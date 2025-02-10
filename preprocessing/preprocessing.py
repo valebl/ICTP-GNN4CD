@@ -12,7 +12,6 @@ from torch_geometric.data import Data, HeteroData
 import torch_geometric.transforms as T
 transform = T.AddLaplacianEigenvectorPE(k=2)
 
-sys.path.append('../ICTP-GNN4CD')
 from utils.utils import write_log, cut_window, retain_valid_nodes, derive_edge_indexes_within, derive_edge_indexes_low2high
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -311,7 +310,8 @@ if __name__ == '__main__':
     # STANDARDISE HIGH-RES FEATURES #
     #-------------------------------#
     
-    if args.load_stats:
+    load_stats_high = True
+    if load_stats_high:
         with open(args.stats_path + args.stats_file_high, 'rb') as f:
             precomputed_stats = pickle.load(f)
         mean_z = precomputed_stats[0]
