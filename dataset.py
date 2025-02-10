@@ -43,10 +43,12 @@ class Dataset_Graph(Dataset):
             self.additional_feature_keys.append(key)
         self._check_temporal_consistency()
         #self._add_node_degree()
-        if self.model_name == "HiResPrecipNet":
-            self._get_features = self.__get_features_6h
-        elif "1h" in self.model_name:
+        if "1h" in self.model_name:
             self._get_features = self.__get_features_1h
+        elif "3h" in self.model_name:
+            self._get_features = self.__get_features_3h
+        elif "6h" in self.model_name:
+            self._get_features = self.__get_features_6h
         else:
             self._get_features = self.__get_features_24h
 
