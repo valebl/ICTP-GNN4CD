@@ -144,8 +144,8 @@ if __name__ == '__main__':
 
     idxs_not_all_nan = find_not_all_nan_times(target_train)
 
-    write_log(f"\nAfter removing all nan time indexes, {idxs_not_all_nan.sum()}" +
-            f" time indexes are considered ({(idxs_not_all_nan.sum() / target_train.shape[1] * 100):.1f} % of initial ones).",
+    write_log(f"\nAfter removing all nan time indexes, {len(idxs_not_all_nan)}" +
+            f" time indexes are considered ({(len(idxs_not_all_nan) / target_train.shape[1] * 100):.1f} % of initial ones).",
             args, accelerator, 'a')
 
     # We assume that the validtion set is a single year within the dataset
@@ -157,8 +157,8 @@ if __name__ == '__main__':
     val_start_idx = val_idxs.min()
     val_end_idx = val_idxs.max()
     
-    write_log(f"\nTrain from {args.train_day_start}/{args.train_month_start}/{args.train_year_start} to " +
-              f"{args.train_day_end}/{args.train_month_end}/{args.train_year_end} with validation year {args.validation_year}",
+    write_log(f"\nTrain from {int(args.train_day_start)}/{int(args.train_month_start)}/{int(args.train_year_start)} to " +
+              f"{int(args.train_day_end)}/{int(args.train_month_end)}/{int(args.train_year_end)} with validation year {int(args.validation_year)}",
               args, accelerator, 'a')
 
     # Define input and target
