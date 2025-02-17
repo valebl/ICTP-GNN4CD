@@ -19,7 +19,7 @@ from utils.utils import date_to_idxs, Tester, set_seed_everything
 from torch_geometric.utils import degree
 
 from utils.utils_plots import create_zones, plot_italy, extremes_cmap
-from utils.utils_plots import plot_maps, plot_single_map, plot_mean_time_series
+from utils.utils_plots import plot_maps, plot_single_map, plot_mean_time_series, plot_seasonal_maps
 from utils.utils import date_to_idxs
 
 import matplotlib
@@ -96,18 +96,22 @@ if __name__ == '__main__':
     test_start_idx, test_end_idx = date_to_idxs(args.test_year_start, args.test_month_start,
                                                 args.test_day_start, args.test_year_end, args.test_month_end,
                                                 args.test_day_end, args.first_year)
-    
-    test_start_idx_input, test_end_idx_input = date_to_idxs(args.test_year_start, args.test_month_start,
-                                                args.test_day_start, args.test_year_end, args.test_month_end,
-                                                args.test_day_end, args.first_year_input)
+    if test_start_idx < 24:
+        test_start_idx = 24
+    test_idxs = torch.tensor([*range(test_start_idx, test_end_idx)])
 
-    #correction for start idxs
-    if test_start_idx >= 24:
-        test_start_idx = test_start_idx-24
-        test_start_idx_input = test_start_idx_input-24
-    else:
-        with open(args.output_path+args.log_file, 'a') as f:
-            f.write(f"\ntest_start_idx={test_start_idx} < 24, thus testing will start from idx {test_start_idx+24}")
+
+    # test_start_idx_input, test_end_idx_input = date_to_idxs(args.test_year_start, args.test_month_start,
+    #                                             args.test_day_start, args.test_year_end, args.test_month_end,
+    #                                             args.test_day_end, args.first_year_input)
+
+    # #correction for start idxs
+    # if test_start_idx >= 24:
+    #     test_start_idx = test_start_idx-24
+    #     test_start_idx_input = test_start_idx_input-24
+    # else:
+    #     with open(args.output_path+args.log_file, 'a') as f:
+    #         f.write(f"\ntest_start_idx={test_start_idx} < 24, thus testing will start from idx {test_start_idx+24}")
 
     with open(args.input_path+args.target_file, 'rb') as f:
         pr_target = pickle.load(f)
@@ -115,9 +119,9 @@ if __name__ == '__main__':
     with open(args.input_path+args.graph_file, 'rb') as f:
         low_high_graph = pickle.load(f)
 
-    pr_target = pr_target[:,test_start_idx:test_end_idx]
+    # pr_target = pr_target[:,test_start_idx:test_end_idx]
 
-    low_high_graph['low'].x = low_high_graph['low'].x[:,test_start_idx_input:test_end_idx_input,:] 
+    # low_high_graph['low'].x = low_high_graph['low'].x[:,test_start_idx_input:test_end_idx_input,:] 
 
     Dataset_Graph = getattr(dataset, args.dataset_name)
     
@@ -128,7 +132,7 @@ if __name__ == '__main__':
 
     custom_collate_fn = getattr(dataset, 'custom_collate_fn_graph')
         
-    sampler_graph = Iterable_Graph(dataset_graph=dataset_graph, shuffle=False)
+    sampler_graph = Iterable_Graph(dataset_graph=dataset_graph, shuffle=False, idxs_vector=test_idxs)
         
     dataloader = torch.utils.data.DataLoader(dataset_graph, batch_size=args.batch_size, num_workers=0,
                     sampler=sampler_graph, collate_fn=custom_collate_fn)
@@ -230,7 +234,7 @@ if __name__ == '__main__':
     elif args.mode == "cl":
         data.pr_cl = pr_cl.cpu().numpy()
     
-    data.pr_target = pr_target[:,24:].cpu().numpy()
+    data.pr_target = pr_target[:,test_idxs].cpu().numpy()
     data.times = times.cpu().numpy()
     data["low"].lat = low_high_graph["low"].lat.cpu().numpy()
     data["low"].lon = low_high_graph["low"].lon.cpu().numpy()

@@ -8,6 +8,7 @@ import random
 import torch
 import torch.nn.functional as F
 from datetime import datetime, date
+from calendar import monthrange
 
 ######################################################
 #------------------ GENERAL UTILITIES ---------------
@@ -213,7 +214,6 @@ def find_not_all_nan_times(target_train):
 
 def derive_train_val_idxs(train_year_start, train_month_start, train_day_start, train_year_end, train_month_end,
                          train_day_end, first_year, idxs_not_all_nan=None, validation_year=None):
-
     r'''
     Computes the train and validation indexes
     Args:
@@ -229,7 +229,6 @@ def derive_train_val_idxs(train_year_start, train_month_start, train_day_start, 
         train_idxs (tensor)
         val_idxs (tensor)
     '''
-    
     # Derive the idxs corresponding to the training period
     train_start_idx, train_end_idx = date_to_idxs(train_year_start, train_month_start, train_day_start,
                                                   train_year_end, train_month_end, train_day_end, first_year)
@@ -242,22 +241,33 @@ def derive_train_val_idxs(train_year_start, train_month_start, train_day_start, 
         val_start_idx, val_end_idx = date_to_idxs(validation_year-1, 12, 1, validation_year, 11, 30, first_year)
 
     # We need the previous 24h to make the prediction at time t
-    if val_start_idx >= 24:
-        val_start_idx = val_start_idx-24
+    if train_start_idx < 24:
+        train_start_idx = 24
+        
+    if val_start_idx < 24:
+        val_start_idx = 24
+
+    if train_start_idx <= train_end_idx:
+        raise Exception("Train start idxs is not larger than train end ids.")
+    if val_start_idx <= val_end_idx:
+        raise Exception("Val start idxs is not larger than val end ids.")
             
-    # Fix the idxs if the validation year is after the training time span
-    if train_start_idx > val_end_idx:
-        offset = val_start_idx
-        train_idxs_list = [*range(train_start_idx - offset, train_end_idx - offset)]
-        val_idxs_list = [*range(val_start_idx - offset, val_end_idx - offset)]
+    # Val year before or after train years
+    if train_start_idx >= val_end_idx or train_end_idx <= val_start_idx:
+        train_idxs_list = [*range(train_start_idx, train_end_idx)]
+        val_idxs_list = [*range(val_start_idx, val_end_idx)]
+    # Val year inside train years
+    elif val_start_idx > train_start_idx and val_end_idx < train_start_idx:
+        train_idxs_list = [*range(train_start_idx, val_start_idx)] + [*range(val_end_idx,  train_end_idx)]
+        val_idxs_list = [*range(val_start_idx, val_end_idx)]
     else:
-        offset = train_start_idx
-        train_idxs_list = [*range(train_start_idx - offset, val_start_idx - offset)] + [*range(val_end_idx - offset,  train_end_idx - offset)]
-        val_idxs_list = [*range(val_start_idx - offset, val_end_idx - offset)]
+        raise Exception("Partially overlapping train and validation periods are not supported." +
+                        "Val must be before, after or completely inside train years.")
 
     # For speedup
     idxs_not_all_nan_set = set(idxs_not_all_nan)
-    
+
+    # Remove the idxs for which all graph nodes have nan target
     if idxs_not_all_nan is not None:
         train_idxs_list = [i for i in train_idxs_list if i in idxs_not_all_nan]
         val_idxs = [i for i in val_idxs_list if i in idxs_not_all_nan]
@@ -266,6 +276,105 @@ def derive_train_val_idxs(train_year_start, train_month_start, train_day_start, 
     val_idxs = torch.tensor(val_idxs_list)
 
     return train_idxs, val_idxs
+
+
+def derive_train_val_test_idxs_random_months(train_year_start, train_month_start, train_day_start, train_year_end, train_month_end,
+                         train_day_end, first_year, idxs_not_all_nan=None, validation_year=None, args=None, accelerator=None):
+    r'''
+    Computes the train, validation and test indeces, assuming that validation and test are periods
+    of one year where the months are chosen randomly among the whole period. All remaining months
+    are part of the training datset
+    Args:
+        train_year_start (int): year at which period starts
+        train_month_start (int): month at which period starts
+        train_day_start (int): day at which period starts
+        train_year_end (int): year at which period ends
+        train_month_end (int): month at which period ends
+        train_day_end (int): day at which period ends
+        first_year (int): reference year to compute the idxs
+        validation_year (int): year considered for validation
+    Returns:
+        train_idxs (tensor)
+        val_idxs (tensor)
+        test_idxs (tensor)
+    '''
+    # Derive the idxs corresponding to the period
+    train_start_idx, train_end_idx = date_to_idxs(train_year_start, train_month_start, train_day_start,
+                                                  train_year_end, train_month_end, train_day_end, first_year)
+    
+    if train_start_idx < 24:
+        train_start_idx = 24
+    
+    # lists where for each month I save the year from which I will take it from
+    val_year_per_month={}
+    test_year_per_month={}
+
+    train_idxs_list = []
+    val_idxs_list = []
+    test_idxs_list = []
+
+    years_val = [*range(train_year_start, train_year_end+1)]
+    years_test = [*range(train_year_start, train_year_end+1)]
+    
+    for month in range(1,13):
+        if years_val == []:
+            years_val = [*range(train_year_start, train_year_end+1)]
+        if years_test == []:
+            years_test = [*range(train_year_start, train_year_end+1)]
+        if month > train_month_start: # we always ignore the first month
+            if month <= train_month_end:
+                available_years = [*range(train_year_start, train_year_end+1)]
+            else:
+                available_years = [*range(train_year_start, train_year_end)]
+        else:
+            available_years = [*range(train_year_start+1, train_year_end)]
+
+        available_years_val = [y for y in available_years if y in years_val]
+        chosen_year_val = random.sample(available_years_val, 1)[0]
+        
+        available_years_test = [y for y in available_years if y in years_test]
+        if chosen_year_val in available_years_test:
+            available_years_test.remove(chosen_year_val)
+        
+        chosen_year_test = random.sample(available_years_test, 1)[0]
+
+        years_val.remove(chosen_year_val)
+        years_test.remove(chosen_year_test)
+
+        # Save for later log
+        val_year_per_month[str(month)] = chosen_year_val
+        test_year_per_month[str(month)] = chosen_year_test
+
+        val_month_start_idx, val_month_end_idx = date_to_idxs(chosen_year_val, month, 1, chosen_year_val,
+                                            month, monthrange(chosen_year_val, month)[1], first_year)
+        test_month_start_idx, test_month_end_idx = date_to_idxs(chosen_year_test, month, 1, chosen_year_test,
+                                            month, monthrange(chosen_year_test, month)[1], first_year)
+        
+        val_idxs_list += [*range(val_month_start_idx, val_month_end_idx)]
+        test_idxs_list += [*range(test_month_start_idx, test_month_end_idx)]
+
+    train_idxs_list = [*range(train_start_idx, train_end_idx)]
+    train_idxs_list = [i for i in train_idxs_list if i not in val_idxs_list and i not in test_idxs_list]
+
+    train_idxs = torch.tensor(train_idxs_list)
+    val_idxs = torch.tensor(val_idxs_list)
+    test_idxs = torch.tensor(test_idxs_list)
+
+    if args is not None:
+        with open(args.output_path+"log.txt", 'a') as f:
+            f.write(f"\nValidation year: {val_year_per_month}\nTest year: {test_year_per_month}")
+        if accelerator is None or accelerator.is_main_process:
+            write_log(f"\nValidation year: {val_year_per_month}\nTest year: {test_year_per_month}", args, accelerator, 'a')
+            with open(args.output_path + "train_idxs.pkl", 'wb') as f:
+                pickle.dump(train_idxs, f)
+            with open(args.output_path + "val_idxs.pkl", 'wb') as f:
+                pickle.dump(val_idxs, f)
+            with open(args.output_path + "test_idxs.pkl", 'wb') as f:
+                pickle.dump(test_idxs, f)
+    
+    return train_idxs, val_idxs
+
+    
     
 
 ######################################################

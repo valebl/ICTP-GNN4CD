@@ -16,7 +16,7 @@ import dataset
 import importlib
 
 import utils.utils
-from utils.utils import write_log, date_to_idxs, check_freezed_layers, set_seed_everything, find_not_all_nan_times, derive_train_val_idxs
+from utils.utils import write_log, date_to_idxs, check_freezed_layers, set_seed_everything, find_not_all_nan_times, derive_train_val_idxs, derive_train_val_test_idxs_random_months
 from utils.utils import Trainer
 from accelerate import Accelerator
 
@@ -65,14 +65,14 @@ parser.add_argument('--dataset_name', type=str, default='Dataset_Graph')
 parser.add_argument('--collate_name', type=str)
 
 #-- start and end training dates
-parser.add_argument('--train_year_start', type=float)
-parser.add_argument('--train_month_start', type=float)
-parser.add_argument('--train_day_start', type=float)
-parser.add_argument('--train_year_end', type=float)
-parser.add_argument('--train_month_end', type=float)
-parser.add_argument('--train_day_end', type=float)
-parser.add_argument('--first_year', type=float)
-parser.add_argument('--validation_year', type=float, default=None)
+parser.add_argument('--train_year_start', type=int)
+parser.add_argument('--train_month_start', type=int)
+parser.add_argument('--train_day_start', type=int)
+parser.add_argument('--train_year_end', type=int)
+parser.add_argument('--train_month_end', type=int)
+parser.add_argument('--train_day_end', type=int)
+parser.add_argument('--first_year', type=int)
+parser.add_argument('--validation_year', type=int, default=None)
 
 if __name__ == '__main__':
 
@@ -148,22 +148,35 @@ if __name__ == '__main__':
             f" time indexes are considered ({(len(idxs_not_all_nan) / target_train.shape[1] * 100):.1f} % of initial ones).",
             args, accelerator, 'a')
 
-    # We assume that the validtion set is a single year within the dataset
-    train_idxs, val_idxs = derive_train_val_idxs(args.train_year_start, args.train_month_start, args.train_day_start, args.train_year_end,
-                                                 args.train_month_end, args.train_day_end, args.first_year, idxs_not_all_nan, args.validation_year)
+    if args.validation_year is not None:
+        train_idxs, val_idxs = derive_train_val_idxs(args.train_year_start, args.train_month_start, args.train_day_start, args.train_year_end,
+                                                     args.train_month_end, args.train_day_end, args.first_year, idxs_not_all_nan, args.validation_year)
+        write_log(f"\nTrain from {args.train_day_start}/{args.train_month_start}/{args.train_year_start} to " +
+                  f"{args.train_day_end}/{args.train_month_end}/{args.train_year_end} with validation year {args.validation_year}",
+                  args, accelerator, 'a')
+
+    else:
+        train_idxs, val_idxs = derive_train_val_test_idxs_random_months(args.train_year_start, args.train_month_start, args.train_day_start, args.train_year_end,
+                                             args.train_month_end, args.train_day_end, args.first_year, idxs_not_all_nan,
+                                             args.validation_year, args, accelerator)
+        write_log(f"\nTrain from {args.train_day_start}/{args.train_month_start}/{args.train_year_start} to " +
+                f"{args.train_day_end}/{args.train_month_end}/{args.train_year_end} with validation and test years" +
+                f"as 12 months chosen randomly within the {args.train_year_start}-{args.train_year_end} period.."
 
     train_start_idx = train_idxs.min()
     train_end_idx = train_idxs.max()
     val_start_idx = val_idxs.min()
     val_end_idx = val_idxs.max()
     
-    write_log(f"\nTrain from {int(args.train_day_start)}/{int(args.train_month_start)}/{int(args.train_year_start)} to " +
-              f"{int(args.train_day_end)}/{int(args.train_month_end)}/{int(args.train_year_end)} with validation year {int(args.validation_year)}",
-              args, accelerator, 'a')
-
-    # Define input and target
-    low_high_graph['low'].x = low_high_graph['low'].x[:,min(train_start_idx, val_start_idx):max(train_end_idx, val_end_idx),:] # nodes, time, var*lev
-    target_train = target_train[:,min(train_start_idx, val_start_idx):max(train_end_idx, val_end_idx)] # 0, 140256
+    # Check that the size of the train and val idxs is multiple of n_gpu
+    # to avoid issues with accelerator.gather_for_metrics; if not, simply
+    # discard the last idxs to obtain a multiple of n_gpu
+    tail_train_idxs = len(train_idxs) % args.n_gpu
+    tail_val_idxs = len(val_idxs) % args.n_gpu
+    if tail_train_idxs != 0:
+        train_idxs = train_idxs[:-tail_train_idxs]
+    if tail_val_idxs != 0:
+        val_idxs = val_idxs[:-tail_val_idxs]
     
     #-----------------------------------------------------
     #-------------- DATASET AND DATALOADER ---------------
@@ -174,7 +187,6 @@ if __name__ == '__main__':
     if args.loss_fn == 'weighted_mse_loss' or args.loss_fn == 'weighted_mae_loss' or args.loss_fn == "quantized_loss":
         with open(args.input_path+args.weights_file, 'rb') as f:
             weights_reg = pickle.load(f)
-        weights_reg = weights_reg[:,min(train_start_idx, val_start_idx):max(train_end_idx, val_end_idx)]
 
         write_log("\nUsing weights in the loss.", args, accelerator, 'a')
 
@@ -186,28 +198,20 @@ if __name__ == '__main__':
         dataset_graph = Dataset_Graph(targets=target_train,
             graph=low_high_graph, model_name=args.model_name)
 
+    # Define the custom collate function
     custom_collate_fn = getattr(dataset, args.collate_name)
         
-    #-- split into trainset and testset
-    n_gpu = 4
-    tail_train_idxs = len(train_idxs) % n_gpu
-    tail_val_idxs = len(val_idxs) % n_gpu
-    if tail_train_idxs != 0:
-        train_idxs = train_idxs[:-tail_train_idxs]
-    if tail_val_idxs != 0:
-        val_idxs = val_idxs[:-tail_val_idxs]
-    dataset_graph_train = torch.utils.data.Subset(dataset_graph, train_idxs)
-    dataset_graph_val = torch.utils.data.Subset(dataset_graph, val_idxs)
+    # Define the custom samplers
+    sampler_graph_train = Iterable_Graph(dataset_graph=dataset_graph, shuffle=True, idxs_vector=train_idxs)
+    sampler_graph_val = Iterable_Graph(dataset_graph=dataset_graph, shuffle=True, idxs_vector=val_idxs)
 
-    sampler_graph_train = Iterable_Graph(dataset_graph=dataset_graph_train, shuffle=True)
-    sampler_graph_val = Iterable_Graph(dataset_graph=dataset_graph_val, shuffle=True)
+    write_log(f'\nTrainset size = {train_idxs.shape[0]}, validationset size = {val_idxs.shape[0]}.', args, accelerator, 'a')
 
-    write_log(f'\nTrainset size = {len(dataset_graph_train)}, validationset size = {len(dataset_graph_val)}.', args, accelerator, 'a')
-
-    dataloader_train = torch.utils.data.DataLoader(dataset_graph_train, batch_size=args.batch_size, num_workers=0,
+    # Define the dataloaders
+    dataloader_train = torch.utils.data.DataLoader(dataset_graph, batch_size=args.batch_size, num_workers=0,
                     sampler=sampler_graph_train, collate_fn=custom_collate_fn)
 
-    dataloader_val = torch.utils.data.DataLoader(dataset_graph_val, batch_size=args.batch_size, num_workers=0,
+    dataloader_val = torch.utils.data.DataLoader(dataset_graph, batch_size=args.batch_size, num_workers=0,
                     sampler=sampler_graph_val, collate_fn=custom_collate_fn)
 
     if accelerator is None or accelerator.is_main_process:

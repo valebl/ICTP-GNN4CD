@@ -166,36 +166,42 @@ class Dataset_Graph(Dataset):
         s['node_idx'] = node_idx
         
         return s
-
+        
 
 class Iterable_Graph(object):
 
-    def __init__(self, dataset_graph, shuffle):
+    def __init__(self, dataset_graph, shuffle, idxs_vector=None):
         self.dataset_graph = dataset_graph
         self.shuffle = shuffle
-        if self.shuffle:
-            self.sampling_vector = torch.randperm(len(self)-24) + 24 # from 24 to len
-        else:
-            self.sampling_vector = torch.arange(24, len(self))
+        self.idxs_vector = idxs_vector
 
     def __len__(self):
         return len(self.dataset_graph)
 
     def __next__(self):
-        if self.t < len(self)-24:
-            self.idx = self.sampling_vector[self.t].item()
-            self.t = self.t + 1
+        if self.prog_idx < self.idxs_vector.shape[0]:
+            self.idx = self.sampling_vector[self.prog_idx].item()
+            self.prog_idx = self.prog_idx + 1
             return self.idx
         else:
-            self.t = 0
+            self.prog_idx = 0
             self.idx = 0
             raise StopIteration
 
     def __iter__(self):
-        self.t = 0
+        self.prog_idx = 0
         self.idx = 0
-        if self.shuffle:
-            self.sampling_vector = torch.randperm(len(self)-24) + 24 # from 24 to len
+        if self.idxs_vector is not None:
+            if self.shuffle:
+                rnd_idxs = torch.randperm(self.idxs_vector.shape[0])
+                self.sampling_vector = self.idxs_vector[rnd_idxs].view(self.idxs_vector.size())
+            else:
+                self.sampling_vector = self.idxs_vector
+        else:
+            if self.shuffle:
+                self.sampling_vector = torch.randperm(len(self)-24) + 24 # from 24 to len
+            else:
+                self.sampling_vector = torch.arange(24, len(self))
         return self
 
 
