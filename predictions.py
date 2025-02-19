@@ -20,7 +20,7 @@ from torch_geometric.utils import degree
 
 from utils.utils_plots import create_zones, plot_italy, extremes_cmap
 from utils.utils_plots import plot_maps, plot_single_map, plot_mean_time_series, plot_seasonal_maps
-from utils.utils import date_to_idxs
+from utils.utils import date_to_idxs, write_log
 
 import matplotlib
 import matplotlib.ticker as ticker
@@ -35,6 +35,7 @@ parser.add_argument('--input_path', type=str, help='path to input directory')
 parser.add_argument('--output_path', type=str, help='path to output directory')
 parser.add_argument('--log_file', type=str, default='log.txt', help='log file')
 
+parser.add_argument('--train_path', type=str)
 parser.add_argument('--checkpoint', type=str)
 parser.add_argument('--checkpoint_reg', type=str, default=None)
 parser.add_argument('--checkpoint_cl', type=str, default=None)
@@ -48,6 +49,7 @@ parser.add_argument('--model_reg', type=str, default=None)
 parser.add_argument('--model_cl', type=str, default=None) 
 parser.add_argument('--dataset_name', type=str, default=None) 
 parser.add_argument('--mode', type=str, default="cl_reg") 
+parser.add_argument('--test_idxs_file', type=str, default="")
 
 #-- start and end training dates
 parser.add_argument('--test_year_start', type=int)
@@ -84,44 +86,27 @@ if __name__ == '__main__':
     else:
         accelerator = None
 
-    if accelerator is None or accelerator.is_main_process:
-        with open(args.output_path + args.log_file, 'w') as f:
-            f.write(f"Starting!")
+    write_log("Starting the testing...", args, accelerator, 'w')
+    write_log(f"Cuda is available: {torch.cuda.is_available()}. There are {torch.cuda.device_count()} available GPUs.", args, accelerator, 'a')
 
-    if accelerator is None or accelerator.is_main_process:
-        with open(args.output_path+args.log_file, 'w') as f:
-            f.write("Starting the testing...")
-            f.write(f"Cuda is available: {torch.cuda.is_available()}. There are {torch.cuda.device_count()} available GPUs.")
-
-    test_start_idx, test_end_idx = date_to_idxs(args.test_year_start, args.test_month_start,
-                                                args.test_day_start, args.test_year_end, args.test_month_end,
-                                                args.test_day_end, args.first_year)
-    if test_start_idx < 24:
-        test_start_idx = 24
-    test_idxs = torch.tensor([*range(test_start_idx, test_end_idx)])
-
-
-    # test_start_idx_input, test_end_idx_input = date_to_idxs(args.test_year_start, args.test_month_start,
-    #                                             args.test_day_start, args.test_year_end, args.test_month_end,
-    #                                             args.test_day_end, args.first_year_input)
-
-    # #correction for start idxs
-    # if test_start_idx >= 24:
-    #     test_start_idx = test_start_idx-24
-    #     test_start_idx_input = test_start_idx_input-24
-    # else:
-    #     with open(args.output_path+args.log_file, 'a') as f:
-    #         f.write(f"\ntest_start_idx={test_start_idx} < 24, thus testing will start from idx {test_start_idx+24}")
+    if args.test_idxs_file == "":
+        test_start_idx, test_end_idx = date_to_idxs(args.test_year_start, args.test_month_start,
+            args.test_day_start, args.test_year_end, args.test_month_end,
+            args.test_day_end, args.first_year)        
+        if test_start_idx < 24:
+            test_start_idx = 24
+        test_idxs = torch.tensor([*range(test_start_idx, test_end_idx)])
+        write_log(f"\nUsing the provided start and end test times to derive the test idxs.", args, accelerator, 'a')
+    else:
+        with open(args.train_path+args.test_idxs_file, 'rb') as f:
+            test_idxs = pickle.load(f)
+        write_log(f"Using the provided test idxs vector.", args, accelerator, 'a')
 
     with open(args.input_path+args.target_file, 'rb') as f:
         pr_target = pickle.load(f)
 
     with open(args.input_path+args.graph_file, 'rb') as f:
         low_high_graph = pickle.load(f)
-
-    # pr_target = pr_target[:,test_start_idx:test_end_idx]
-
-    # low_high_graph['low'].x = low_high_graph['low'].x[:,test_start_idx_input:test_end_idx_input,:] 
 
     Dataset_Graph = getattr(dataset, args.dataset_name)
     
@@ -151,22 +136,20 @@ if __name__ == '__main__':
 
     if accelerator is None:
         if args.mode == "cl_reg":
-            checkpoint_cl = torch.load(args.checkpoint_cl, map_location=torch.device('cpu'))
-            checkpoint_reg = torch.load(args.checkpoint_reg, map_location=torch.device('cpu'))
+            checkpoint_cl = torch.load(args.train_path+args.checkpoint_cl, map_location=torch.device('cpu'))
+            checkpoint_reg = torch.load(args.train_path+args.checkpoint_reg, map_location=torch.device('cpu'))
         else:
-            checkpoint = torch.load(args.checkpoint, map_location=torch.device('cpu'))
+            checkpoint = torch.load(args.train_path+args.checkpoint, map_location=torch.device('cpu'))
         device = 'cpu'
     else:
         if args.mode == "cl_reg":
-            checkpoint_cl = torch.load(args.checkpoint_cl)
-            checkpoint_reg = torch.load(args.checkpoint_reg)
+            checkpoint_cl = torch.load(args.train_path+args.checkpoint_cl)
+            checkpoint_reg = torch.load(args.train_path+args.checkpoint_reg)
         else:
-            checkpoint = torch.load(args.checkpoint)
+            checkpoint = torch.load(args.train_path+args.checkpoint)
         device = accelerator.device
     
-    if accelerator is None or accelerator.is_main_process:
-        with open(args.output_path + args.log_file, 'a') as f:
-            f.write("\nLoading state dict.")
+    write_log("\nLoading state dict.", args, accelerator, 'a')
     if args.mode == "cl_reg":
         model_cl.load_state_dict(checkpoint_cl)
         model_reg.load_state_dict(checkpoint_reg)
@@ -179,10 +162,7 @@ if __name__ == '__main__':
         else:
             model, dataloader = accelerator.prepare(model, dataloader)
 
-    if accelerator is None or accelerator.is_main_process:
-        with open(args.output_path + args.log_file, 'a') as f:
-            f.write(f"\nStarting the test, from {int(args.test_day_start)}/{int(args.test_month_start)}/{int(args.test_year_start)} to " +
-                    f"{int(args.test_day_end)}/{int(args.test_month_end)}/{int(args.test_year_end)} (from idx {test_start_idx} to idx {test_end_idx}).")
+    # write_log(f"\nStarting the test, from idx {test_start_idx} to idx {test_end_idx}.", args, accelerator, 'a')
 
     tester = Tester()
 
@@ -244,15 +224,17 @@ if __name__ == '__main__':
     degree = degree(low_high_graph['high', 'within', 'high'].edge_index[0], low_high_graph['high'].num_nodes)
     data["high"].degree = degree.cpu().numpy()
     
-    if accelerator is None or accelerator.is_main_process:
-        with open(args.output_path + args.log_file, 'a') as f:
-            f.write(f"\nDone. Testing concluded in {end-start} seconds.")
-            f.write("\nWrite the files.")
+    write_log(f"\nDone. Testing concluded in {end-start} seconds.\nWrite the files.", args, accelerator, 'a')
 
     if accelerator is None or accelerator.is_main_process:
         with open(args.output_path + args.output_file, 'wb') as f:
             pickle.dump(data, f)
 
+
+    ###################
+    ###--- PLOTS ---###
+    ###################
+    
     if args.make_plots:
 
         G = data
@@ -327,7 +309,7 @@ if __name__ == '__main__':
         acc = np.nansum(corrects) / len(corrects) * 100
         acc_0 = np.nansum(corrects[y_true_cl==0]) / np.nansum(y_true_cl==0) * 100
         acc_1 = np.nansum(corrects[y_true_cl==1]) / np.nansum(y_true_cl==1) * 100            
-        print(f"\nClassifier\nAccuracy: {acc:.2f}\nAccuracy on class 0: {acc_0:.2f}\nAccuracy on class 1: {acc_1:.2f}")
+        write_log(f"\nClassifier\nAccuracy: {acc:.2f}\nAccuracy on class 0: {acc_0:.2f}\nAccuracy on class 1: {acc_1:.2f}", args, accelerator, 'a')
 
         # Apply the mask
         G.pr_cl = G.pr_cl[mask,:]
@@ -336,27 +318,44 @@ if __name__ == '__main__':
         pos = pos[mask,:]
         y_target_cl = y_target_cl[mask,:]
 
-        pr_pred_seasons = []
-        pr_target_seasons = []
-        
-        djf_start, djf_end = date_to_idxs(year_start=2015, month_start=12, day_start=1, year_end=2016,
-                                          month_end=2, day_end=29, first_year=2015, first_month=12, first_day=1)
-        mam_start, mam_end = date_to_idxs(year_start=2016, month_start=3, day_start=1, year_end=2016,
-                                          month_end=5, day_end=31, first_year=2015, first_month=12, first_day=1)
-        jja_start, jja_end = date_to_idxs(year_start=2016, month_start=6, day_start=1, year_end=2016,
-                                          month_end=8, day_end=31, first_year=2015, first_month=12, first_day=1)
-        son_start, son_end = date_to_idxs(year_start=2016, month_start=9, day_start=1, year_end=2016,
-                                          month_end=11, day_end=30, first_year=2015, first_month=12, first_day=1)
-        
-        pr_pred_seasons.append(G.pr[:,djf_start: djf_end])
-        pr_pred_seasons.append(G.pr[:,mam_start: mam_end])
-        pr_pred_seasons.append(G.pr[:,jja_start: jja_end])
-        pr_pred_seasons.append(G.pr[:,son_start: son_end])
-        
-        pr_target_seasons.append(G.pr_target[:,djf_start: djf_end])
-        pr_target_seasons.append(G.pr_target[:,mam_start: mam_end])
-        pr_target_seasons.append(G.pr_target[:,jja_start: jja_end])
-        pr_target_seasons.append(G.pr_target[:,son_start: son_end])
+        make_seasonal_plots = True
+        if args.test_idxs_file is not None:  
+            djf_start, djf_end = date_to_idxs(year_start=2015, month_start=12, day_start=1, year_end=2016,
+                                              month_end=2, day_end=29, first_year=2015, first_month=12, first_day=1)
+            mam_start, mam_end = date_to_idxs(year_start=2016, month_start=3, day_start=1, year_end=2016,
+                                              month_end=5, day_end=31, first_year=2015, first_month=12, first_day=1)
+            jja_start, jja_end = date_to_idxs(year_start=2016, month_start=6, day_start=1, year_end=2016,
+                                              month_end=8, day_end=31, first_year=2015, first_month=12, first_day=1)
+            son_start, son_end = date_to_idxs(year_start=2016, month_start=9, day_start=1, year_end=2016,
+                                              month_end=11, day_end=30, first_year=2015, first_month=12, first_day=1)
+        else:
+            djf_start = 0
+            if test_idxs.shape[0] == 8760:
+                djf_end = (31 + 31 + 28) * 24
+            elif test_idxs.shape[0] == 8784:
+                djf_end = (31 + 31 + 29) * 24
+            else:
+                write_log("Cannot identify the months, thus seasonal plots are skipped.")
+                make_seasonal_plots = False
+            mam_start = djf_end
+            mam_end = mam_start + (31 + 30 + 31) * 24
+            jja_start = mam_end
+            jja_end = jja_start + (31 + 31 + 30) * 24
+            son_start = jja_end
+            son_end = son_start + (30 + 31 + 30) * 24
+
+        if make_seasonal_plots:
+            pr_pred_seasons = []
+            pr_target_seasons = []
+            pr_pred_seasons.append(G.pr[:,djf_start: djf_end])
+            pr_pred_seasons.append(G.pr[:,mam_start: mam_end])
+            pr_pred_seasons.append(G.pr[:,jja_start: jja_end])
+            pr_pred_seasons.append(G.pr[:,son_start: son_end])
+            
+            pr_target_seasons.append(G.pr_target[:,djf_start: djf_end])
+            pr_target_seasons.append(G.pr_target[:,mam_start: mam_end])
+            pr_target_seasons.append(G.pr_target[:,jja_start: jja_end])
+            pr_target_seasons.append(G.pr_target[:,son_start: son_end])
 
         G.pr_cl = G.pr_cl[:,24*31:]
         G.pr = G.pr[:,24*31:]
@@ -441,57 +440,61 @@ if __name__ == '__main__':
         plt.savefig(f'{args.output_path}average_daily_geq3mm.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
         
         # ### Extreme event - North Italy 22 Nov 2016 - 25 Nov 2016
-        cmap_extreme = extremes_cmap()
-
-        start, end = date_to_idxs(year_start=2016, month_start=11, day_start=22, year_end=2016, month_end=11, day_end=25,
-                         first_year=2016, first_month=1, first_day=1)
-        
-        plot_maps(pos, G.pr[:,start:end], G.pr_target[:,start:end], pr_min=0.0, pr_max=400,  legend_title="[mm]",
-            aggr=np.nansum, title=f"Cumulative precipitation (from {22}/{11}/{2016} to {25}/{11}/{2016})", cmap=cmap_extreme, subtitle_x=0.55,
-            save_path=None, save_file_name=None, zones=zones, x_size=x_size, y_size=y_size, font_size_title=font_size_title, font_size=font_size)
-        plt.savefig(f'{args.output_path}extreme.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
-        
-        print(np.nanmax(G.pr[:,start:end]), np.nanmax(G.pr_target[:,start:end]))
+        if args.test_idxs_file is None:
+            cmap_extreme = extremes_cmap()
+    
+            start, end = date_to_idxs(year_start=2016, month_start=11, day_start=22, year_end=2016, month_end=11, day_end=25,
+                             first_year=2016, first_month=1, first_day=1)
+            
+            plot_maps(pos, G.pr[:,start:end], G.pr_target[:,start:end], pr_min=0.0, pr_max=400,  legend_title="[mm]",
+                aggr=np.nansum, title=f"Cumulative precipitation (from {22}/{11}/{2016} to {25}/{11}/{2016})", cmap=cmap_extreme, subtitle_x=0.55,
+                save_path=None, save_file_name=None, zones=zones, x_size=x_size, y_size=y_size, font_size_title=font_size_title, font_size=font_size)
+            plt.savefig(f'{args.output_path}extreme.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+            
+            write_log(f"Exreme event - GNN4CD max={np.nanmax(G.pr[:,start:end])}, GRIPHO max={np.nanmax(G.pr_target[:,start:end])}", args, accelerator, 'a')
 
         # Seasonal results
 
-        plot_seasonal_maps(pos, pr_pred_seasons, pr_min=0.1, pr_max=500, aggr=np.nansum, title='Cumulative precipitation for 2016 seasons - GNN4CD')
-        plt.savefig(f'{args.output_path}seasons_gnn4cd.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
-        plot_seasonal_maps(pos, pr_target_seasons, pr_min=0.1, pr_max=dpi, aggr=np.nansum, title='Cumulative precipitation for 2016 seasons - OBSERVATION')
-        plt.savefig(f'{args.output_path}seasons_gripho.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
-        
-        # Distributions
-        fig, ax = plt.subplots(nrows=1, ncols=4, figsize=(28,7))
-        ax_list = [ax[0], ax[1], ax[2], ax[3]]
-        text_list = ['DJF', 'MAM', 'JJA', 'SON']
-        plt.rcParams.update({'font.size': 14})
-        
-        for s in range(4):
-        
-            axi = ax_list[s]
-            y = pr_target_seasons[s].flatten()
-            pr = pr_pred_seasons[s].flatten()
-            binwidth = 1
-        
-            y = y[y>0]
-            pr = pr[pr>0]
-        
-            bins_max_y = 160 #min(200, int(np.nanmax(y)))
-            bins_max_pr = 160 #bins_max_y #min(200, int(np.nanmax(pr)))
-                            
-            hist_y, bin_edges_y = np.histogram(y, bins=np.arange(0,150,0.5), range=[int(np.nanmin(y)), bins_max_y+binwidth], density=True)
-            hist_pr, bin_edges_pr = np.histogram(pr, bins=np.arange(0,150,0.5), range=[int(np.nanmin(y)), bins_max_y+binwidth], density=True)
+        if make_seasonal_plots: 
+            plot_seasonal_maps(pos, pr_pred_seasons, zones=zones, pr_min=0.1, pr_max=500, aggr=np.nansum,
+                               title='Cumulative precipitation for 2016 seasons - GNN4CD')
+            plt.savefig(f'{args.output_path}seasons_gnn4cd.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+            plot_seasonal_maps(pos, pr_target_seasons, zones=zones, pr_min=0.1, pr_max=500, aggr=np.nansum,
+                               title='Cumulative precipitation for 2016 seasons - OBSERVATION')
+            plt.savefig(f'{args.output_path}seasons_gripho.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
             
-            axi.scatter(bin_edges_y[:-1], hist_y, label='GRIPHO', color="darkturquoise", alpha=0.5)
-            axi.scatter(bin_edges_pr[:-1], hist_pr, label='DL-MODEL', color="indigo", alpha=0.5)
-            axi.set_yscale('log')
-            axi.set_xscale('log')
-            axi.set_xlabel('precipitation intensity [mm/hr]')
-            axi.set_ylabel('pdf')
-            axi.set_title(text_list[s], fontsize=18)
-            axi.legend()
-        
-        plt.savefig(f'{args.output_path}seasonal_pdfs.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+            # Distributions
+            fig, ax = plt.subplots(nrows=1, ncols=4, figsize=(28,7))
+            ax_list = [ax[0], ax[1], ax[2], ax[3]]
+            text_list = ['DJF', 'MAM', 'JJA', 'SON']
+            plt.rcParams.update({'font.size': 14})
+            
+            for s in range(4):
+            
+                axi = ax_list[s]
+                y = pr_target_seasons[s].flatten()
+                pr = pr_pred_seasons[s].flatten()
+                binwidth = 1
+            
+                y = y[y>0]
+                pr = pr[pr>0]
+            
+                bins_max_y = 160 #min(200, int(np.nanmax(y)))
+                bins_max_pr = 160 #bins_max_y #min(200, int(np.nanmax(pr)))
+                                
+                hist_y, bin_edges_y = np.histogram(y, bins=np.arange(0,150,0.5), range=[int(np.nanmin(y)), bins_max_y+binwidth], density=True)
+                hist_pr, bin_edges_pr = np.histogram(pr, bins=np.arange(0,150,0.5), range=[int(np.nanmin(y)), bins_max_y+binwidth], density=True)
+                
+                axi.scatter(bin_edges_y[:-1], hist_y, label='GRIPHO', color="darkturquoise", alpha=0.5)
+                axi.scatter(bin_edges_pr[:-1], hist_pr, label='DL-MODEL', color="indigo", alpha=0.5)
+                axi.set_yscale('log')
+                axi.set_xscale('log')
+                axi.set_xlabel('precipitation intensity [mm/hr]')
+                axi.set_ylabel('pdf')
+                axi.set_title(text_list[s], fontsize=18)
+                axi.legend()
+            
+            plt.savefig(f'{args.output_path}seasonal_pdfs.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
     
         # Time series
         rmse, rmse_perc = plot_mean_time_series(pos, G.pr_target, G.pr, points=np.arange(G.pr_target.shape[0]), aggr=np.nanmean, title="")
@@ -500,126 +503,127 @@ if __name__ == '__main__':
         # Diurnal Cycles
 
         # Precipitation average
-        
-        pr_pred_seasons_daily_cycle = np.zeros((4,24))
-        for s in range(4):
-            pr_season = pr_pred_seasons[s]
-            for i in range(0,24):
-                pr_pred_seasons_daily_cycle[s,i] = np.nanmean(pr_season[:,i::24])
 
-        pr_gripho_seasons_daily_cycle = np.zeros((4,24))
-        for s in range(4):
-            pr_season = pr_target_seasons[s]
-            for i in range(0,24):
-                pr_gripho_seasons_daily_cycle[s,i] = np.nanmean(pr_season[:,i::24])
-
-        points = np.arange(G.pr_target.shape[0])
-        
-        text_list = ['DJF', 'MAM', 'JJA', 'SON']
-        plt.rcParams.update({'font.size': 25})
-        
-        fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(16,18))
-        
-        ax_list = [ax[0,0], ax[0,1], ax[1,0], ax[1,1]]
-        
-        for s in range(4):
-        
-            pr_mean = pr_gripho_seasons_daily_cycle[s]
-            pr_pred_mean = pr_pred_seasons_daily_cycle[s]
-        
-            n = 25
-            ax_list[s].plot(range(1,n), pr_pred_mean, label='GNN4CD R', linestyle='-', linewidth=2, color='red')
-            ax_list[s].plot(range(1,n), pr_mean, label='GRIPHO', linestyle=':', linewidth=2, color='black')
-            ax_list[s].set_title(text_list[s], fontsize=45)
-            ax_list[s].set_ylabel("pr [mm/h]", fontsize=40)
-            ax_list[s].set_xlabel("time [h]", fontsize=40)
-            ax_list[s].set_ylim([0,0.30])
-            # ax_list[s].set_xlim([0,24])
-            ax_list[s].set_xticks(ticks=range(0,n,6))
-            ax_list[s].grid(which='major', color='lightgrey')
-        
-        plt.suptitle("Average", y=1, fontsize=40)
-        plt.legend(loc='upper left', prop={'size': 30})
-        plt.tight_layout()
-        plt.savefig(f'{args.output_path}diurnal_average.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
-       
-        pr_pred_seasons_daily_cycle_intensity = np.zeros((4,24))
-        pr_pred_seasons_daily_cycle_frequency = np.zeros((4,24))
-        for s in range(4):
-            pr_season = pr_pred_seasons[s]
-            for i in range(0,24):
-                pr_pred_seasons_daily_cycle_intensity[s,i] = np.nanmean(pr_season[:,i::24][pr_season[:,i::24]>=0.1])
-                pr_pred_seasons_daily_cycle_frequency[s,i] = (pr_season[:,i::24]>=0.1).sum() / pr_season[:,i::24].flatten().shape[0] * 100
-        
-        pr_gripho_seasons_daily_cycle_intensity = np.zeros((4,24))
-        pr_gripho_seasons_daily_cycle_frequency = np.zeros((4,24))
-        for s in range(4):
-            pr_season = pr_target_seasons[s]
-            for i in range(0,24):
-                pr_gripho_seasons_daily_cycle_intensity[s,i] = np.nanmean(pr_season[:,i::24][pr_season[:,i::24]>=0.1])
-                pr_gripho_seasons_daily_cycle_frequency[s,i] = (pr_season[:,i::24]>=0.1).sum() / pr_season[:,i::24].flatten().shape[0] * 100
-        
-        # Precipitation frequency
-        
-        points = np.arange(G.pr_target.shape[0])
-        
-        text_list = ['DJF', 'MAM', 'JJA', 'SON']
-        plt.rcParams.update({'font.size': 25})
-        
-        fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(16,18))
-        
-        ax_list = [ax[0,0], ax[0,1], ax[1,0], ax[1,1]]
-        
-        for s in range(4):
-        
-            pr_mean = pr_gripho_seasons_daily_cycle_intensity[s]
-            pr_pred_mean = pr_pred_seasons_daily_cycle_intensity[s]
-        
-            n = 25
-            ax_list[s].plot(range(1,n), pr_pred_mean, label='GNN4CD R', linestyle='-', linewidth=2, color='red')
-            ax_list[s].plot(range(1,n), pr_mean, label='GRIPHO', linestyle=':', linewidth=2, color='black')
-            ax_list[s].set_title(text_list[s], fontsize=45)
-            ax_list[s].set_ylabel("pr [mm/h]", fontsize=40)
-            ax_list[s].set_xlabel("time [h]", fontsize=40)
-            ax_list[s].set_ylim([0.5,3.5])
-            # ax_list[s].set_xlim([0,25])
-            ax_list[s].set_xticks(ticks=range(0,n,6))
-            ax_list[s].grid(which='major', color='lightgrey')
-        
-        plt.suptitle("Intensity", y=1, fontsize=40)
-        plt.legend(loc='upper left', prop={'size': 30})
-        plt.tight_layout()
-        plt.savefig(f'{args.output_path}diurnal_intensity.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
-        
-        points = np.arange(G.pr_target.shape[0])
-        
-        text_list = ['DJF', 'MAM', 'JJA', 'SON']
-        plt.rcParams.update({'font.size': 25})
-        
-        fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(16,18))
-        
-        ax_list = [ax[0,0], ax[0,1], ax[1,0], ax[1,1]]
-        
-        for s in range(4):
-        
-            pr_mean = pr_gripho_seasons_daily_cycle_frequency[s]
-            pr_pred_mean = pr_pred_seasons_daily_cycle_frequency[s]
-        
-            n = 25
-            ax_list[s].plot(range(1,n), pr_pred_mean, label='GNN4CD RC', linestyle='-', linewidth=2, color='red')
-            ax_list[s].plot(range(1,n), pr_mean, label='GRIPHO', linestyle=':', linewidth=2, color='black')
-            ax_list[s].set_title(text_list[s], fontsize=45)
-            ax_list[s].set_ylabel("pr [mm/h]", fontsize=40)
-            ax_list[s].set_xlabel("time [h]", fontsize=40)
-            ax_list[s].set_ylim([0,20])
-            # ax_list[s].set_xlim([0,25])
-            ax_list[s].set_xticks(ticks=range(0,n,6))
-            ax_list[s].grid(which='major', color='lightgrey')
-        
-        plt.suptitle("Frequency", y=1, fontsize=25)
-        plt.legend(loc='upper left', prop={'size': 30})
-        plt.tight_layout()
-        plt.savefig(f'{args.output_path}diurnal_frequency.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        if make_seasonal_plots:
+            pr_pred_seasons_daily_cycle = np.zeros((4,24))
+            for s in range(4):
+                pr_season = pr_pred_seasons[s]
+                for i in range(0,24):
+                    pr_pred_seasons_daily_cycle[s,i] = np.nanmean(pr_season[:,i::24])
+    
+            pr_gripho_seasons_daily_cycle = np.zeros((4,24))
+            for s in range(4):
+                pr_season = pr_target_seasons[s]
+                for i in range(0,24):
+                    pr_gripho_seasons_daily_cycle[s,i] = np.nanmean(pr_season[:,i::24])
+    
+            points = np.arange(G.pr_target.shape[0])
+            
+            text_list = ['DJF', 'MAM', 'JJA', 'SON']
+            plt.rcParams.update({'font.size': 25})
+            
+            fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(16,18))
+            
+            ax_list = [ax[0,0], ax[0,1], ax[1,0], ax[1,1]]
+            
+            for s in range(4):
+            
+                pr_mean = pr_gripho_seasons_daily_cycle[s]
+                pr_pred_mean = pr_pred_seasons_daily_cycle[s]
+            
+                n = 25
+                ax_list[s].plot(range(1,n), pr_pred_mean, label='GNN4CD R', linestyle='-', linewidth=2, color='red')
+                ax_list[s].plot(range(1,n), pr_mean, label='GRIPHO', linestyle=':', linewidth=2, color='black')
+                ax_list[s].set_title(text_list[s], fontsize=45)
+                ax_list[s].set_ylabel("pr [mm/h]", fontsize=40)
+                ax_list[s].set_xlabel("time [h]", fontsize=40)
+                ax_list[s].set_ylim([0,0.30])
+                # ax_list[s].set_xlim([0,24])
+                ax_list[s].set_xticks(ticks=range(0,n,6))
+                ax_list[s].grid(which='major', color='lightgrey')
+            
+            plt.suptitle("Average", y=1, fontsize=40)
+            plt.legend(loc='upper left', prop={'size': 30})
+            plt.tight_layout()
+            plt.savefig(f'{args.output_path}diurnal_average.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+           
+            pr_pred_seasons_daily_cycle_intensity = np.zeros((4,24))
+            pr_pred_seasons_daily_cycle_frequency = np.zeros((4,24))
+            for s in range(4):
+                pr_season = pr_pred_seasons[s]
+                for i in range(0,24):
+                    pr_pred_seasons_daily_cycle_intensity[s,i] = np.nanmean(pr_season[:,i::24][pr_season[:,i::24]>=0.1])
+                    pr_pred_seasons_daily_cycle_frequency[s,i] = (pr_season[:,i::24]>=0.1).sum() / pr_season[:,i::24].flatten().shape[0] * 100
+            
+            pr_gripho_seasons_daily_cycle_intensity = np.zeros((4,24))
+            pr_gripho_seasons_daily_cycle_frequency = np.zeros((4,24))
+            for s in range(4):
+                pr_season = pr_target_seasons[s]
+                for i in range(0,24):
+                    pr_gripho_seasons_daily_cycle_intensity[s,i] = np.nanmean(pr_season[:,i::24][pr_season[:,i::24]>=0.1])
+                    pr_gripho_seasons_daily_cycle_frequency[s,i] = (pr_season[:,i::24]>=0.1).sum() / pr_season[:,i::24].flatten().shape[0] * 100
+            
+            # Precipitation frequency
+            
+            points = np.arange(G.pr_target.shape[0])
+            
+            text_list = ['DJF', 'MAM', 'JJA', 'SON']
+            plt.rcParams.update({'font.size': 25})
+            
+            fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(16,18))
+            
+            ax_list = [ax[0,0], ax[0,1], ax[1,0], ax[1,1]]
+            
+            for s in range(4):
+            
+                pr_mean = pr_gripho_seasons_daily_cycle_intensity[s]
+                pr_pred_mean = pr_pred_seasons_daily_cycle_intensity[s]
+            
+                n = 25
+                ax_list[s].plot(range(1,n), pr_pred_mean, label='GNN4CD R', linestyle='-', linewidth=2, color='red')
+                ax_list[s].plot(range(1,n), pr_mean, label='GRIPHO', linestyle=':', linewidth=2, color='black')
+                ax_list[s].set_title(text_list[s], fontsize=45)
+                ax_list[s].set_ylabel("pr [mm/h]", fontsize=40)
+                ax_list[s].set_xlabel("time [h]", fontsize=40)
+                ax_list[s].set_ylim([0.5,3.5])
+                # ax_list[s].set_xlim([0,25])
+                ax_list[s].set_xticks(ticks=range(0,n,6))
+                ax_list[s].grid(which='major', color='lightgrey')
+            
+            plt.suptitle("Intensity", y=1, fontsize=40)
+            plt.legend(loc='upper left', prop={'size': 30})
+            plt.tight_layout()
+            plt.savefig(f'{args.output_path}diurnal_intensity.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+            
+            points = np.arange(G.pr_target.shape[0])
+            
+            text_list = ['DJF', 'MAM', 'JJA', 'SON']
+            plt.rcParams.update({'font.size': 25})
+            
+            fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(16,18))
+            
+            ax_list = [ax[0,0], ax[0,1], ax[1,0], ax[1,1]]
+            
+            for s in range(4):
+            
+                pr_mean = pr_gripho_seasons_daily_cycle_frequency[s]
+                pr_pred_mean = pr_pred_seasons_daily_cycle_frequency[s]
+            
+                n = 25
+                ax_list[s].plot(range(1,n), pr_pred_mean, label='GNN4CD RC', linestyle='-', linewidth=2, color='red')
+                ax_list[s].plot(range(1,n), pr_mean, label='GRIPHO', linestyle=':', linewidth=2, color='black')
+                ax_list[s].set_title(text_list[s], fontsize=45)
+                ax_list[s].set_ylabel("pr [mm/h]", fontsize=40)
+                ax_list[s].set_xlabel("time [h]", fontsize=40)
+                ax_list[s].set_ylim([0,20])
+                # ax_list[s].set_xlim([0,25])
+                ax_list[s].set_xticks(ticks=range(0,n,6))
+                ax_list[s].grid(which='major', color='lightgrey')
+            
+            plt.suptitle("Frequency", y=1, fontsize=25)
+            plt.legend(loc='upper left', prop={'size': 30})
+            plt.tight_layout()
+            plt.savefig(f'{args.output_path}diurnal_frequency.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
 
         # PDF
         
@@ -874,7 +878,7 @@ if __name__ == '__main__':
         spatial_corr_p99 = stats.pearsonr(np.nanpercentile(G.pr, q=99, axis=1).flatten(), np.nanpercentile(G.pr_target,  q=99, axis=1).flatten())
         spatial_corr_p999 = stats.pearsonr(np.nanpercentile(G.pr, q=99.9, axis=1).flatten(), np.nanpercentile(G.pr_target,  q=99.9, axis=1).flatten())
 
-        print(f"avg:\t{spatial_corr_avg}\np99:\t{spatial_corr_p99}\np99.9:\t{spatial_corr_p999}")
+        write_log(f"Italy spatial corr - avg:\t{spatial_corr_avg}\np99:\t{spatial_corr_p99}\np99.9:\t{spatial_corr_p999}", args, accelerator, 'a')
         
         # spatial_corr_avg.confidence_interval(confidence_level=0.68,method=method)
 
@@ -885,7 +889,7 @@ if __name__ == '__main__':
         spatial_corr_p999 = stats.pearsonr(np.nanpercentile(G.pr[mask_north,:], q=99.9, axis=1).flatten(),
                                            np.nanpercentile(G.pr_target[mask_north,:],  q=99.9, axis=1).flatten())
 
-        print(f"avg:\t{spatial_corr_avg}\np99:\t{spatial_corr_p99}\np99.9:\t{spatial_corr_p999}")
+        write_log(f"North spatial corr - avg:\t{spatial_corr_avg}\np99:\t{spatial_corr_p99}\np99.9:\t{spatial_corr_p999}", args, accelerator, 'a')
 
         spatial_corr_avg = stats.pearsonr(np.nanmean(G.pr[mask_centre_sud,:], axis=1).flatten(),
                                           np.nanmean(G.pr_target[mask_centre_sud,:], axis=1).flatten())
@@ -894,7 +898,7 @@ if __name__ == '__main__':
         spatial_corr_p999 = stats.pearsonr(np.nanpercentile(G.pr[mask_centre_sud,:], q=99.9, axis=1).flatten(), 
                                            np.nanpercentile(G.pr_target[mask_centre_sud,:],  q=99.9, axis=1).flatten())
         
-        print(f"avg:\t{spatial_corr_avg}\np99:\t{spatial_corr_p99}\np99.9:\t{spatial_corr_p999}")
+        write_log(f"Centre-south spatial corr - avg:\t{spatial_corr_avg}\np99:\t{spatial_corr_p99}\np99.9:\t{spatial_corr_p999}", args, accelerator, 'a')
         
 
         # QQ plot

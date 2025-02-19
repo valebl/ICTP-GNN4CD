@@ -10,6 +10,11 @@ import torch.nn.functional as F
 from datetime import datetime, date
 from calendar import monthrange
 
+import numpy as np
+from scipy.stats import pearsonr, spearmanr, wasserstein_distance, ks_2samp, entropy
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.metrics.pairwise import cosine_similarity
+
 ######################################################
 #------------------ GENERAL UTILITIES ---------------
 ######################################################
@@ -247,17 +252,17 @@ def derive_train_val_idxs(train_year_start, train_month_start, train_day_start, 
     if val_start_idx < 24:
         val_start_idx = 24
 
-    if train_start_idx <= train_end_idx:
-        raise Exception("Train start idxs is not larger than train end ids.")
-    if val_start_idx <= val_end_idx:
-        raise Exception("Val start idxs is not larger than val end ids.")
+    if train_start_idx >= train_end_idx:
+        raise Exception("Train start idxs is not larger than train end idx.")
+    if val_start_idx >= val_end_idx:
+        raise Exception("Val start idxs is not larger than val end idx.")
             
     # Val year before or after train years
     if train_start_idx >= val_end_idx or train_end_idx <= val_start_idx:
         train_idxs_list = [*range(train_start_idx, train_end_idx)]
         val_idxs_list = [*range(val_start_idx, val_end_idx)]
     # Val year inside train years
-    elif val_start_idx > train_start_idx and val_end_idx < train_start_idx:
+    elif val_start_idx > train_start_idx and val_end_idx < train_end_idx:
         train_idxs_list = [*range(train_start_idx, val_start_idx)] + [*range(val_end_idx,  train_end_idx)]
         val_idxs_list = [*range(val_start_idx, val_end_idx)]
     else:
@@ -279,7 +284,7 @@ def derive_train_val_idxs(train_year_start, train_month_start, train_day_start, 
 
 
 def derive_train_val_test_idxs_random_months(train_year_start, train_month_start, train_day_start, train_year_end, train_month_end,
-                         train_day_end, first_year, idxs_not_all_nan=None, validation_year=None, args=None, accelerator=None):
+                         train_day_end, first_year, idxs_not_all_nan=None, args=None, accelerator=None):
     r'''
     Computes the train, validation and test indeces, assuming that validation and test are periods
     of one year where the months are chosen randomly among the whole period. All remaining months
@@ -436,6 +441,77 @@ def accuracy_binary_one_classes(prediction, target, reduction="mean"):
             acc_class1 = torch.tensor(torch.nan)
         return acc_class0, acc_class1
 
+
+def compute_metrics(y_pred, y_true):
+    metrics = {}
+
+    # Compute precipitation
+    pr_pred = np.expm1(y_pred)
+    pr_true = np.expm1(y_true)
+    pr_pred_spatial_avg = np.nanmean(pr_pred, axis=1)
+    pr_true_spatial_avg = np.nanmean(pr_true, axis=1)
+    pr_pred_spatial_p99 = np.nanpercentile(pr_pred, q=99, axis=1)
+    pr_true_spatial_p99 = np.nanpercentile(pr_true, q=99, axis=1)
+    pr_pred_spatial_p999 = np.nanpercentile(pr_pred, q=99.9, axis=1)
+    pr_true_spatial_p999 = np.nanpercentile(pr_true, q=99.9, axis=1)
+    
+    #  Determine a non-nan mask
+    mask_not_nan = ~np.isnan(y_true.flatten())
+    y_pred = y_pred.flatten()[mask_not_nan]
+    y_true = y_true.flatten()[mask_not_nan]
+    
+    # Basic error metrics
+    metrics['MAE'] = mean_absolute_error(y_true, y_pred)
+    metrics['RMSE'] = np.sqrt(mean_squared_error(y_true, y_pred))
+    metrics['NRMSE'] = metrics['RMSE'] / (np.max(y_true) - np.min(y_true))
+    metrics['Bias'] = np.mean(y_pred - y_true)
+
+    # Basic error metrics
+    metrics['Spatial Avg MAE'] = mean_absolute_error(y_true, y_pred)
+    metrics['Spatial Avg RMSE'] = np.sqrt(mean_squared_error(y_true, y_pred))
+    metrics['Spatial Avg NRMSE'] = metrics['RMSE'] / (np.max(y_true) - np.min(y_true))
+    metrics['Spatial Avg Bias'] = np.mean(y_pred - y_true)
+    
+    # Spatial correlation
+    metrics['Pearson Corr'], _ = pearsonr(y_true, y_pred)
+    metrics['Spearman Corr'], _ = spearmanr(y_true, y_pred)
+    
+    # Percentage bias
+    metrics['Mean Percentage Bias'] = 100 * np.mean((y_pred - y_true) / (y_true + 1e-6))
+    metrics['Relative RMSE'] = metrics['RMSE'] / (np.mean(y_true) + 1e-6)
+    
+    # Extreme precipitation metrics
+    p99_obs = np.nanpercentile(y_true, 99)
+    p99_pred = np.nanpercentile(y_pred, 99)
+    
+    p99_9_obs = np.nanpercentile(y_true, 99.9)
+    p99_9_pred = np.nanpercentile(y_pred, 99.9)
+    
+    metrics['Extreme Bias (p99)'] = p99_pred - p99_obs
+    metrics['Extreme Bias (p99.9)'] = p99_9_pred - p99_9_obs
+    
+    # Probability of Detection and False Alarm Ratio for extremes
+    hits = np.nansum((y_pred >= p99_obs) & (y_true >= p99_obs))
+    false_alarms = np.nansum((y_pred >= p99_obs) & (y_true < p99_obs))
+    actual_extremes = np.nansum(y_true >= p99_obs)
+    predicted_extremes = np.nansum(y_pred >= p99_obs)
+    
+    metrics['POD (p99)'] = hits / (actual_extremes + 1e-6)  # Probability of Detection
+    metrics['FAR (p99)'] = false_alarms / (predicted_extremes + 1e-6)  # False Alarm Ratio
+    
+    # distributions comparison
+    metrics['Earth Mover Distance'] = wasserstein_distance(y_true, y_pred)
+    metrics['KL Divergence'] = entropy(y_true + 1e-6, y_pred + 1e-6)
+    ks_stat, _ = ks_2samp(y_true, y_pred)
+    metrics['KS Statistic'] = ks_stat
+
+    # PDF comparison
+    hist_y_true, _ = np.histogram(pr_true.flatten()[mask_not_nan], bins=np.arange(0,200,0.1).astype(np.float32), density=False)
+    hist_y_pred, _ = np.histogram(pr_pred.flatten()[mask_not_nan], bins=np.arange(0,200,0.1).astype(np.float32), density=False)
+
+    metrics["PDF Cos Sim"] = cosine_similarity(hist_y_true/hist_y_true.sum(), hist_y_pred/hist_y_pred.sum())
+    
+    return metrics
 
 #-----------------------------------------------------
 #--------------- CUSTOM LOSS FUNCTIONS ---------------
@@ -598,7 +674,7 @@ class Trainer(object):
                     #graph = graph.to(accelerator.device)
                     train_mask = graph["high"].train_mask
                     if train_mask.sum() == 0:
-                        continue               
+                        continue
                     y = graph['high'].y
 
                     y_pred = model(graph).squeeze()
@@ -711,9 +787,7 @@ class Trainer(object):
 
             with torch.no_grad():    
                 for i, graph in enumerate(dataloader_val):
-                    train_mask = graph["high"].train_mask
-                    if train_mask.sum() == 0:
-                        continue                    
+                    train_mask = graph["high"].train_mask               
                     y_pred = model(graph).squeeze()
                     y = graph['high'].y
                     w = graph['high'].w
@@ -955,6 +1029,78 @@ class Validator(object):
 
         return all_loss_meter_val.avg
 
+    # def validate_reg_all(self, model, dataloader, loss_fn, accelerator, args):
+        
+    #     all_train_mask_list = []
+    #     all_y_pred_list = []
+    #     all_y_list = []
+    #     all_w_list = []
+
+    #     model.eval()
+        
+    #     with torch.no_grad(): 
+    #         for i, graph in enumerate(dataloader):
+
+    #             train_mask = graph["high"].train_mask
+    #             if train_mask.sum() == 0:
+    #                 continue
+    #             y = graph['high'].y
+    #             w = graph['high'].w
+                    
+    #             # Regressor
+    #             y_pred = model(graph).squeeze()
+
+    #             # Gather from all processes for metrics
+    #             all_y_pred, all_y, all_w, all_train_mask = accelerator.gather((y_pred, y, w, train_mask))
+
+    #             # Apply mask
+    #             all_train_mask_list.append(all_train_mask)
+    #             all_y_pred_list.append(all_y_pred)
+    #             all_y_list.append(all_y)
+    #             all_w_list.append(all_w)
+
+    #         # Create tensors
+    #         all_train_mask_tensor = torch.stack(all_train_mask_list)
+    #         all_y_pred_tensor = torch.stack(all_y_pred_list)[all_train_mask_tensor]
+    #         all_y_tensor = torch.stack(all_y_list)[all_train_mask_tensor]
+    #         all_w_tensor = torch.stack(all_w_list)[all_train_mask_tensor]
+
+    #         all_loss, _, _ = loss_fn(all_y_pred_tensor,all_y_tensor,all_w_tensor)  
+                    
+    #     return torch.mean(all_loss).item(), all_y_pred_tensor.cpu().numpy(), all_y_tensor.cpu().numpy()
+
+    def validate_reg_all(self, model, dataloader, accelerator, args):
+        
+        train_mask = []
+        y_pred = []
+        y = []
+        w = []
+
+        model.eval()
+        
+        with torch.no_grad(): 
+            for i, graph in enumerate(dataloader):
+
+                train_mask.append(graph["high"].train_mask)
+                if graph["high"].train_mask.sum() == 0:
+                    nan_tensor = (torch.ones(train_mask) * torch.nan).to(accelerator.device)
+                    y.append(nan_tensor)
+                    w.append(nan_tensor)
+                    y_pred.append(nan_tensor)
+                    continue
+                    
+                y.append(graph['high'].y)
+                w.append(graph['high'].w)
+                y_pred.append(model(graph).squeeze())
+
+            # Create tensors
+            train_mask = torch.stack(train_mask)
+            y_pred = torch.stack(y_pred)
+            y = torch.stack(y)
+            w = torch.stack(w)
+                    
+        return y_pred, y, w, train_mask
+    
     def validate_reg_bins(self, model, dataloader, loss_fn, accelerator, args):
 
         loss_meter_val = AverageMeter()

@@ -154,14 +154,15 @@ if __name__ == '__main__':
         write_log(f"\nTrain from {args.train_day_start}/{args.train_month_start}/{args.train_year_start} to " +
                   f"{args.train_day_end}/{args.train_month_end}/{args.train_year_end} with validation year {args.validation_year}",
                   args, accelerator, 'a')
-
     else:
-        train_idxs, val_idxs = derive_train_val_test_idxs_random_months(args.train_year_start, args.train_month_start, args.train_day_start, args.train_year_end,
-                                             args.train_month_end, args.train_day_end, args.first_year, idxs_not_all_nan,
-                                             args.validation_year, args, accelerator)
+        train_idxs, val_idxs = derive_train_val_test_idxs_random_months(args.train_year_start, args.train_month_start,
+            args.train_day_start,args.train_year_end, args.train_month_end, args.train_day_end, args.first_year,
+            idxs_not_all_nan, args, accelerator)
+
+        
         write_log(f"\nTrain from {args.train_day_start}/{args.train_month_start}/{args.train_year_start} to " +
                 f"{args.train_day_end}/{args.train_month_end}/{args.train_year_end} with validation and test years" +
-                f"as 12 months chosen randomly within the {args.train_year_start}-{args.train_year_end} period.."
+                f"as 12 months chosen randomly within the {args.train_year_start}-{args.train_year_end} period..")
 
     train_start_idx = train_idxs.min()
     train_end_idx = train_idxs.max()

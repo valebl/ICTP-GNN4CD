@@ -176,7 +176,7 @@ class Iterable_Graph(object):
         self.idxs_vector = idxs_vector
 
     def __len__(self):
-        return len(self.dataset_graph)
+        return len(self.idxs_vector)
 
     def __next__(self):
         if self.prog_idx < self.idxs_vector.shape[0]:
