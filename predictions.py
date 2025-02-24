@@ -368,6 +368,7 @@ if __name__ == '__main__':
             x_size=x_size, y_size=y_size, font_size_title=font_size_title, font_size=font_size, cbar_title_size=cbar_title_size,
             ylim=ylim, xlim=xlim, cbar_y=cbar_y)
         plt.savefig(f'{args.output_path}classifier.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
 
         # Cumulative precipitation
         plot_maps(pos, G.pr, G.pr_target, pr_min=0, aggr=np.nansum, pr_max=2750,
@@ -375,6 +376,7 @@ if __name__ == '__main__':
             x_size=x_size, y_size=y_size, font_size_title=font_size_title, font_size=font_size, cbar_title_size=cbar_title_size,
             ylim=ylim, xlim=xlim, cbar_y=cbar_y, subtitle_x=0.55)
         plt.savefig(f'{args.output_path}cumulative.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
 
         pr_reg_bias = np.nansum(G.pr, axis=1) - np.nansum(G.pr_target, axis=1)
         pr_reg_bias_percentage = pr_reg_bias / np.nansum(G.pr_target, axis=1) * 100
@@ -384,12 +386,14 @@ if __name__ == '__main__':
             cmap='BrBG', save_path=None, save_file_name=None, zones=zones, x_size=x_size, y_size=y_size, 
             font_size_title=85, font_size=font_size, cbar_title_size=100, ylim=ylim, xlim=xlim, cbar_y=cbar_y)
         plt.savefig(f'{args.output_path}cumulative_bias.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
         
         plot_single_map(pos, pr_reg_bias_percentage, pr_min=-100, aggr=None, pr_max=100,
             title=f"Cumulative precipitation percentage bias - Year 2016", legend_title="[%]", subtitle_y=0.98, subtitle_x=0.5,
             cmap='BrBG', save_path=None, save_file_name=None, zones=zones, x_size=x_size, y_size=y_size, 
             font_size_title=85, font_size=font_size, cbar_title_size=100, ylim=ylim, xlim=xlim, cbar_y=cbar_y)
         plt.savefig(f'{args.output_path}cumulative_bias_percentage.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
 
         # Average precipitation
         plot_maps(pos, G.pr, G.pr_target, pr_min=0, aggr=np.nanmean, pr_max=0.3,
@@ -397,6 +401,7 @@ if __name__ == '__main__':
             x_size=x_size, y_size=y_size, font_size_title=font_size_title, font_size=font_size, cbar_title_size=cbar_title_size,
             ylim=ylim, xlim=xlim, cbar_y=cbar_y, subtitle_x=0.55)
         plt.savefig(f'{args.output_path}average.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
 
         pr_bias_avg = np.nanmean(G.pr, axis=1) - np.nanmean(G.pr_target, axis=1)
         pr_bias_percentage_avg = pr_bias_avg / np.nanmean(G.pr_target, axis=1) * 100
@@ -406,12 +411,14 @@ if __name__ == '__main__':
             cmap='BrBG', save_path=None, save_file_name=None, zones=zones, x_size=x_size, y_size=y_size, 
             font_size_title=85, font_size=font_size, cbar_title_size=100, ylim=ylim, xlim=xlim, cbar_y=cbar_y)
         plt.savefig(f'{args.output_path}average_bias.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
         
         plot_single_map(pos, pr_bias_percentage_avg, pr_min=-100, aggr=None, pr_max=100,
             title=f"Average precipitation percentage bias - Year 2016", legend_title="[%]", subtitle_y=0.98, subtitle_x=0.5,
             cmap='BrBG', save_path=None, save_file_name=None, zones=zones, x_size=x_size, y_size=y_size, 
             font_size_title=85, font_size=font_size, cbar_title_size=100, ylim=ylim, xlim=xlim, cbar_y=cbar_y)
         plt.savefig(f'{args.output_path}average_bias_percentage.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
 
         # Daily maps
 
@@ -431,6 +438,7 @@ if __name__ == '__main__':
                   save_file_name=None, zones=zones, x_size=x_size, y_size=y_size, font_size_title=font_size_title,
                   font_size=font_size, cbar_title_size=cbar_title_size, ylim=ylim, xlim=xlim, cbar_y=cbar_y)
         plt.savefig(f'{args.output_path}average_daily.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
         
         plot_maps(pos, pr_daily_avg_geq3mm, pr_target_daily_avg_geq3mm, aggr=None, title=f"Average daily precipitation - Year 2016",
                   legend_title="[mm/d]", cmap_type="custom_jet_discrete_avg_limits", save_path=None, pr_max=5,
@@ -438,6 +446,7 @@ if __name__ == '__main__':
                   save_file_name=None, zones=zones, x_size=x_size, y_size=y_size, font_size_title=font_size_title,
                   font_size=font_size, cbar_title_size=cbar_title_size, ylim=ylim, xlim=xlim, cbar_y=cbar_y)
         plt.savefig(f'{args.output_path}average_daily_geq3mm.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
         
         # ### Extreme event - North Italy 22 Nov 2016 - 25 Nov 2016
         if args.test_idxs_file is None:
@@ -450,6 +459,7 @@ if __name__ == '__main__':
                 aggr=np.nansum, title=f"Cumulative precipitation (from {22}/{11}/{2016} to {25}/{11}/{2016})", cmap=cmap_extreme, subtitle_x=0.55,
                 save_path=None, save_file_name=None, zones=zones, x_size=x_size, y_size=y_size, font_size_title=font_size_title, font_size=font_size)
             plt.savefig(f'{args.output_path}extreme.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+            plt.close()
             
             write_log(f"Exreme event - GNN4CD max={np.nanmax(G.pr[:,start:end])}, GRIPHO max={np.nanmax(G.pr_target[:,start:end])}", args, accelerator, 'a')
 
@@ -459,9 +469,11 @@ if __name__ == '__main__':
             plot_seasonal_maps(pos, pr_pred_seasons, zones=zones, pr_min=0.1, pr_max=500, aggr=np.nansum,
                                title='Cumulative precipitation for 2016 seasons - GNN4CD')
             plt.savefig(f'{args.output_path}seasons_gnn4cd.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+            plt.close()
             plot_seasonal_maps(pos, pr_target_seasons, zones=zones, pr_min=0.1, pr_max=500, aggr=np.nansum,
                                title='Cumulative precipitation for 2016 seasons - OBSERVATION')
             plt.savefig(f'{args.output_path}seasons_gripho.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+            plt.close()
             
             # Distributions
             fig, ax = plt.subplots(nrows=1, ncols=4, figsize=(28,7))
@@ -495,10 +507,12 @@ if __name__ == '__main__':
                 axi.legend()
             
             plt.savefig(f'{args.output_path}seasonal_pdfs.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+            plt.close()
     
         # Time series
         rmse, rmse_perc = plot_mean_time_series(pos, G.pr_target, G.pr, points=np.arange(G.pr_target.shape[0]), aggr=np.nanmean, title="")
         plt.savefig(f'{args.output_path}time_series.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
 
         # Diurnal Cycles
 
@@ -546,6 +560,7 @@ if __name__ == '__main__':
             plt.legend(loc='upper left', prop={'size': 30})
             plt.tight_layout()
             plt.savefig(f'{args.output_path}diurnal_average.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+            plt.close()
            
             pr_pred_seasons_daily_cycle_intensity = np.zeros((4,24))
             pr_pred_seasons_daily_cycle_frequency = np.zeros((4,24))
@@ -563,7 +578,7 @@ if __name__ == '__main__':
                     pr_gripho_seasons_daily_cycle_intensity[s,i] = np.nanmean(pr_season[:,i::24][pr_season[:,i::24]>=0.1])
                     pr_gripho_seasons_daily_cycle_frequency[s,i] = (pr_season[:,i::24]>=0.1).sum() / pr_season[:,i::24].flatten().shape[0] * 100
             
-            # Precipitation frequency
+            # Precipitation intensity
             
             points = np.arange(G.pr_target.shape[0])
             
@@ -594,6 +609,9 @@ if __name__ == '__main__':
             plt.legend(loc='upper left', prop={'size': 30})
             plt.tight_layout()
             plt.savefig(f'{args.output_path}diurnal_intensity.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+            plt.close()
+
+            # Precipitation frequency
             
             points = np.arange(G.pr_target.shape[0])
             
@@ -620,10 +638,11 @@ if __name__ == '__main__':
                 ax_list[s].set_xticks(ticks=range(0,n,6))
                 ax_list[s].grid(which='major', color='lightgrey')
             
-            plt.suptitle("Frequency", y=1, fontsize=25)
+            plt.suptitle("Frequency", y=1, fontsize=40)
             plt.legend(loc='upper left', prop={'size': 30})
             plt.tight_layout()
             plt.savefig(f'{args.output_path}diurnal_frequency.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+            plt.close()
 
         # PDF
         
@@ -682,6 +701,7 @@ if __name__ == '__main__':
         ax.set_xlabel('precipitation [mm/h]', fontsize=22)
         ax.set_ylabel('frequency', fontsize=22)
         plt.savefig(f'{args.output_path}pdf.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
 
         # binsize of 0.1mm
         plt.rcParams.update({'font.size': 18})
@@ -713,6 +733,7 @@ if __name__ == '__main__':
         ax.set_xlabel('precipitation [mm/hr]')
         ax.set_ylabel('frequency')
         plt.savefig(f'{args.output_path}pdf_01mm.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
 
         # binsize of 0.5mm and step histogram
 
@@ -738,6 +759,7 @@ if __name__ == '__main__':
         ax.set_xlabel('precipitation intensity [mm/hr]')
         ax.set_ylabel('frequency')
         plt.savefig(f'{args.output_path}pdf_05mm_step.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
 
         # 99 and 99.9 percentiles
 
@@ -749,6 +771,7 @@ if __name__ == '__main__':
             x_size=x_size, y_size=y_size, font_size_title=font_size_title, font_size=font_size, cbar_title_size=cbar_title_size,
             ylim=ylim, xlim=xlim, cbar_y=cbar_y)
         plt.savefig(f'{args.output_path}p99.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
         
         p99_bias = p99_pred - p99_y
         p99_bias_percentile = p99_bias / p99_y * 100
@@ -758,12 +781,14 @@ if __name__ == '__main__':
             cmap='BrBG', save_path=None, save_file_name=None, zones=zones, x_size=x_size, y_size=y_size, 
             font_size_title=85, font_size=font_size, cbar_title_size=100, ylim=ylim, xlim=xlim, cbar_y=cbar_y)
         plt.savefig(f'{args.output_path}p99_bias.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
 
         plot_single_map(pos, p99_bias_percentile, pr_min=-100, aggr=None, pr_max=100,
             title=f"P99 precipitation percentage bias - Year 2016", legend_title="[%]", subtitle_y=0.98, subtitle_x=0.5,
             cmap='BrBG', save_path=None, save_file_name=None, zones=zones, x_size=x_size, y_size=y_size, 
             font_size_title=85, font_size=font_size, cbar_title_size=100, ylim=ylim, xlim=xlim, cbar_y=cbar_y)
         plt.savefig(f'{args.output_path}p99_bias_percentage.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
 
         p999_y = np.nanpercentile(G.pr_target, q=99.9, axis=1)
         p999_pred = np.nanpercentile(G.pr, q=99.9, axis=1)
@@ -773,6 +798,7 @@ if __name__ == '__main__':
             x_size=x_size, y_size=y_size, font_size_title=font_size_title, font_size=font_size, cbar_title_size=cbar_title_size,
             ylim=ylim, xlim=xlim, cbar_y=cbar_y)
         plt.savefig(f'{args.output_path}p999.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
         
         p999_bias = p999_pred - p999_y
         p999_bias_percentile = p999_bias / p999_y * 100
@@ -782,12 +808,14 @@ if __name__ == '__main__':
             cmap='BrBG', save_path=None, save_file_name=None, zones=zones, x_size=x_size, y_size=y_size, 
             font_size_title=85, font_size=font_size, cbar_title_size=100, ylim=ylim, xlim=xlim, cbar_y=cbar_y)
         plt.savefig(f'{args.output_path}p999_bias.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
 
         plot_single_map(pos, p999_bias_percentile, pr_min=-100, aggr=None, pr_max=100,
             title=f"P99.9 precipitation percentage bias - Year 2016", legend_title="[%]", subtitle_y=0.98, subtitle_x=0.5,
             cmap='BrBG', save_path=None, save_file_name=None, zones=zones, x_size=x_size, y_size=y_size, 
             font_size_title=85, font_size=font_size, cbar_title_size=100, ylim=ylim, xlim=xlim, cbar_y=cbar_y)
         plt.savefig(f'{args.output_path}p999_bias_percentage.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
 
         # Additional plots
 
@@ -838,6 +866,7 @@ if __name__ == '__main__':
         ax.set_xlabel('precipitation [mm/h]', fontsize=20)
         ax.set_ylabel('frequency', fontsize=20)
         plt.savefig(f'{args.output_path}pdf_north.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
         
         plt.rcParams.update({'font.size': 18})
         
@@ -867,7 +896,7 @@ if __name__ == '__main__':
         ax.set_xlabel('precipitation [mm/h]', fontsize=22)
         ax.set_ylabel('frequency', fontsize=22)
         plt.savefig(f'{args.output_path}pdf_centre_south.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
-        
+        plt.close()        
         
         # Spatial correlation
         from scipy import stats
@@ -901,13 +930,14 @@ if __name__ == '__main__':
         write_log(f"Centre-south spatial corr - avg:\t{spatial_corr_avg}\np99:\t{spatial_corr_p99}\np99.9:\t{spatial_corr_p999}", args, accelerator, 'a')
         
 
-        # QQ plot
-        import statsmodels.api as sm
+        # # QQ plot (nice but slow!)
+        # import statsmodels.api as sm
         
-        x = sm.ProbPlot(G.pr.flatten())
-        y = sm.ProbPlot(G.pr_target.flatten())
+        # x = sm.ProbPlot(G.pr.flatten())
+        # y = sm.ProbPlot(G.pr_target.flatten())
 
-        plt.rcParams.update({'font.size': 30})
-        fig, ax = plt.subplots(figsize=(20,20))
-        sm.qqplot_2samples(x,y, xlabel="GNN4CD [mm/h]", ylabel="OBSERVATION [mm/h]", ax=ax, line="45")
-        plt.savefig(f'{args.output_path}qqplot.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        # plt.rcParams.update({'font.size': 30})
+        # fig, ax = plt.subplots(figsize=(20,20))
+        # sm.qqplot_2samples(x,y, xlabel="GNN4CD [mm/h]", ylabel="OBSERVATION [mm/h]", ax=ax, line="45")
+        # plt.savefig(f'{args.output_path}qqplot.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        # plt.close()

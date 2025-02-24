@@ -269,9 +269,6 @@ def derive_train_val_idxs(train_year_start, train_month_start, train_day_start, 
         raise Exception("Partially overlapping train and validation periods are not supported." +
                         "Val must be before, after or completely inside train years.")
 
-    # For speedup
-    idxs_not_all_nan_set = set(idxs_not_all_nan)
-
     # Remove the idxs for which all graph nodes have nan target
     if idxs_not_all_nan is not None:
         train_idxs_list = [i for i in train_idxs_list if i in idxs_not_all_nan]
@@ -442,74 +439,74 @@ def accuracy_binary_one_classes(prediction, target, reduction="mean"):
         return acc_class0, acc_class1
 
 
-def compute_metrics(y_pred, y_true):
+def compute_metrics(y_pred, y_true, threshold=0.1):
     metrics = {}
 
     # Compute precipitation
     pr_pred = np.expm1(y_pred)
     pr_true = np.expm1(y_true)
+    pr_true[pr_true < threshold] = 0
+    pr_true = np.round(pr_true, decimals=1)
+    pr_pred[pr_pred < threshold] = 0
+
     pr_pred_spatial_avg = np.nanmean(pr_pred, axis=1)
     pr_true_spatial_avg = np.nanmean(pr_true, axis=1)
     pr_pred_spatial_p99 = np.nanpercentile(pr_pred, q=99, axis=1)
     pr_true_spatial_p99 = np.nanpercentile(pr_true, q=99, axis=1)
     pr_pred_spatial_p999 = np.nanpercentile(pr_pred, q=99.9, axis=1)
     pr_true_spatial_p999 = np.nanpercentile(pr_true, q=99.9, axis=1)
-    
-    #  Determine a non-nan mask
-    mask_not_nan = ~np.isnan(y_true.flatten())
-    y_pred = y_pred.flatten()[mask_not_nan]
-    y_true = y_true.flatten()[mask_not_nan]
+
+    # spatial biases
+    spatial_bias_percentage = (pr_pred_spatial_avg - pr_true_spatial_avg) / (pr_true_spatial_avg + 1e-6) * 100
+    spatial_p99_bias_percentage = (pr_pred_spatial_p99 - pr_true_spatial_p99) / (pr_true_spatial_p99 + 1e-6) * 100
+    spatial_p999_bias_percentage = (pr_pred_spatial_p999 - pr_true_spatial_p999) / (pr_true_spatial_p999 + 1e-6) * 100
+
+    mask_not_nan_y = ~np.isnan(y_true.flatten())
+    mask_not_nan = ~np.isnan(pr_true.flatten())
+    y_true = y_true.flatten()[mask_not_nan_y]
+    y_pred = y_pred.flatten()[mask_not_nan_y]
     
     # Basic error metrics
     metrics['MAE'] = mean_absolute_error(y_true, y_pred)
     metrics['RMSE'] = np.sqrt(mean_squared_error(y_true, y_pred))
-    metrics['NRMSE'] = metrics['RMSE'] / (np.max(y_true) - np.min(y_true))
-    metrics['Bias'] = np.mean(y_pred - y_true)
 
-    # Basic error metrics
-    metrics['Spatial Avg MAE'] = mean_absolute_error(y_true, y_pred)
-    metrics['Spatial Avg RMSE'] = np.sqrt(mean_squared_error(y_true, y_pred))
-    metrics['Spatial Avg NRMSE'] = metrics['RMSE'] / (np.max(y_true) - np.min(y_true))
-    metrics['Spatial Avg Bias'] = np.mean(y_pred - y_true)
+    metrics['Avg spatial Bias (over)'] = np.mean(spatial_bias_percentage[spatial_bias_percentage>0])
+    metrics['Avg spatial Bias (under)'] = np.mean(spatial_bias_percentage[spatial_bias_percentage<=0])
+    metrics['Avg spatial p99 Bias (over)'] = np.nanmean(spatial_p99_bias_percentage[spatial_p99_bias_percentage>0])
+    metrics['Avg spatial p99 Bias (under)'] = np.nanmean(spatial_p99_bias_percentage[spatial_p99_bias_percentage<=0])
+    metrics['Avg spatial p99.9 Bias (over)'] = np.nanmean(spatial_p999_bias_percentage[spatial_p999_bias_percentage>0])
+    metrics['Avg spatial p99.9 Bias (under)'] = np.nanmean(spatial_p999_bias_percentage[spatial_p999_bias_percentage<=0])
     
     # Spatial correlation
-    metrics['Pearson Corr'], _ = pearsonr(y_true, y_pred)
-    metrics['Spearman Corr'], _ = spearmanr(y_true, y_pred)
-    
-    # Percentage bias
-    metrics['Mean Percentage Bias'] = 100 * np.mean((y_pred - y_true) / (y_true + 1e-6))
-    metrics['Relative RMSE'] = metrics['RMSE'] / (np.mean(y_true) + 1e-6)
-    
-    # Extreme precipitation metrics
-    p99_obs = np.nanpercentile(y_true, 99)
-    p99_pred = np.nanpercentile(y_pred, 99)
-    
-    p99_9_obs = np.nanpercentile(y_true, 99.9)
-    p99_9_pred = np.nanpercentile(y_pred, 99.9)
-    
-    metrics['Extreme Bias (p99)'] = p99_pred - p99_obs
-    metrics['Extreme Bias (p99.9)'] = p99_9_pred - p99_9_obs
+    metrics['Pearson Corr'], _ = pearsonr(y_pred, y_true)
+    metrics['Spearman Corr'], _ = spearmanr(y_pred, y_true)
     
     # Probability of Detection and False Alarm Ratio for extremes
-    hits = np.nansum((y_pred >= p99_obs) & (y_true >= p99_obs))
-    false_alarms = np.nansum((y_pred >= p99_obs) & (y_true < p99_obs))
-    actual_extremes = np.nansum(y_true >= p99_obs)
-    predicted_extremes = np.nansum(y_pred >= p99_obs)
+    pr_true_p99 = np.nanpercentile(pr_true, q=99)
+    hits = np.nansum((pr_pred >= pr_true_p99) & (pr_true >= pr_true_p99))
+    false_alarms = np.nansum((pr_pred >= pr_true_p99) & (pr_true < pr_true_p99))
+    actual_extremes = np.nansum(pr_true >= pr_true_p99)
+    predicted_extremes = np.nansum(pr_pred >= pr_true_p99)
     
-    metrics['POD (p99)'] = hits / (actual_extremes + 1e-6)  # Probability of Detection
+    metrics['POD (p99)'] = hits / (actual_extremes + 1e-6) # Probability of Detection
     metrics['FAR (p99)'] = false_alarms / (predicted_extremes + 1e-6)  # False Alarm Ratio
     
+    # To avoid numerical issues due to unrealistic predictions
+    pr_pred[np.isinf(pr_pred)] = np.nan
+
     # distributions comparison
-    metrics['Earth Mover Distance'] = wasserstein_distance(y_true, y_pred)
-    metrics['KL Divergence'] = entropy(y_true + 1e-6, y_pred + 1e-6)
-    ks_stat, _ = ks_2samp(y_true, y_pred)
+    metrics['Earth Mover Distance'] = wasserstein_distance(pr_true.flatten()[mask_not_nan], pr_pred.flatten()[mask_not_nan])
+    metrics['KL Divergence'] = entropy(pr_true.flatten()[mask_not_nan] + 1e-6, pr_pred.flatten()[mask_not_nan] + 1e-6)
+    ks_stat, p_value = ks_2samp(pr_true.flatten()[mask_not_nan], pr_pred.flatten()[mask_not_nan])
     metrics['KS Statistic'] = ks_stat
+    metrics['KS p-value'] = p_value
 
     # PDF comparison
     hist_y_true, _ = np.histogram(pr_true.flatten()[mask_not_nan], bins=np.arange(0,200,0.1).astype(np.float32), density=False)
     hist_y_pred, _ = np.histogram(pr_pred.flatten()[mask_not_nan], bins=np.arange(0,200,0.1).astype(np.float32), density=False)
 
-    metrics["PDF Cos Sim"] = cosine_similarity(hist_y_true/hist_y_true.sum(), hist_y_pred/hist_y_pred.sum())
+    metrics["PDF Cos Sim"] = cosine_similarity((hist_y_true/hist_y_true.sum()).reshape(1, -1), (hist_y_pred/hist_y_pred.sum()).reshape(1, -1))
+    metrics["PDF Chi Squared"] = 0.5 * np.sum((hist_y_true/hist_y_true.sum() - hist_y_pred/hist_y_pred.sum()) ** 2 / (hist_y_true/hist_y_true.sum() + hist_y_pred/hist_y_pred.sum() + 1e-6))
     
     return metrics
 
@@ -546,6 +543,47 @@ class quantized_loss():
             mask_b = (bins == b)
             loss_quantized += self.mse_loss(prediction_batch[mask_b], target_batch[mask_b])
         return loss_mse + self.alpha * loss_quantized, loss_mse, loss_quantized
+    
+
+class quantized_loss_scaled():
+    '''
+    bins:   array containing the bin number for each of the nodes
+            shape = (n_nodes)
+    '''
+    def __init__(self, gamma=0.5, scale=0.001):
+        self.gamma = gamma
+        self.scale = scale
+        print(f"gamma: {self.gamma}, scale: {self.scale}")
+
+    def __call__(self, prediction_batch, target_batch, bins):
+        loss_quantized = 0
+        bins = bins.int()
+        for b in torch.unique(bins):
+            mask_b = (bins == b)
+            loss_quantized += torch.sum((prediction_batch[mask_b] - target_batch[mask_b])**2) * (1/torch.sum(mask_b))**self.gamma
+        return self.scale * loss_quantized
+    
+
+class quantized_loss_mod():
+    '''
+    bins:   array containing the bin number for each of the nodes
+            shape = (n_nodes)
+    '''
+    def __init__(self, alpha=1):
+        self.mse_loss = nn.MSELoss(reduction="none")
+        self.alpha = alpha
+        print(f"alpha: {self.alpha}")
+
+    def __call__(self, prediction_batch, target_batch, bins):
+        loss_mse = self.mse_loss(prediction_batch, target_batch)
+        loss_quantized = []
+        bins = bins.int()
+        alpha_vector = []
+        for b in torch.unique(bins):
+            mask_b = (bins == b)
+            loss_quantized += alpha_vector * self.mse_loss(prediction_batch[mask_b], target_batch[mask_b])
+        loss_quantized = torch.sum(torch.stack(loss_quantized))
+        return loss_mse + self.alpha * loss_quantized, loss_mse, loss_quantized
 
 
 class quantized_loss_bins():
@@ -554,8 +592,10 @@ class quantized_loss_bins():
     bins:   array containing the bin number for each of the nodes
             shape = (n_nodes)
     '''
-    def __init__(self):
+    def __init__(self, alpha=0.025):
         self.mse_loss = nn.MSELoss()
+        self.alpha = alpha
+        print(f"alpha: {self.alpha}")
 
     def __call__(self, prediction_batch, target_batch, bins, accelerator, nbins=12):
         loss_mse = self.mse_loss(prediction_batch, target_batch)
@@ -565,7 +605,7 @@ class quantized_loss_bins():
         for b in torch.unique(bins):
             mask_b = (bins == b)
             losses[b] = self.mse_loss(prediction_batch[mask_b], target_batch[mask_b])
-        return losses
+        return losses, None, None
 
 
 #-----------------------------------------------------
@@ -589,6 +629,7 @@ class Trainer(object):
     def __init__(self):
         super(Trainer, self).__init__()
 
+    #--- CLASSIFIER
     def train_cl(self, model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args,
                         epoch_start, alpha=0.75, gamma=2):
         
@@ -658,7 +699,8 @@ class Trainer(object):
             # End of epoch --> write log and save checkpoint
             accelerator.log({'epoch':epoch, 'loss epoch': all_loss_meter.avg, 'loss epoch (1GPU)': loss_meter.avg,  'accuracy epoch': acc_meter.avg,
                              'accuracy class0 epoch': acc_class0_meter.avg, 'accuracy class1 epoch': acc_class1_meter.avg})
-            write_log(f"\nEpoch {epoch+1} completed in {end - start:.4f} seconds. Loss - total: {all_loss_meter.sum:.4f} - average: {all_loss_meter.avg:.10f}; " + f"acc: {acc_meter.avg:.4f}; acc class 0: {acc_class0_meter.avg:.4f}; acc class 1: {acc_class1_meter.avg:.4f}.", args, accelerator, 'a')
+            write_log(f"\nEpoch {epoch+1} completed in {end - start:.4f} seconds. Loss - total: {all_loss_meter.sum:.4f} - average: {all_loss_meter.avg:.10f}; "
+                      + f"acc: {acc_meter.avg:.4f}; acc class 0: {acc_class0_meter.avg:.4f}; acc class 1: {acc_class1_meter.avg:.4f}.", args, accelerator, 'a')
             
             # if lr_scheduler is not None and lr_scheduler.get_last_lr()[0] > 0.00001:
             #     lr_scheduler.step()
@@ -706,30 +748,28 @@ class Trainer(object):
             
             if lr_scheduler is not None:
                 lr_scheduler.step(all_loss_meter_val.avg)
-    
-        return model
-
+                
+    #--- REGRESSOR
     def train_reg(self, model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=0):
         
         write_log(f"\nStart training the regressor.", args, accelerator, 'a')
+
+        step = 0
         
         for epoch in range(epoch_start, epoch_start+args.epochs):
             model.train()
             write_log(f"\nEpoch {epoch+1} --- learning rate {optimizer.param_groups[0]['lr']:.8f}", args, accelerator, 'a')
             
             loss_meter = AverageMeter()
-            loss_meter_val = AverageMeter()
             all_loss_meter = AverageMeter()
-            all_loss_meter_val = AverageMeter()
             
-            if "quantized_loss" in args.loss_fn:
+            if args.loss_fn == "quantized_loss":
                 loss_term1_meter = AverageMeter()
                 loss_term2_meter = AverageMeter()
-                loss_term1_meter_val = AverageMeter()
-                loss_term2_meter_val = AverageMeter()
 
             start = time.time()
-
+            
+            # TRAIN
             for graph in dataloader_train:
                 train_mask = graph['high'].train_mask
                 optimizer.zero_grad()
@@ -746,7 +786,7 @@ class Trainer(object):
 
                 # print(f"{accelerator.device} - all_y_pred.shape: {all_y_pred.shape}, all_y.shape: {all_y.shape}, all_w.shape: {all_w.shape}")
                 
-                if "quantized_loss" in args.loss_fn:
+                if args.loss_fn == "quantized_loss":
                     loss, _, _ = loss_fn(y_pred, y, w)
                     all_loss, loss_term1, loss_term2 = loss_fn(all_y_pred, all_y, all_w)
                 else:
@@ -756,75 +796,83 @@ class Trainer(object):
                 accelerator.backward(loss)
                 #accelerator.clip_grad_norm_(model.parameters(), 5)
                 optimizer.step()
+                step += 1
                 
                 # Log values to wandb
                 loss_meter.update(val=loss.item(), n=y_pred.shape[0])    
                 all_loss_meter.update(val=all_loss.item(), n=all_y_pred.shape[0])
                 
-                if "quantized_loss" in args.loss_fn:
+                if args.loss_fn == "quantized_loss":
                     loss_term1_meter.update(val=loss_term1.item(), n=all_y_pred.shape[0])
                     loss_term2_meter.update(val=loss_term2.item(), n=all_y_pred.shape[0])
                     
-                accelerator.log({'epoch':epoch, 'loss iteration': loss_meter.val, 'loss avg': loss_meter.avg})
-                accelerator.log({'epoch':epoch, 'loss all avg': all_loss_meter.avg})
+                accelerator.log({'epoch':epoch, 'loss iteration': loss_meter.val, 'loss avg': loss_meter.avg, 'loss all avg': all_loss_meter.avg}, step=step)
 
             end = time.time()
-            
-            accelerator.log({'epoch':epoch, 'train loss (1GPU)': loss_meter.avg})
-            accelerator.log({'epoch':epoch, 'train loss': all_loss_meter.avg})
-            if "quantized_loss" in args.loss_fn:
-                accelerator.log({'epoch':epoch, 'train mse loss': loss_term1_meter.avg, 'train quantized loss': loss_term2_meter.avg})
-            
-            write_log(f"\nEpoch {epoch+1} completed in {end - start:.4f} seconds. Loss - total: {all_loss_meter.sum:.4f} - average: {all_loss_meter.avg:.10f}. ", args, accelerator, 'a')
+
+            if args.loss_fn == "quantized_loss":
+                accelerator.log({'epoch':epoch, 'train loss (1GPU)': loss_meter.avg, 'train loss': all_loss_meter.avg,
+                                 'train mse loss': loss_term1_meter.avg, 'train quantized loss': loss_term2_meter.avg}, step=step)
+            else:
+                accelerator.log({'epoch':epoch, 'train loss (1GPU)': loss_meter.avg, 'train loss': all_loss_meter.avg}, step=step)
+
+            write_log(f"\nEpoch {epoch+1} completed in {end - start:.4f} seconds." +
+                      f"Loss - total: {all_loss_meter.sum:.4f} - average: {all_loss_meter.avg:.10f}. ", args, accelerator, 'a')
                     
             accelerator.save_state(output_dir=args.output_path+f"checkpoint_{epoch}/")
             torch.save({"epoch": epoch}, args.output_path+f"checkpoint_{epoch}/epoch")
-            
-            # if lr_scheduler is not None:
-            #     lr_scheduler.step()
-            
+
+            # VALIDATION
+            # Validation is performed on all the validation dataset at once
             model.eval()
 
+            y_pred_val = []
+            y_val = []
+            w_val = []
+            train_mask_val = []
+
             with torch.no_grad():    
-                for i, graph in enumerate(dataloader_val):
-                    train_mask = graph["high"].train_mask               
-                    y_pred = model(graph).squeeze()
-                    y = graph['high'].y
-                    w = graph['high'].w
+                for graph in dataloader_val:
+                    # Append the data for the current epoch
+                    train_mask_val.append(graph["high"].train_mask)            
+                    y_pred_val.append(model(graph).squeeze())
+                    y_val.append(graph['high'].y)
+                    w_val.append(graph['high'].w)
+                
+                # Create tensors
+                train_mask_val = torch.stack(train_mask_val)
+                y_pred_val = torch.stack(y_pred_val)
+                y_val = torch.stack(y_val)
+                w_val = torch.stack(w_val)
 
-                    # Gather from all processes for metrics
-                    all_y_pred, all_y, all_w, all_train_mask = accelerator.gather((y_pred, y, w, train_mask))
+                # Log validation metrics for 1GPU
+                if args.loss_fn == "quantized_loss":
+                    loss_val_1gpu,  _, _ = loss_fn(y_pred_val[train_mask_val], y_val[train_mask_val], w_val[train_mask_val])
+                else:
+                    loss_val_1gpu = loss_fn(y_pred_val[train_mask_val], y_val[train_mask_val], w_val[train_mask_val])
 
-                    # Apply mask
-                    y_pred, y, w = y_pred[train_mask], y[train_mask], w[train_mask]
-                    all_y_pred, all_y, all_w = all_y_pred[all_train_mask], all_y[all_train_mask], all_w[all_train_mask]
+                # Gather from all processes for metrics
+                y_pred_val, y_val, w_val, train_mask_val = accelerator.gather((y_pred_val, y_val, w_val, train_mask_val))
+
+                # Apply mask
+                y_pred_val, y_val, w_val = y_pred_val[train_mask_val], y_val[train_mask_val], w_val[train_mask_val]
                     
-                    if "quantized_loss" in args.loss_fn:
-                        loss_val,  _, _ = loss_fn(y_pred, y, w)
-                        all_loss_val, loss_term1_val, loss_term2_val = loss_fn(all_y_pred, all_y, all_w)
-                    else:
-                        loss_val = loss_fn(y_pred, y, w)
-                        all_loss_val = loss_fn(all_y_pred, all_y, all_w)
-                        
-                    loss_meter_val.update(val=loss_val.item(), n=y_pred.shape[0])
-                    all_loss_meter_val.update(val=all_loss_val.item(), n=all_y_pred.shape[0])
+                if args.loss_fn == "quantized_loss":
+                    loss_val, loss_term1_val, loss_term2_val = loss_fn(y_pred_val, y_val, w_val)
+                else:
+                    loss_val = loss_fn(y_pred_val, y_val, w_val)
 
-                    if "quantized_loss" in args.loss_fn:
-                        loss_term1_meter_val.update(val=loss_term1_val.item(), n=all_y_pred.shape[0])
-                        loss_term2_meter_val.update(val=loss_term2_val.item(), n=all_y_pred.shape[0])
-
-            accelerator.log({'epoch':epoch, 'validation loss (1GPU)': loss_meter_val.avg})
-            accelerator.log({'epoch':epoch, 'validation loss': all_loss_meter_val.avg})
+            if lr_scheduler is not None:
+                lr_scheduler.step(loss_val.item())
             
-            if "quantized_loss" in args.loss_fn:
-                accelerator.log({'epoch':epoch, 'validation mse loss': loss_term1_meter_val.avg,'validation quantized loss': loss_term2_meter_val.avg})
-            
-            if lr_scheduler is not None: # and lr_scheduler.get_last_lr()[0] > 0.00001:
-                lr_scheduler.step(all_loss_meter_val.avg)
-            
-            accelerator.log({'epoch': epoch, 'lr': np.mean(lr_scheduler._last_lr)})
-
-        return model
+            if args.loss_fn == "quantized_loss":
+                accelerator.log({'epoch':epoch, 'validation loss (1GPU)': loss_val_1gpu.item(), 'validation loss': loss_val.item(),
+                                 'validation mse loss': loss_term1_val.item(),'validation quantized loss': loss_term2_val.item(),
+                                 'lr': np.mean(lr_scheduler._last_lr)}, step=step)
+            else:
+                accelerator.log({'epoch':epoch, 'validation loss (1GPU)': loss_val_1gpu.item(), 'validation loss': loss_val.item(),
+                                 'lr': np.mean(lr_scheduler._last_lr)}, step=step)
+        
 
 
 #-----------------------------------------------------
@@ -1029,45 +1077,6 @@ class Validator(object):
 
         return all_loss_meter_val.avg
 
-    # def validate_reg_all(self, model, dataloader, loss_fn, accelerator, args):
-        
-    #     all_train_mask_list = []
-    #     all_y_pred_list = []
-    #     all_y_list = []
-    #     all_w_list = []
-
-    #     model.eval()
-        
-    #     with torch.no_grad(): 
-    #         for i, graph in enumerate(dataloader):
-
-    #             train_mask = graph["high"].train_mask
-    #             if train_mask.sum() == 0:
-    #                 continue
-    #             y = graph['high'].y
-    #             w = graph['high'].w
-                    
-    #             # Regressor
-    #             y_pred = model(graph).squeeze()
-
-    #             # Gather from all processes for metrics
-    #             all_y_pred, all_y, all_w, all_train_mask = accelerator.gather((y_pred, y, w, train_mask))
-
-    #             # Apply mask
-    #             all_train_mask_list.append(all_train_mask)
-    #             all_y_pred_list.append(all_y_pred)
-    #             all_y_list.append(all_y)
-    #             all_w_list.append(all_w)
-
-    #         # Create tensors
-    #         all_train_mask_tensor = torch.stack(all_train_mask_list)
-    #         all_y_pred_tensor = torch.stack(all_y_pred_list)[all_train_mask_tensor]
-    #         all_y_tensor = torch.stack(all_y_list)[all_train_mask_tensor]
-    #         all_w_tensor = torch.stack(all_w_list)[all_train_mask_tensor]
-
-    #         all_loss, _, _ = loss_fn(all_y_pred_tensor,all_y_tensor,all_w_tensor)  
-                    
-    #     return torch.mean(all_loss).item(), all_y_pred_tensor.cpu().numpy(), all_y_tensor.cpu().numpy()
 
     def validate_reg_all(self, model, dataloader, accelerator, args):
         
@@ -1081,14 +1090,7 @@ class Validator(object):
         with torch.no_grad(): 
             for i, graph in enumerate(dataloader):
 
-                train_mask.append(graph["high"].train_mask)
-                if graph["high"].train_mask.sum() == 0:
-                    nan_tensor = (torch.ones(train_mask) * torch.nan).to(accelerator.device)
-                    y.append(nan_tensor)
-                    w.append(nan_tensor)
-                    y_pred.append(nan_tensor)
-                    continue
-                    
+                train_mask.append(graph["high"].train_mask)                    
                 y.append(graph['high'].y)
                 w.append(graph['high'].w)
                 y_pred.append(model(graph).squeeze())
@@ -1101,41 +1103,5 @@ class Validator(object):
                     
         return y_pred, y, w, train_mask
     
-    def validate_reg_bins(self, model, dataloader, loss_fn, accelerator, args):
-
-        loss_meter_val = AverageMeter()
-        all_loss_meter_val = AverageMeter()
-
-        model.eval()
-
-        all_loss_bins = []
-        
-        with torch.no_grad(): 
-            for i, graph in enumerate(dataloader):
-
-                train_mask = graph["high"].train_mask
-                if train_mask.sum() == 0:
-                    continue
-                y = graph['high'].y
-                w = graph['high'].w
-                    
-                # Regressor
-                y_pred = model(graph).squeeze()
-
-                # Gather from all processes for metrics
-                all_y_pred, all_y, all_w, all_train_mask = accelerator.gather((y_pred, y, w, train_mask))
-
-                # Apply mask
-                y_pred, y, w = y_pred[train_mask], y[train_mask], w[train_mask]
-                all_y_pred, all_y, all_w = all_y_pred[all_train_mask], all_y[all_train_mask], all_w[all_train_mask]
-
-                loss = loss_fn(y_pred, y, w, accelerator)
-                all_loss = loss_fn(all_y_pred, all_y, all_w, accelerator)
-                all_loss_bins.append(all_loss)
-
-        all_loss_bins = torch.stack(all_loss_bins, dim=0)
-        all_loss_bins_avg = torch.nanmean(all_loss_bins, dim=0)
-            
-        return all_loss_bins_avg
         
 

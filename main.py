@@ -123,6 +123,8 @@ if __name__ == '__main__':
         loss_fn = getattr(torchvision.ops, args.loss_fn)
     elif args.loss_fn == 'quantized_loss':
         loss_fn = getattr(utils.utils, args.loss_fn)(alpha=args.alpha)
+    elif args.loss_fn == 'quantized_loss_scaled':
+        loss_fn = getattr(utils.utils, args.loss_fn)()
     elif args.loss_fn == 'weighted_mse_loss':
         loss_fn = getattr(utils.utils, args.loss_fn)()
     elif args.loss_fn == 'weighted_mae_loss':
@@ -185,7 +187,7 @@ if __name__ == '__main__':
     
     Dataset_Graph = getattr(dataset, args.dataset_name)
     
-    if args.loss_fn == 'weighted_mse_loss' or args.loss_fn == 'weighted_mae_loss' or args.loss_fn == "quantized_loss":
+    if args.loss_fn == 'weighted_mse_loss' or args.loss_fn == 'weighted_mae_loss' or "quantized" in args.loss_fn:
         with open(args.input_path+args.weights_file, 'rb') as f:
             weights_reg = pickle.load(f)
 
@@ -276,9 +278,9 @@ if __name__ == '__main__':
 
     trainer = Trainer()
     if args.model_type == "cl":
-        model = trainer.train_cl(model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=epoch_start)
+        trainer.train_cl(model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=epoch_start)
     elif args.model_type == "reg":
-        model = trainer.train_reg(model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=epoch_start)      
+        trainer.train_reg(model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=epoch_start)      
     end = time.time()
 
     write_log(f"\nCompleted in {end - start} seconds.\nDONE!")

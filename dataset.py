@@ -67,9 +67,14 @@ class Dataset_Graph(Dataset):
         node_degree = (degree(snapshot['high','within','high'].edge_index[0], snapshot['high'].num_nodes) / 8).unsqueeze(-1)
         return node_degree
 
+    def __get_features_3h(self, time_index: int):
+        x_low = self.graph['low'].x[:,time_index-24:time_index+1:3,:]   # model HiResPrecipNet
+        x_low = x_low.flatten(start_dim=2, end_dim=-1)                  # model HiResPrecipNet
+        return x_low
+
     def __get_features_6h(self, time_index: int):
         x_low = self.graph['low'].x[:,time_index-24:time_index+1:6,:]   # model HiResPrecipNet
-        x_low = x_low.flatten(start_dim=1, end_dim=-1)                  # model HiResPrecipNet
+        x_low = x_low.flatten(start_dim=2, end_dim=-1)                  # model HiResPrecipNet
         return x_low
 
     def __get_features_24h(self, time_index: int):
