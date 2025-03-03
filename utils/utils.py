@@ -634,9 +634,12 @@ class Trainer(object):
                         epoch_start, alpha=0.75, gamma=2):
         
         write_log(f"\nStart training the classifier.", args, accelerator, 'a')
+
+        step = 0
         
         for epoch in range(epoch_start, epoch_start+args.epochs):
             
+            model.train()
             write_log(f"\nEpoch {epoch+1} --- learning rate {optimizer.param_groups[0]['lr']:.8f}", args, accelerator, 'a')
 
             # Define objects to track meters
@@ -647,24 +650,21 @@ class Trainer(object):
             acc_class1_meter = AverageMeter()
 
             # Validation
-            all_loss_meter_val = AverageMeter()
             loss_meter_val = AverageMeter()
+            loss_meter_val_1_gpu = AverageMeter()
             acc_meter_val = AverageMeter()
             acc_class0_meter_val = AverageMeter()
             acc_class1_meter_val = AverageMeter()
 
-            model.train()
             start = time.time()
 
             for graph in dataloader_train:
-                optimizer.zero_grad()
                 
-                train_mask = graph["high"].train_mask                    
-                if train_mask.sum() == 0:
-                        continue    
-                y = graph['high'].y                
-                
+                optimizer.zero_grad()             
                 y_pred = model(graph).squeeze()
+
+                train_mask = graph["high"].train_mask      
+                y = graph['high'].y   
 
                 # Gather from all processes for metrics
                 all_y_pred, all_y, all_train_mask = accelerator.gather((y_pred, y, train_mask))
@@ -679,6 +679,7 @@ class Trainer(object):
                 accelerator.backward(loss)
                 #accelerator.clip_grad_norm_(model.parameters(), 5)
                 optimizer.step()
+                step += 1
                 
                 loss_meter.update(val=loss.item(), n=y_pred.shape[0])   
                 all_loss_meter.update(val=all_loss.item(), n=all_y_pred.shape[0])   
@@ -692,13 +693,13 @@ class Trainer(object):
 
                 accelerator.log({'epoch':epoch, 'accuracy iteration': acc_meter.val, 'loss avg': all_loss_meter.avg,
                                  'loss avg (1GPU)': loss_meter.avg, 'accuracy avg': acc_meter.avg,
-                                 'accuracy class0 avg': acc_class0_meter.avg, 'accuracy class1 avg': acc_class1_meter.avg})
+                                 'accuracy class0 avg': acc_class0_meter.avg, 'accuracy class1 avg': acc_class1_meter.avg}, step=step)
                 
             end = time.time()
 
             # End of epoch --> write log and save checkpoint
             accelerator.log({'epoch':epoch, 'loss epoch': all_loss_meter.avg, 'loss epoch (1GPU)': loss_meter.avg,  'accuracy epoch': acc_meter.avg,
-                             'accuracy class0 epoch': acc_class0_meter.avg, 'accuracy class1 epoch': acc_class1_meter.avg})
+                             'accuracy class0 epoch': acc_class0_meter.avg, 'accuracy class1 epoch': acc_class1_meter.avg}, step=step)
             write_log(f"\nEpoch {epoch+1} completed in {end - start:.4f} seconds. Loss - total: {all_loss_meter.sum:.4f} - average: {all_loss_meter.avg:.10f}; "
                       + f"acc: {acc_meter.avg:.4f}; acc class 0: {acc_class0_meter.avg:.4f}; acc class 1: {acc_class1_meter.avg:.4f}.", args, accelerator, 'a')
             
@@ -710,44 +711,47 @@ class Trainer(object):
 
             # Perform the validation step
             model.eval()
+
+            y_pred_val = []
+            y_val = []
+            train_mask_val = []
                 
             with torch.no_grad():    
                 for i, graph in enumerate(dataloader_val):
-                    #graph = graph.to(accelerator.device)
-                    train_mask = graph["high"].train_mask
-                    if train_mask.sum() == 0:
-                        continue
-                    y = graph['high'].y
+                    # Append the data for the current epoch
+                    train_mask_val.append(graph["high"].train_mask)            
+                    y_pred_val.append(model(graph).squeeze())
+                    y_val.append(graph['high'].y)
 
-                    y_pred = model(graph).squeeze()
+                # Create tensors
+                train_mask_val = torch.stack(train_mask_val)
+                y_pred_val = torch.stack(y_pred_val)
+                y_val = torch.stack(y_val)
 
-                    # Gather from all processes for metrics
-                    all_y_pred, all_y, all_train_mask = accelerator.gather((y_pred, y, train_mask))
+                # Validation metrics for 1GPU
+                loss_val_1gpu = loss_fn(y_pred_val[train_mask_val], y_val[train_mask_val], alpha, gamma, reduction="mean")
 
-                    # Apply mask
-                    y_pred, y = y_pred[train_mask], y[train_mask]
-                    all_y_pred, all_y = all_y_pred[all_train_mask], all_y[all_train_mask]
+                # Gather from all processes for metrics
+                y_pred_val, y_val, train_mask_val = accelerator.gather((y_pred_val, y_val, train_mask_val))
 
-                    # Compute metrics on all validation dataset            
-                    loss_val = loss_fn(y_pred, y, alpha, gamma, reduction="mean")
-                    all_loss_val = loss_fn(all_y_pred, all_y, alpha, gamma, reduction="mean")
+                # Apply mask
+                y_pred_val, y_val = y_pred_val[train_mask_val], y_val[train_mask_val]
 
-                    acc_class0_val, acc_class1_val = accuracy_binary_one_classes(all_y_pred, all_y)
-                    acc_val = accuracy_binary_one(all_y_pred, all_y)
+                # Compute metrics on all validation dataset            
+                loss_val = loss_fn(y_pred_val, y_val, alpha, gamma, reduction="mean")
 
-                    loss_meter_val.update(val=loss_val.item(), n=y_pred.shape[0])
-                    all_loss_meter_val.update(val=loss_val.item(), n=all_y_pred.shape[0])
-                    acc_meter_val.update(val=acc_val.item(), n=all_y_pred.shape[0])
-                    acc_class0_meter_val.update(val=acc_class0_val.item(), n=(all_y==0).sum().item())
-                    acc_class1_meter_val.update(val=acc_class1_val.item(), n=(all_y==1).sum().item())
+                acc_class0_val, acc_class1_val = accuracy_binary_one_classes(y_pred_val, y_val)
+                acc_val = accuracy_binary_one(y_pred_val, y_val)
             
-            accelerator.log({'epoch':epoch, 'validation loss': all_loss_meter_val.avg, 'validation loss (1GPU)': loss_meter_val.avg,
-                             'validation accuracy': acc_meter_val.avg,
-                             'validation accuracy class0': acc_class0_meter_val.avg,
-                             'validation accuracy class1': acc_class1_meter_val.avg})
-            
+                        
             if lr_scheduler is not None:
-                lr_scheduler.step(all_loss_meter_val.avg)
+                lr_scheduler.step(loss_val.item())
+           
+            accelerator.log({'epoch':epoch, 'validation loss': loss_val.item(), 'validation loss (1GPU)': loss_val_1gpu.item(),
+                             'validation accuracy': acc_val.item(),
+                             'validation accuracy class0': acc_class0_val.item(),
+                             'validation accuracy class1': acc_class1_val.item(),
+                             'lr': np.mean(lr_scheduler._last_lr)}, step=step)
                 
     #--- REGRESSOR
     def train_reg(self, model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=0):
@@ -757,9 +761,11 @@ class Trainer(object):
         step = 0
         
         for epoch in range(epoch_start, epoch_start+args.epochs):
+
             model.train()
             write_log(f"\nEpoch {epoch+1} --- learning rate {optimizer.param_groups[0]['lr']:.8f}", args, accelerator, 'a')
             
+            # Define objects to track meters
             loss_meter = AverageMeter()
             all_loss_meter = AverageMeter()
             
@@ -771,9 +777,11 @@ class Trainer(object):
             
             # TRAIN
             for graph in dataloader_train:
-                train_mask = graph['high'].train_mask
+            
                 optimizer.zero_grad()
                 y_pred = model(graph).squeeze()
+
+                train_mask = graph['high'].train_mask
                 y = graph['high'].y
                 w = graph['high'].w
 
@@ -944,7 +952,6 @@ class Tester(object):
 
         pr_cl = []
         pr_reg = []
-        pr_combined = []
         times = []
         with torch.no_grad():    
             for graph in dataloader:
@@ -957,15 +964,9 @@ class Tester(object):
                 
                 # Classifier
                 pr_cl.append(y_pred_cl)
-                #pr_cl.append(torch.where(y_pred_cl >= 0.0, 1.0, 0.0))
                 
                 # Regressor
                 pr_reg.append(y_pred_reg)
-                #pr_reg.append(torch.expm1(y_pred_reg))
-                
-                # Combined 
-                #pr_combined.append(y_pred_combined)
-                #pr_combined.append(torch.expm1(y_pred_combined))
 
                 if step % 100 == 0:
                     if accelerator is None or accelerator.is_main_process:
@@ -975,7 +976,6 @@ class Tester(object):
 
         pr_cl = torch.stack(pr_cl)
         pr_reg = torch.stack(pr_reg)
-        #pr_combined = torch.stack(pr_combined)
         times = torch.stack(times)
 
         return pr_cl, pr_reg, times
