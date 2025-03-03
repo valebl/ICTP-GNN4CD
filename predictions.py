@@ -36,6 +36,8 @@ parser.add_argument('--output_path', type=str, help='path to output directory')
 parser.add_argument('--log_file', type=str, default='log.txt', help='log file')
 
 parser.add_argument('--train_path', type=str)
+parser.add_argument('--train_path_reg', type=str)
+parser.add_argument('--train_path_cl', type=str)
 parser.add_argument('--checkpoint', type=str)
 parser.add_argument('--checkpoint_reg', type=str, default=None)
 parser.add_argument('--checkpoint_cl', type=str, default=None)
@@ -45,8 +47,6 @@ parser.add_argument('--graph_file', type=str, default=None)
 parser.add_argument('--target_file', type=str, default="pr_target.pkl") 
 parser.add_argument('--model_type', type=str, default=None)
 parser.add_argument('--model', type=str, default=None) 
-parser.add_argument('--model_reg', type=str, default=None) 
-parser.add_argument('--model_cl', type=str, default=None) 
 parser.add_argument('--dataset_name', type=str, default=None) 
 parser.add_argument('--mode', type=str, default="cl_reg") 
 parser.add_argument('--test_idxs_file', type=str, default="")
@@ -110,10 +110,7 @@ if __name__ == '__main__':
 
     Dataset_Graph = getattr(dataset, args.dataset_name)
     
-    if args.mode == "cl_reg":
-        dataset_graph = Dataset_Graph(targets=None, graph=low_high_graph, model_name=args.model_reg)
-    else:
-        dataset_graph = Dataset_Graph(targets=None, graph=low_high_graph, model_name=args.model)
+    dataset_graph = Dataset_Graph(targets=None, graph=low_high_graph, model_name=args.model)
 
     custom_collate_fn = getattr(dataset, 'custom_collate_fn_graph')
         
@@ -122,29 +119,25 @@ if __name__ == '__main__':
     dataloader = torch.utils.data.DataLoader(dataset_graph, batch_size=args.batch_size, num_workers=0,
                     sampler=sampler_graph, collate_fn=custom_collate_fn)
 
+    model_file = importlib.import_module(f"models.{args.model}")
+    Model = getattr(model_file, args.model)
     if args.mode == "cl_reg":
-        model_file_cl = importlib.import_module(f"models.{args.model_cl}")
-        model_file_reg = importlib.import_module(f"models.{args.model_reg}")
-        Model_cl = getattr(model_file_cl, args.model_cl)
-        Model_reg = getattr(model_file_reg, args.model_reg)
-        model_cl = Model_cl()
-        model_reg = Model_reg()
+        model_cl = Model()
+        model_reg = Model()
     else:
-        model_file = importlib.import_module(f"models.{args.model}")
-        Model = getattr(model_file, args.model)
         model = Model()
 
     if accelerator is None:
         if args.mode == "cl_reg":
-            checkpoint_cl = torch.load(args.train_path+args.checkpoint_cl, map_location=torch.device('cpu'))
-            checkpoint_reg = torch.load(args.train_path+args.checkpoint_reg, map_location=torch.device('cpu'))
+            checkpoint_cl = torch.load(args.train_path_cl+args.checkpoint_cl, map_location=torch.device('cpu'))
+            checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg, map_location=torch.device('cpu'))
         else:
             checkpoint = torch.load(args.train_path+args.checkpoint, map_location=torch.device('cpu'))
         device = 'cpu'
     else:
         if args.mode == "cl_reg":
-            checkpoint_cl = torch.load(args.train_path+args.checkpoint_cl)
-            checkpoint_reg = torch.load(args.train_path+args.checkpoint_reg)
+            checkpoint_cl = torch.load(args.train_path_cl+args.checkpoint_cl)
+            checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg)
         else:
             checkpoint = torch.load(args.train_path+args.checkpoint)
         device = accelerator.device
@@ -172,12 +165,12 @@ if __name__ == '__main__':
         pr, times = tester.test_encoding(model, dataloader, low_high_graph=low_high_graph, args=args, accelerator=accelerator)
     elif args.mode == "cl_reg":
         pr_cl, pr_reg, times = tester.test_cl_reg(model_cl, model_reg, dataloader, low_high_graph=low_high_graph, args=args, accelerator=accelerator)
-    elif args.mode == "reg":
+    elif args.mode == "reg" or args.mode == "all":
         pr_reg, times = tester.test(model, dataloader, low_high_graph=low_high_graph, args=args, accelerator=accelerator)
     elif args.mode == "cl":
         pr_cl, times = tester.test(model, dataloader, low_high_graph=low_high_graph, args=args, accelerator=accelerator)
     else:
-        raise Exception("mode should be: 'reg', 'cl', 'encoding' or 'cl_reg'")
+        raise Exception("mode should be: 'reg', 'cl', 'all', 'encoding' or 'cl_reg'")
 
     end = time.time()
 
@@ -196,7 +189,7 @@ if __name__ == '__main__':
             pr_cl = accelerator.gather(pr_cl).squeeze().swapaxes(0,1)[:,indices]
             pr_reg = accelerator.gather(pr_reg).squeeze().swapaxes(0,1)[:,indices]
             #pr_combined = accelerator.gather(pr_combined).squeeze().swapaxes(0,1)[:,indices]
-        elif args.mode == "reg":
+        elif args.mode == "reg" or args.mode == "all":
             pr_reg = accelerator.gather(pr_reg).squeeze().swapaxes(0,1)[:,indices]
         elif args.mode == "cl":
             pr_cl = accelerator.gather(pr_cl).squeeze().swapaxes(0,1)[:,indices]
@@ -209,7 +202,7 @@ if __name__ == '__main__':
         data.pr_cl = pr_cl.cpu().numpy()
         data.pr_reg = pr_reg.cpu().numpy()
         #data.pr_combined = pr_combined.cpu().numpy()  
-    elif args.mode == "reg":
+    elif args.mode == "reg" or args.mode == "all":
         data.pr_reg = pr_reg.cpu().numpy()
     elif args.mode == "cl":
         data.pr_cl = pr_cl.cpu().numpy()
@@ -290,9 +283,20 @@ if __name__ == '__main__':
         mask_P = y_target_cl==1
         
         pr_reg = np.expm1(G.pr_reg)
-        G.pr_cl = y_target_cl
         
-        G.pr = pr_reg * G.pr_cl
+        if args.mode == "all":
+            G.pr_cl = np.where(pr_reg < threshold, 0.0, 1.0)
+            G.pr = pr_reg
+            write_log("\nPredictions for the R-all model", args, accelerator, 'a')
+        elif args.mode == "reg":
+            G.pr_cl = y_target_cl
+            G.pr = pr_reg * G.pr_cl
+            write_log("\nPredictions for the R model", args, accelerator, 'a')
+        elif args.mode == "cl_reg":
+            G.pr_cl = np.where(G.pr_cl < threshold, 0.0, 1.0)
+            G.pr = pr_reg * G.pr_cl
+            write_log("\nPredictions for the RC model", args, accelerator, 'a')
+
         # G.pr[G.pr >= 200] = 200
         G.pr[G.pr < threshold] = 0
         
@@ -328,39 +332,55 @@ if __name__ == '__main__':
                                               month_end=8, day_end=31, first_year=2015, first_month=12, first_day=1)
             son_start, son_end = date_to_idxs(year_start=2016, month_start=9, day_start=1, year_end=2016,
                                               month_end=11, day_end=30, first_year=2015, first_month=12, first_day=1)
+
+            if make_seasonal_plots:
+                pr_pred_seasons = []
+                pr_target_seasons = []
+                pr_pred_seasons.append(G.pr[:,djf_start: djf_end])
+                pr_pred_seasons.append(G.pr[:,mam_start: mam_end])
+                pr_pred_seasons.append(G.pr[:,jja_start: jja_end])
+                pr_pred_seasons.append(G.pr[:,son_start: son_end])
+                
+                pr_target_seasons.append(G.pr_target[:,djf_start: djf_end])
+                pr_target_seasons.append(G.pr_target[:,mam_start: mam_end])
+                pr_target_seasons.append(G.pr_target[:,jja_start: jja_end])
+                pr_target_seasons.append(G.pr_target[:,son_start: son_end])
+
+            G.pr_cl = G.pr_cl[:,24*31:]
+            G.pr = G.pr[:,24*31:]
+            G.pr_target = G.pr_target[:,24*31:]
+            y_target_cl = y_target_cl[:,24*31:]
+
         else:
-            djf_start = 0
+            jf_start = 0 # january-february
             if test_idxs.shape[0] == 8760:
-                djf_end = (31 + 31 + 28) * 24
+                jf_end = (31 + 28) * 24
             elif test_idxs.shape[0] == 8784:
-                djf_end = (31 + 31 + 29) * 24
+                jf_end = (31 + 29) * 24
             else:
                 write_log("Cannot identify the months, thus seasonal plots are skipped.")
                 make_seasonal_plots = False
-            mam_start = djf_end
+
+            mam_start = jf_end
             mam_end = mam_start + (31 + 30 + 31) * 24
             jja_start = mam_end
             jja_end = jja_start + (31 + 31 + 30) * 24
             son_start = jja_end
             son_end = son_start + (30 + 31 + 30) * 24
+            d_start = son_end
+            d_end = son_end + 31 * 24 # december
 
-        if make_seasonal_plots:
-            pr_pred_seasons = []
-            pr_target_seasons = []
-            pr_pred_seasons.append(G.pr[:,djf_start: djf_end])
-            pr_pred_seasons.append(G.pr[:,mam_start: mam_end])
-            pr_pred_seasons.append(G.pr[:,jja_start: jja_end])
-            pr_pred_seasons.append(G.pr[:,son_start: son_end])
-            
-            pr_target_seasons.append(G.pr_target[:,djf_start: djf_end])
-            pr_target_seasons.append(G.pr_target[:,mam_start: mam_end])
-            pr_target_seasons.append(G.pr_target[:,jja_start: jja_end])
-            pr_target_seasons.append(G.pr_target[:,son_start: son_end])
-
-        G.pr_cl = G.pr_cl[:,24*31:]
-        G.pr = G.pr[:,24*31:]
-        G.pr_target = G.pr_target[:,24*31:]
-        y_target_cl = y_target_cl[:,24*31:]
+            if make_seasonal_plots:
+                pr_pred_seasons = []
+                pr_target_seasons = []
+                pr_pred_seasons.append(torch.stack(G.pr[:,d_start:d_end], G.pr[:,jf_start:jf_end], dim=1))
+                pr_pred_seasons.append(G.pr[:,mam_start: mam_end])
+                pr_pred_seasons.append(G.pr[:,jja_start: jja_end])
+                pr_pred_seasons.append(G.pr[:,son_start: son_end])
+                pr_target_seasons.append(torch.stack(G.pr_target[:,d_start:d_end], G.pr_target[:,jf_start:jf_end], dim=1))
+                pr_target_seasons.append(G.pr_target[:,mam_start: mam_end])
+                pr_target_seasons.append(G.pr_target[:,jja_start: jja_end])
+                pr_target_seasons.append(G.pr_target[:,son_start: son_end])
 
         # Classifier
         plot_maps(pos, G.pr_cl, y_target_cl, pr_min=0, aggr=np.nansum, pr_max=1500,
@@ -449,7 +469,7 @@ if __name__ == '__main__':
         plt.close()
         
         # ### Extreme event - North Italy 22 Nov 2016 - 25 Nov 2016
-        if args.test_idxs_file is None:
+        if args.test_idxs_file is None or args.test_idxs_file=="":
             cmap_extreme = extremes_cmap()
     
             start, end = date_to_idxs(year_start=2016, month_start=11, day_start=22, year_end=2016, month_end=11, day_end=25,
@@ -462,7 +482,7 @@ if __name__ == '__main__':
             plt.close()
             
             write_log(f"Exreme event - GNN4CD max={np.nanmax(G.pr[:,start:end])}, GRIPHO max={np.nanmax(G.pr_target[:,start:end])}", args, accelerator, 'a')
-
+        sys.exit()
         # Seasonal results
 
         if make_seasonal_plots: 
@@ -508,11 +528,6 @@ if __name__ == '__main__':
             
             plt.savefig(f'{args.output_path}seasonal_pdfs.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
             plt.close()
-    
-        # Time series
-        rmse, rmse_perc = plot_mean_time_series(pos, G.pr_target, G.pr, points=np.arange(G.pr_target.shape[0]), aggr=np.nanmean, title="")
-        plt.savefig(f'{args.output_path}time_series.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
-        plt.close()
 
         # Diurnal Cycles
 
@@ -907,7 +922,7 @@ if __name__ == '__main__':
         spatial_corr_p99 = stats.pearsonr(np.nanpercentile(G.pr, q=99, axis=1).flatten(), np.nanpercentile(G.pr_target,  q=99, axis=1).flatten())
         spatial_corr_p999 = stats.pearsonr(np.nanpercentile(G.pr, q=99.9, axis=1).flatten(), np.nanpercentile(G.pr_target,  q=99.9, axis=1).flatten())
 
-        write_log(f"Italy spatial corr - avg:\t{spatial_corr_avg}\np99:\t{spatial_corr_p99}\np99.9:\t{spatial_corr_p999}", args, accelerator, 'a')
+        write_log(f"\nItaly spatial corr - avg:\t{spatial_corr_avg}\np99:\t{spatial_corr_p99}\np99.9:\t{spatial_corr_p999}", args, accelerator, 'a')
         
         # spatial_corr_avg.confidence_interval(confidence_level=0.68,method=method)
 
@@ -918,7 +933,7 @@ if __name__ == '__main__':
         spatial_corr_p999 = stats.pearsonr(np.nanpercentile(G.pr[mask_north,:], q=99.9, axis=1).flatten(),
                                            np.nanpercentile(G.pr_target[mask_north,:],  q=99.9, axis=1).flatten())
 
-        write_log(f"North spatial corr - avg:\t{spatial_corr_avg}\np99:\t{spatial_corr_p99}\np99.9:\t{spatial_corr_p999}", args, accelerator, 'a')
+        write_log(f"\nNorth spatial corr - avg:\t{spatial_corr_avg}\np99:\t{spatial_corr_p99}\np99.9:\t{spatial_corr_p999}", args, accelerator, 'a')
 
         spatial_corr_avg = stats.pearsonr(np.nanmean(G.pr[mask_centre_sud,:], axis=1).flatten(),
                                           np.nanmean(G.pr_target[mask_centre_sud,:], axis=1).flatten())
@@ -927,17 +942,21 @@ if __name__ == '__main__':
         spatial_corr_p999 = stats.pearsonr(np.nanpercentile(G.pr[mask_centre_sud,:], q=99.9, axis=1).flatten(), 
                                            np.nanpercentile(G.pr_target[mask_centre_sud,:],  q=99.9, axis=1).flatten())
         
-        write_log(f"Centre-south spatial corr - avg:\t{spatial_corr_avg}\np99:\t{spatial_corr_p99}\np99.9:\t{spatial_corr_p999}", args, accelerator, 'a')
-        
+        write_log(f"\nCentre-south spatial corr - avg:\t{spatial_corr_avg}\np99:\t{spatial_corr_p99}\np99.9:\t{spatial_corr_p999}", args, accelerator, 'a')
 
-        # # QQ plot (nice but slow!)
-        # import statsmodels.api as sm
-        
-        # x = sm.ProbPlot(G.pr.flatten())
-        # y = sm.ProbPlot(G.pr_target.flatten())
+        # Time series
+        rmse, rmse_perc = plot_mean_time_series(pos, G.pr_target, G.pr, points=np.arange(G.pr_target.shape[0]), aggr=np.nanmean, title="")
+        plt.savefig(f'{args.output_path}time_series.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
 
-        # plt.rcParams.update({'font.size': 30})
-        # fig, ax = plt.subplots(figsize=(20,20))
-        # sm.qqplot_2samples(x,y, xlabel="GNN4CD [mm/h]", ylabel="OBSERVATION [mm/h]", ax=ax, line="45")
-        # plt.savefig(f'{args.output_path}qqplot.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
-        # plt.close()
+        # QQ plot (nice but slow!)
+        import statsmodels.api as sm
+        
+        x = sm.ProbPlot(G.pr.flatten())
+        y = sm.ProbPlot(G.pr_target.flatten())
+
+        plt.rcParams.update({'font.size': 30})
+        fig, ax = plt.subplots(figsize=(20,20))
+        sm.qqplot_2samples(x,y, xlabel="GNN4CD [mm/h]", ylabel="OBSERVATION [mm/h]", ax=ax, line="45")
+        plt.savefig(f'{args.output_path}qqplot.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        plt.close()
