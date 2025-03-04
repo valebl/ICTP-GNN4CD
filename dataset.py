@@ -133,9 +133,10 @@ class Dataset_Graph(Dataset):
 
         snapshot['low'].x = x_low 
         #snapshot['high'].x_empty = self.graph['high'].x
-        snapshot['high'].x = self.graph['high'].z_std # torch.zeros((snapshot['high'].num_nodes,1))
+        # snapshot['high'].x = self.graph['high'].z_std # torch.zeros((snapshot['high'].num_nodes,1))
         snapshot['high'].z_std = self.graph['high'].z_std
         snapshot['high'].land_std = self.graph['high'].land_std
+        snapshot['high'].x = torch.concatenate((snapshot['high'].z_std, snapshot['high'].land_std),dim=-1)
 
         snapshot['high'].lon = self.graph['high'].lon
         snapshot['high'].lat = self.graph['high'].lat

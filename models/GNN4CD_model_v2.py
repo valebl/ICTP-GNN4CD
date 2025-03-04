@@ -1,15 +1,7 @@
 import torch.nn as nn
 import torch_geometric.nn as geometric_nn
 from torch_geometric.nn import GATv2Conv, GraphConv
-import numpy as np
 import torch
-
-from typing import Optional
-from torch import Tensor
-
-from torch_geometric.nn.inits import ones, zeros
-from torch_geometric.typing import OptTensor
-from torch_geometric.utils import scatter
 
 
 class GNN4CD_model_v2(nn.Module):
@@ -56,12 +48,15 @@ class GNN4CD_model_v2(nn.Module):
             )
 
     def forward(self, data):   
+        # RNN preprocessing
         encod_rnn, _ = self.rnn(data.x_dict['low']) # out, h
         encod_rnn = encod_rnn.flatten(start_dim=1)
         encod_rnn = self.dense(encod_rnn)
-        x_zland  = torch.concatenate((data['high'].z_std, data['high'].land_std),dim=-1)
-        encod_low2high  = self.downscaler((encod_rnn, x_zland), data["low", "to", "high"].edge_index)
+        # Downscaler
+        encod_low2high  = self.downscaler((encod_rnn, data['high'].x), data["low", "to", "high"].edge_index)
+        # Processor
         encod_high = self.processor(encod_low2high , data.edge_index_dict[('high','within','high')])
+        # Predictor
         y_pred = self.predictor(encod_high)
         return y_pred
 
