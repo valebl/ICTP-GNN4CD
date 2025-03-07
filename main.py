@@ -16,8 +16,9 @@ import dataset
 import importlib
 
 import utils.utils
-from utils.utils import write_log, date_to_idxs, check_freezed_layers, set_seed_everything, find_not_all_nan_times, derive_train_val_idxs, derive_train_val_test_idxs_random_months
-from utils.utils import Trainer
+from utils.utils import write_log, check_freezed_layers, set_seed_everything
+from utils.utils import find_not_all_nan_times, derive_train_val_idxs, derive_train_val_test_idxs_random_months
+from utils.utils import compute_input_statistics, standardize_input, Trainer
 from accelerate import Accelerator
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -63,6 +64,9 @@ parser.add_argument('--model_type', type=str)
 parser.add_argument('--model_name', type=str, default='HiResPrecipNet')
 parser.add_argument('--dataset_name', type=str, default='Dataset_Graph')
 parser.add_argument('--collate_name', type=str)
+
+parser.add_argument('--stats_mode', type=str, default="var")
+
 
 #-- start and end training dates
 parser.add_argument('--train_year_start', type=int)
@@ -164,7 +168,8 @@ if __name__ == '__main__':
         
         write_log(f"\nTrain from {args.train_day_start}/{args.train_month_start}/{args.train_year_start} to " +
                 f"{args.train_day_end}/{args.train_month_end}/{args.train_year_end} with validation and test years" +
-                f"as 12 months chosen randomly within the {args.train_year_start}-{args.train_year_end} period..")
+                f"as 12 months chosen randomly within the {args.train_year_start}-{args.train_year_end} period..",
+                args, accelerator, 'a')
 
     train_start_idx = train_idxs.min()
     train_end_idx = train_idxs.max()
@@ -180,7 +185,32 @@ if __name__ == '__main__':
         train_idxs = train_idxs[:-tail_train_idxs]
     if tail_val_idxs != 0:
         val_idxs = val_idxs[:-tail_val_idxs]
+
+    means_low, stds_low, means_high, stds_high = compute_input_statistics(
+        low_high_graph['low'].x[:,train_idxs,:], low_high_graph['high'].x, args, accelerator)
     
+    low_high_graph['low'].x, low_high_graph['high'].x = standardize_input(
+        low_high_graph['low'].x, low_high_graph['high'].x, means_low, stds_low, means_high, stds_high, args, accelerator) # num_nodes, time, vars, levels
+    
+    vars_names = ['q', 't', 'u', 'v', 'z']
+    levels = ['200', '500', '700', '850', '1000']
+    if args.stats_mode == "var":
+        for var in range(5):
+            write_log(f"\nLow var {vars_names[var]}: mean={low_high_graph['low'].x[:,:,var,:].mean()}, std={low_high_graph['low'].x[:,:,var,:].std()}",
+                      args, accelerator, 'a')
+    elif args.stats_mode == "field":
+        for var in range(5):
+            for lev in range(5):
+                write_log(f"\nLow var {vars_names[var]} lev {levels[lev]}: mean={low_high_graph[:,:,var,lev].mean()}, std={low_high_graph[:,:,var,lev].std()}",
+                          args, accelerator, 'a')
+    
+    write_log(f"\nHigh z: mean={low_high_graph['high'].x[:,0].mean()}, std={low_high_graph['high'].x[:,0].std()}",
+              args, accelerator, 'a')
+    write_log(f"\nHigh land_use: mean={low_high_graph['high'].x[:,1:].mean()}, std={low_high_graph['high'].x[:,1:].std()}",
+              args, accelerator, 'a')
+
+    low_high_graph['low'].x = torch.flatten(low_high_graph['low'].x, start_dim=2, end_dim=-1)   # num_nodes, time, vars*levels
+
     #-----------------------------------------------------
     #-------------- DATASET AND DATALOADER ---------------
     #-----------------------------------------------------

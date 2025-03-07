@@ -46,7 +46,6 @@ def set_seed_everything(seed):
 #--------------- PREPROCESSING UTILITIES -------------
 ######################################################
 
-
 def cut_window(lon_min, lon_max, lat_min, lat_max, lon, lat, pr, z, mask_land, *argv):
     r'''
     Derives a new version of the longitude, latitude and precipitation
@@ -150,7 +149,7 @@ def derive_edge_indexes_low2high(lon_n1 ,lat_n1, lon_n2, lat_n2, k, undirected=F
         The edge_indexes tensor
     '''
     edge_index = []
-    edge_weight = []
+    edge_attr = []
 
     lonlat_n1 = torch.concatenate((lon_n1.unsqueeze(-1), lat_n1.unsqueeze(-1)),dim=-1)
     lonlat_n2 = torch.concatenate((lon_n2.unsqueeze(-1), lat_n2.unsqueeze(-1)),dim=-1)
@@ -161,15 +160,15 @@ def derive_edge_indexes_low2high(lon_n1 ,lat_n1, lon_n2, lat_n2, k, undirected=F
     for n_n2 in range(lonlat_n2.shape[0]):
         for n_n1 in neighbours[n_n2,:]:
             edge_index.append(torch.tensor([n_n1, n_n2]))
-            edge_weight.append(dist[n_n2, n_n1])
+            edge_attr.append(dist[n_n2, n_n1])
             if undirected:
                 edge_index.append(torch.tensor([n_n2, n_n1]))
 
     edge_index = torch.stack(edge_index)
-    edge_weight = torch.stack(edge_weight)
+    edge_attr = torch.stack(edge_attr)
     
     if use_edge_weight:
-        return edge_index, edge_weight
+        return edge_index, edge_attr
     else:
         return edge_index
 
@@ -376,7 +375,77 @@ def derive_train_val_test_idxs_random_months(train_year_start, train_month_start
     
     return train_idxs, val_idxs
 
+
+def compute_input_statistics(x_low, x_high, args, accelerator=None):
+
+    write_log(f'\nComputing statistics for the low-res input data.', args, accelerator, 'a')
+
+    # Low-res data
+    if args.stats_mode == "var":
+        means_low = np.zeros((5))
+        stds_low = np.zeros((5))
+        for var in range(5):
+            m = np.nanmean(x_low[:,:,var,:]) # num_nodes, time, vars, levels
+            s = np.nanstd(x_low[:,:,var,:])  # num_nodes, time, vars, levels
+            means_low[var] = m
+            stds_low[var] = s
+    elif args.stats_mode == "field":
+        means_low = np.zeros((5,5))
+        stds_low = np.zeros((5,5))
+        for var in range(5):
+            for lev in range(5):
+                m = np.nanmean(x_low[:,:,var,lev])  # num_nodes, time, vars, levels
+                s = np.nanstd(x_low[:,:,var,lev])   # num_nodes, time, vars, levels
+                means_low[var, lev] = m
+                stds_low[var, lev] = s
+    else:
+        raise Exception("Arg 'stats_mode' should be either 'var' or 'field'")
+
+    write_log(f'\nComputing statistics for the high-res input data.', args, accelerator, 'a')
+
+    # High-res data
+    means_high = torch.tensor([x_high[:,0].mean(), x_high[:,1:].mean()])
+    stds_high = torch.tensor([x_high[:,0].std(), x_high[:,1:].std()])
+
+    # Write the standardized data to disk
+    with open(args.output_path + "means_low.pkl", 'wb') as f:
+        pickle.dump(means_low, f)
+    with open(args.output_path + "stds_low.pkl", 'wb') as f:
+        pickle.dump(stds_low, f)
+    with open(args.output_path + "means_high.pkl", 'wb') as f:
+        pickle.dump(means_high, f)
+    with open(args.output_path + "stds_high.pkl", 'wb') as f:
+        pickle.dump(stds_high, f)
+
+    return means_low, stds_low, means_high, stds_high
+
+
+def standardize_input(x_low, x_high, means_low, stds_low, means_high, stds_high, args, accelerator=None):
+
+    write_log(f'\nStandardizing the low-res input data.', args, accelerator, 'a')
+
+    x_low_standard = torch.zeros((x_low.size()), dtype=torch.float32)
+
+    # Standardize the data
+    if args.stats_mode == "var":
+        for var in range(5):
+            x_low_standard[:,:,var,:] = (x_low[:,:,var,:]-means_low[var])/stds_low[var]  # num_nodes, time, vars, levels
+    elif args.stats_mode == "field":
+        for var in range(5):
+            for lev in range(5):
+                x_low_standard[:,:,var,lev] = (x_low[:,:,var,lev]-means_low[var, lev])/stds_low[var, lev]  # num_nodes, time, vars, levels
+    else:
+        raise Exception("Arg 'stats_mode' should be either 'var' or 'field'")
+
+    write_log(f'\nStandardizing the high-res input data.', args, accelerator, 'a')
+
+    # Standardize the data
+    x_high_standard = torch.zeros((x_high.size()), dtype=torch.float32)
     
+    x_high_standard[:,0] = (x_high[:,0] - means_high[0]) / stds_high[0]
+    x_high_standard[:,1:] = (x_high[:,1:] - means_high[1]) / stds_high[1]
+
+    return x_low_standard, x_high_standard
     
 
 ######################################################

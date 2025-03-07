@@ -20,7 +20,7 @@ from torch_geometric.utils import degree
 
 from utils.utils_plots import create_zones, plot_italy, extremes_cmap
 from utils.utils_plots import plot_maps, plot_single_map, plot_mean_time_series, plot_seasonal_maps
-from utils.utils import date_to_idxs, write_log
+from utils.utils import date_to_idxs, write_log, standardize_input
 
 import matplotlib
 import matplotlib.ticker as ticker
@@ -35,10 +35,8 @@ parser.add_argument('--input_path', type=str, help='path to input directory')
 parser.add_argument('--output_path', type=str, help='path to output directory')
 parser.add_argument('--log_file', type=str, default='log.txt', help='log file')
 
-parser.add_argument('--train_path', type=str)
 parser.add_argument('--train_path_reg', type=str)
 parser.add_argument('--train_path_cl', type=str)
-parser.add_argument('--checkpoint', type=str)
 parser.add_argument('--checkpoint_reg', type=str, default=None)
 parser.add_argument('--checkpoint_cl', type=str, default=None)
 parser.add_argument('--output_file', type=str, default="G_predictions.pkl")
@@ -98,15 +96,52 @@ if __name__ == '__main__':
         test_idxs = torch.tensor([*range(test_start_idx, test_end_idx)])
         write_log(f"\nUsing the provided start and end test times to derive the test idxs.", args, accelerator, 'a')
     else:
-        with open(args.train_path+args.test_idxs_file, 'rb') as f:
+        with open(args.train_path_reg+args.test_idxs_file, 'rb') as f:
             test_idxs = pickle.load(f)
         write_log(f"Using the provided test idxs vector.", args, accelerator, 'a')
 
+    # Load the precipitation target
     with open(args.input_path+args.target_file, 'rb') as f:
         pr_target = pickle.load(f)
 
+    # Load the graph
     with open(args.input_path+args.graph_file, 'rb') as f:
         low_high_graph = pickle.load(f)
+
+    # Load the input data statistics used during training
+    # (At the moment we assume that the same statistics has been used for
+    # the regressor and classifier in the RC model case)
+    with open(args.train_path_reg + "means_low.pkl", 'wb') as f:
+        means_low = pickle.load(f)
+    with open(args.train_path_reg + "stds_low.pkl", 'wb') as f:
+        stds_low = pickle.load(f)
+    with open(args.train_path_reg + "means_high.pkl", 'wb') as f:
+        means_high = pickle.load(f)
+    with open(args.train_path_reg + "stds_high.pkl", 'wb') as f:
+        stds_high = pickle.load(f)
+
+    # Standardizing the input data
+    low_high_graph['low'].x, low_high_graph['high'].x = standardize_input(
+        low_high_graph['low'].x, low_high_graph['high'].x, means_low, stds_low, means_high, stds_high, args, accelerator) # num_nodes, time, vars, levels
+    
+    vars_names = ['q', 't', 'u', 'v', 'z']
+    levels = ['200', '500', '700', '850', '1000']
+    if args.stats_mode == "var":
+        for var in range(5):
+            write_log(f"\nLow var {vars_names[var]}: mean={low_high_graph['low'].x[:,:,var,:].mean()}, std={low_high_graph['low'].x[:,:,var,:].std()}",
+                      args, accelerator, 'a')
+    elif args.stats_mode == "field":
+        for var in range(5):
+            for lev in range(5):
+                write_log(f"\nLow var {vars_names[var]} lev {levels[lev]}: mean={low_high_graph[:,:,var,lev].mean()}, std={low_high_graph[:,:,var,lev].std()}",
+                          args, accelerator, 'a')
+    
+    write_log(f"\nHigh z: mean={low_high_graph['high'].x[:,0].mean()}, std={low_high_graph['high'].x[:,0].std()}",
+              args, accelerator, 'a')
+    write_log(f"\nHigh land_use: mean={low_high_graph['high'].x[:,1:].mean()}, std={low_high_graph['high'].x[:,1:].std()}",
+              args, accelerator, 'a')
+
+    low_high_graph['low'].x = torch.flatten(low_high_graph['low'].x, start_dim=2, end_dim=-1)   # num_nodes, time, vars*levels
 
     Dataset_Graph = getattr(dataset, args.dataset_name)
     
@@ -132,14 +167,14 @@ if __name__ == '__main__':
             checkpoint_cl = torch.load(args.train_path_cl+args.checkpoint_cl, map_location=torch.device('cpu'))
             checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg, map_location=torch.device('cpu'))
         else:
-            checkpoint = torch.load(args.train_path+args.checkpoint, map_location=torch.device('cpu'))
+            checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg, map_location=torch.device('cpu'))
         device = 'cpu'
     else:
         if args.mode == "cl_reg":
             checkpoint_cl = torch.load(args.train_path_cl+args.checkpoint_cl)
             checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg)
         else:
-            checkpoint = torch.load(args.train_path+args.checkpoint)
+            checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg)
         device = accelerator.device
     
     write_log("\nLoading state dict.", args, accelerator, 'a')
@@ -147,7 +182,7 @@ if __name__ == '__main__':
         model_cl.load_state_dict(checkpoint_cl)
         model_reg.load_state_dict(checkpoint_reg)
     else:
-        model.load_state_dict(checkpoint)
+        model.load_state_dict(checkpoint_reg)
 
     if accelerator is not None:
         if args.mode == "cl_reg":
