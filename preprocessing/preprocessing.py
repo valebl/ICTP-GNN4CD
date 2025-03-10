@@ -13,7 +13,7 @@ import torch_geometric.transforms as T
 transform = T.AddLaplacianEigenvectorPE(k=2)
 sys.path.append("/leonardo_work/ICT24_ESP/vblasone/ICTP-GNN4CD")
 
-from utils.utils import write_log, cut_window, retain_valid_nodes, derive_edge_indexes_within, derive_edge_indexes_low2high
+from utils.utils import write_log, cut_window, retain_valid_nodes, derive_edge_index_within, derive_edge_index_low2high
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
@@ -121,7 +121,8 @@ for p_idx, p in enumerate(params):
                 data[mask] = torch.nan
                 input_ds[:, p_idx,l_idx,:,:] = data.numpy()
 
-lat_low, lon_low = torch.meshgrid(torch.flip(torch.tensor(lat_low),[0]), torch.tensor(lon_low), indexing='ij')
+lat_low = np.flip(lat_low, axis=0)  # Flip the latitude array along the first axis
+lat_low, lon_low = np.meshgrid(lat_low, lon_low, indexing='ij')
 
 lat_low = lat_low.flatten()
 lon_low = lon_low.flatten()
@@ -213,16 +214,16 @@ topo = xr.open_dataset(args.input_path_topo + args.topo_file)
 #lon = torch.tensor(gripho.longitude.to_numpy())
 #lat = torch.tensor(gripho.latitude.to_numpy())
 #lat, lon = torch.meshgrid(lat, lon)
-lon = torch.tensor(gripho.lon.to_numpy())
-lat = torch.tensor(gripho.lat.to_numpy())
-pr = torch.tensor(gripho.pr.to_numpy())
+lon = gripho.lon.to_numpy()
+lat = gripho.lat.to_numpy()
+pr = gripho.pr.to_numpy()
 
 if args.predictors_type == "regcm":
-    z = torch.tensor(topo.orog.to_numpy())
+    z = topo.orog.to_numpy()
     mask_land = xr.open_dataset(args.mask_path + args.mask_file)
-    mask_land = torch.tensor(mask_land.pr.to_numpy()).squeeze()    
+    mask_land = mask_land.pr.to_numpy().squeeze()    
 else:
-    z = torch.tensor(topo.z.to_numpy())
+    z = topo.z.to_numpy()
     mask_land = None
     
 if args.predictors_type == "regcm":
@@ -232,12 +233,12 @@ if args.predictors_type == "regcm":
 # Reading LAND USE data
 
 landU  = xr.open_dataset(args.land_use_path+args.land_use_file) #open nc file by default with netcdf4, if avail
-water = torch.tensor(landU.water.to_numpy())
-coast = torch.tensor(landU.coast.to_numpy())
-urban_MD = torch.tensor(landU.urban_MD.to_numpy())
-urban_HD = torch.tensor(landU.urban_HD.to_numpy())
-forest = torch.tensor(landU.forest.to_numpy())
-ucrop = torch.tensor(landU.ucrop.to_numpy())
+water = landU.water.to_numpy()
+coast = landU.coast.to_numpy()
+urban_MD = landU.urban_MD.to_numpy()
+urban_HD = landU.urban_HD.to_numpy()
+forest = landU.forest.to_numpy()
+ucrop = landU.ucrop.to_numpy()
 
 write_log("\nCutting the window...", args, accelerator=None, mode='a')
 
@@ -258,7 +259,7 @@ lon_high, lat_high, pr_high, z_high, water_high, coast_high, urban_MD_high, urba
 
 pr_high = pr_high.swapaxes(0,1) # (num_nodes, time)
 
-land_vars_high = torch.stack([water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high], dim=-1)
+land_vars_high = np.stack([water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high], axis=-1)
 
 # print(lon_high.shape, lat_high.shape, pr_high.shape, z_high.shape, land_vars_high.shape)
 
@@ -281,6 +282,8 @@ if args.predictors_type == "era5":
     pr_high = np.round(pr_high, decimals=1)
 
 #-- CLASSIFICATION --#
+
+pr_high = torch.tensor(pr_high)
 
 pr_sel_cl = torch.where(pr_high >= threshold, 1, 0).float()
 pr_sel_cl[torch.isnan(pr_high)] = torch.nan
@@ -351,36 +354,36 @@ high_graph = Data()
 
 #-- EDGES --#
 
-edges_high = derive_edge_indexes_within(lon_radius=args.lon_grid_radius_high, lat_radius=args.lat_grid_radius_high,
-                                lon_n1=lon_high, lat_n1=lat_high, lon_n2=lon_high, lat_n2=lat_high)
+edges_high = derive_edge_index_within(lon_radius=args.lon_grid_radius_high, lat_radius=args.lat_grid_radius_high,
+                                lon_senders=lon_high, lat_senders=lat_high, lon_receivers=lon_high, lat_receivers=lat_high)
 
-edges_low2high, edges_low2high_attr = derive_edge_indexes_low2high(lon_n1=lon_low, lat_n1=lat_low,
-                                lon_n2=lon_high, lat_n2=lat_high, k=9, undirected=False)
+edges_low2high, edges_low2high_attr = derive_edge_index_low2high(lon_low=lon_low, lat_low=lat_low,
+                                lon_high=lon_high, lat_high=lat_high, k=9, undirected=False)
 
-edges_low2high_undirected, edges_low2high_weight_undirected = derive_edge_indexes_low2high(lon_n1=lon_low, lat_n1=lat_low,
-                                lon_n2=lon_high, lat_n2=lat_high, k=9, undirected=True)
+# edges_low2high_undirected, edges_low2high_weight_undirected = derive_edge_index_low2high(lon_low=lon_low, lat_low=lat_low,
+#                                 lon_high=lon_high, lat_high=lat_high, k=9, undirected=True)
 
-edges_low = derive_edge_indexes_within(lon_radius=args.lon_grid_radius_low, lat_radius=args.lat_grid_radius_low,
-                                lon_n1=lon_low, lat_n1=lat_low, lon_n2=lon_low, lat_n2=lat_low)
+edges_low = derive_edge_index_within(lon_radius=args.lon_grid_radius_low, lat_radius=args.lat_grid_radius_low,
+                                lon_senders=lon_low, lat_senders=lat_low, lon_receivers=lon_low, lat_receivers=lat_low)
 
 
 #-- TO GRAPH ATTRIBUTES --#
 
 low_high_graph['low'].x = input_ds
-low_high_graph['low'].lat = lat_low
-low_high_graph['low'].lon = lon_low
+low_high_graph['low'].lat = torch.tensor(lat_low)
+low_high_graph['low'].lon = torch.tensor(lon_low)
 
-low_high_graph['high'].lat = lat_high
-low_high_graph['high'].lon = lon_high
-low_high_graph['high'].z_std = z_high.unsqueeze(-1)
-low_high_graph['high'].land_std = land_vars_high.float()
+low_high_graph['high'].lat = torch.tensor(lat_high)
+low_high_graph['high'].lon = torch.tensor(lon_high)
+low_high_graph['high'].z_std = torch.tensor(z_high).unsqueeze(-1)
+low_high_graph['high'].land_std = torch.tensor(land_vars_high).float()
 low_high_graph['high'].x = torch.concatenate((low_high_graph['high'].z_std, low_high_graph['high'].land_std),dim=-1)
 
-low_high_graph['high', 'within', 'high'].edge_index = edges_high.swapaxes(0,1)
-low_high_graph['low', 'to', 'high'].edge_index = edges_low2high.swapaxes(0,1)
-low_high_graph['low', 'within', 'low'].edge_index = edges_low.swapaxes(0,1)
-low_high_graph['low', 'to_ud', 'high'].edge_index = edges_low2high_undirected.swapaxes(0,1)
-low_high_graph['low', 'to', 'high'].edge_attr = edges_low2high_attr.float()
+low_high_graph['high', 'within', 'high'].edge_index = torch.tensor(edges_high)
+low_high_graph['low', 'to', 'high'].edge_index = torch.tensor(edges_low2high)
+low_high_graph['low', 'within', 'low'].edge_index = torch.tensor(edges_low)
+# low_high_graph['low', 'to_ud', 'high'].edge_index = torch.tensor(edges_low2high_undirected)
+low_high_graph['low', 'to', 'high'].edge_attr = torch.tensor(edges_low2high_attr).float()
 
 #-- WRITE THE GRAPH --#
 

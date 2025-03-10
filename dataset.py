@@ -129,7 +129,7 @@ class Dataset_Graph(Dataset):
         #snapshot['low', 'within', 'low'].edge_index = self.graph['low', 'within', 'low'].edge_index
         snapshot['high', 'within', 'high'].edge_index = self.graph['high', 'within', 'high'].edge_index
         snapshot['low', 'to', 'high'].edge_index = self.graph['low', 'to', 'high'].edge_index
-        # snapshot['low', 'to', 'high'].edge_weight = self.graph['low', 'to', 'high'].edge_weight
+        snapshot['low', 'to', 'high'].edge_attr = self.graph['low', 'to', 'high'].edge_attr
 
         snapshot['low'].x = x_low
         #snapshot['high'].x_empty = self.graph['high'].x

@@ -15,6 +15,9 @@ from scipy.stats import pearsonr, spearmanr, wasserstein_distance, ks_2samp, ent
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.metrics.pairwise import cosine_similarity
 
+from scipy.spatial import transform
+from scipy.spatial.distance import cdist
+
 ######################################################
 #------------------ GENERAL UTILITIES ---------------
 ######################################################
@@ -52,14 +55,14 @@ def cut_window(lon_min, lon_max, lat_min, lat_max, lon, lat, pr, z, mask_land, *
     tensors, by only retaining the values inside the specified lon-lat rectangle
     Args:
         lon_min, lon_max, lat_min, lat_max: integers
-        lon, lat, z, pr: tensors
+        lon, lat, z, pr: np.arrays
     Returns:
         The new tensors with the selected values
     '''
 
-    bool_lon = torch.logical_and(lon >= lon_min, lon <= lon_max)
-    bool_lat = torch.logical_and(lat >= lat_min, lat <= lat_max)
-    bool_both = torch.logical_and(bool_lon, bool_lat)
+    bool_lon = np.logical_and(lon >= lon_min, lon <= lon_max)
+    bool_lat = np.logical_and(lat >= lat_min, lat <= lat_max)
+    bool_both = np.logical_and(bool_lon, bool_lat)
     lon_sel = lon[bool_both]
     lat_sel = lat[bool_both]
     z_sel = z[bool_both]
@@ -81,18 +84,18 @@ def retain_valid_nodes(lon, lat, pr, e, mask_land=None, *argv):
     ignored (e.g. the sea values in GRIPHO). If a land mask
     is provided, non-land points are also ignored.
     Args:
-        lon (torch.tensor): longitude for each spatial point
-        lat (torch.tensor): latitude for each spatial point
-        pr (torch.tensor): precipitation for each spatial point
-        e (torch.tensor): elevation for each spatial point
-        mask_land (torch.tensor, optional): a mask for the land points
+        lon (np.array): longitude for each spatial point
+        lat (np.array): latitude for each spatial point
+        pr (np.array): precipitation for each spatial point
+        e (np.array): elevation for each spatial point
+        mask_land (np.array, optional): a mask for the land points
     Returns:
         The valid points for each input tensor
     '''
 
-    valid_nodes = ~torch.isnan(pr).all(dim=0)
+    valid_nodes = ~np.isnan(pr).all(axis=0)
     if mask_land is not None:
-        valid_nodes = np.logical_and(valid_nodes, ~torch.isnan(mask_land))
+        valid_nodes = np.logical_and(valid_nodes, ~np.isnan(mask_land))
     lon = lon[valid_nodes]
     lat = lat[valid_nodes]
     pr = pr[:,valid_nodes]
@@ -103,47 +106,50 @@ def retain_valid_nodes(lon, lat, pr, e, mask_land=None, *argv):
     return lon, lat, pr, e, *v
 
 
-def derive_edge_indexes_within(lon_radius, lat_radius, lon_n1 ,lat_n1, lon_n2, lat_n2):
+def derive_edge_index_within(lon_radius, lat_radius, lon_senders ,lat_senders, lon_receivers, lat_receivers):
     r'''
     Derives edge_indexes within two sets of nodes based on specified lon, lat distances
     Args:
-        lon_n1 (torch.tensor): longitudes of all first nodes in the edges
-        lat_n1 (torch.tensor): latitudes of all fisrt nodes in the edges
-        lon_n2 (torch.tensor): longitudes of all second nodes in the edges
-        lat_n2 (torch.tensor): latitudes of all second nodes in the edges
+        lon_senders (np.array): longitudes of all first nodes in the edges
+        lat_senders (np.array): latitudes of all fisrt nodes in the edges
+        lon_receivers (np.array): longitudes of all second nodes in the edges
+        lat_receivers (np.array): latitudes of all second nodes in the edges
     Return:
         The edge_indexes tensor
     '''
 
-    edge_indexes = []
+    edge_index = []
 
-    lonlat_n1 = torch.concatenate((lon_n1.unsqueeze(-1), lat_n1.unsqueeze(-1)),dim=-1)
-    lonlat_n2 = torch.concatenate((lon_n2.unsqueeze(-1), lat_n2.unsqueeze(-1)),dim=-1)
+    lonlat_senders = np.column_stack((lon_senders, lat_senders))
+    lonlat_receivers = np.column_stack((lon_receivers,lat_receivers))
 
-    for ii, xi in enumerate(lonlat_n1):
+    for ii, xi in enumerate(lonlat_senders):
         
-        bool_lon = abs(lon_n2 - xi[0]) < lon_radius
-        bool_lat = abs(lat_n2 - xi[1]) < lat_radius
-        bool_both = torch.logical_and(bool_lon, bool_lat).bool()
-        jj_list = torch.nonzero(bool_both)
-        xj_list = lonlat_n2[bool_both]
+        bool_lon = np.abs(lon_receivers - xi[0]) < lon_radius
+        bool_lat = np.abs(lat_receivers - xi[1]) < lat_radius
+        bool_both = np.logical_and(bool_lon, bool_lat)
+
+        jj_list = np.nonzero(bool_both)[0] # to get indices
+        xj_list = lonlat_receivers[bool_both]
+
         for jj, xj in zip(jj_list, xj_list):
-            if not torch.equal(xi, xj):
-                edge_indexes.append(torch.tensor([ii, jj]))
+            if not np.array_equal(xi, xj):
+                edge_index.append(np.array([ii, jj]))
+    
+    edge_index = np.array(edge_index).T
+    print(edge_index.shape)
 
-    edge_indexes = torch.stack(edge_indexes)
-
-    return edge_indexes
+    return edge_index
 
 
-def derive_edge_indexes_low2high(lon_n1 ,lat_n1, lon_n2, lat_n2, k, undirected=False, use_edge_weight=True):
+def derive_edge_index_low2high(lon_low ,lat_low, lon_high, lat_high, k, undirected=False, use_edge_attr=True):
     '''
     Derives edge_indexes between two sets of nodes based on specified number of neighbours k
     Args:
-        lon_n1 (torch.tensor): longitudes of all first nodes in the edges
-        lat_n1 (torch.tensor): latitudes of all fisrt nodes in the edges
-        lon_n2 (torch.tensor): longitudes of all second nodes in the edges
-        lat_n2 (torch.tensor): latitudes of all second nodes in the edges
+        lon_low (np.array): longitudes of all first nodes in the edges
+        lat_low (np.array): latitudes of all fisrt nodes in the edges
+        lon_high (np.array): longitudes of all second nodes in the edges
+        lat_high (np.array): latitudes of all second nodes in the edges
         k (int): the number of neighbours
     Return:
         The edge_indexes tensor
@@ -151,26 +157,228 @@ def derive_edge_indexes_low2high(lon_n1 ,lat_n1, lon_n2, lat_n2, k, undirected=F
     edge_index = []
     edge_attr = []
 
-    lonlat_n1 = torch.concatenate((lon_n1.unsqueeze(-1), lat_n1.unsqueeze(-1)),dim=-1)
-    lonlat_n2 = torch.concatenate((lon_n2.unsqueeze(-1), lat_n2.unsqueeze(-1)),dim=-1)
+    lonlat_low = np.concatenate((np.expand_dims(lon_low,-1), np.expand_dims(lat_low,-1)), axis=-1)
+    lonlat_high = np.concatenate((np.expand_dims(lon_high,-1), np.expand_dims(lat_high,-1)),axis=-1)
 
-    dist = torch.cdist(lonlat_n2.double(), lonlat_n1.double(), p=2, compute_mode='donot_use_mm_for_euclid_dist')
-    _ , neighbours = dist.topk(k, largest=False, dim=-1)
+    dist = cdist(lonlat_high, lonlat_low, metric='euclidean')
+    neighbours = np.argsort(dist, axis=-1)[:, :k]
+    # _ , neighbours = dist.topk(k, largest=False, dim=-1)
 
-    for n_n2 in range(lonlat_n2.shape[0]):
+    for n_n2 in range(lonlat_high.shape[0]):
         for n_n1 in neighbours[n_n2,:]:
-            edge_index.append(torch.tensor([n_n1, n_n2]))
-            edge_attr.append(dist[n_n2, n_n1])
+            edge_index.append(np.array([n_n1, n_n2]))
+            # edge_attr.append(dist[n_n2, n_n1])
             if undirected:
-                edge_index.append(torch.tensor([n_n2, n_n1]))
+                edge_index.append(np.array([n_n2, n_n1]))
 
-    edge_index = torch.stack(edge_index)
-    edge_attr = torch.stack(edge_attr)
+    edge_index = np.array(edge_index).T
+    # edge_attr = np.array(edge_attr).T
     
-    if use_edge_weight:
+    if use_edge_attr:
+        senders = edge_index[0]
+        receivers = edge_index[1]
+        edge_attr = get_edge_features(lon_low, lat_low, lon_high, lat_high, senders, receivers)
         return edge_index, edge_attr
     else:
         return edge_index
+    
+def get_edge_features(node_lon_senders, node_lat_senders, node_lon_receivers, node_lat_receivers,
+                      senders, receivers, rotate_latitude=True, rotate_longitude=True):
+    '''
+    lon_n1, lat_n1, lon_n2, lat_n2, edge_index [2, n_edges]
+    '''
+    
+    node_phi_senders, node_theta_senders = lat_lon_deg_to_spherical(node_lon_senders, node_lat_senders)
+    node_phi_receivers, node_theta_receivers = lat_lon_deg_to_spherical(node_lon_receivers, node_lat_receivers)
+    
+    relative_position = get_relative_position_in_receiver_local_coordinates(
+        node_phi_senders, node_theta_senders, node_phi_receivers, node_theta_receivers, senders, receivers,
+        latitude_local_coordinates=rotate_latitude,
+        longitude_local_coordinates=rotate_longitude)
+    
+    # Note this is L2 distance in 3d space, rather than geodesic distance.
+    relative_edge_distances = np.linalg.norm(
+        relative_position, axis=-1, keepdims=True)
+
+    # Normalize to the maximum edge distance. Note that we expect to always
+    # have an edge that goes in the opposite direction of any given edge
+    # so the distribution of relative positions should be symmetric around
+    # zero. So by scaling by the maximum length, we expect all relative
+    # positions to fall in the [-1., 1.] interval, and all relative distances
+    # to fall in the [0., 1.] interval.
+    max_edge_distance = relative_edge_distances.max()
+    relative_edge_distances = relative_edge_distances / max_edge_distance
+    relative_position = relative_position / max_edge_distance
+
+    return np.concatenate((relative_position, relative_edge_distances), axis=-1)
+
+
+def spherical_to_cartesian(phi, theta):
+    '''
+    Adapted from GraphCast
+    '''
+    # Assuming unit radius.
+    return (np.cos(phi)*np.sin(theta),
+            np.sin(phi)*np.sin(theta),
+            np.cos(theta))
+
+def lat_lon_deg_to_spherical(node_lat, node_lon):
+    '''
+    Adapted from GraphCast
+    '''
+    phi = np.deg2rad(node_lon)
+    theta = np.deg2rad(90 - node_lat)
+    return phi, theta
+
+def get_relative_position_in_receiver_local_coordinates(
+    node_phi_senders, node_theta_senders, node_phi_receivers, node_theta_receivers, senders, receivers,
+    latitude_local_coordinates=True, longitude_local_coordinates=True):
+    """Returns relative position features for the edges.
+
+    The relative positions will be computed in a rotated space for a local
+    coordinate system as defined by the receiver. The relative positions are
+    simply obtained by subtracting sender position minues receiver position in
+    that local coordinate system after the rotation in R^3.
+
+    Args:
+        node_phi: [num_nodes] with polar angles.
+        node_theta: [num_nodes] with azimuthal angles.
+        senders: [num_edges] with indices.
+        receivers: [num_edges] with indices.
+        latitude_local_coordinates: Whether to rotate edges such that in the
+            positions are computed such that the receiver is always at latitude 0.
+        longitude_local_coordinates: Whether to rotate edges such that in the
+            positions are computed such that the receiver is always at longitude 0.
+
+    Returns:
+        Array of relative positions in R3 [num_edges, 3]
+    """
+
+    node_pos_senders = np.stack(spherical_to_cartesian(node_phi_senders, node_theta_senders), axis=-1)
+    node_pos_receivers = np.stack(spherical_to_cartesian(node_phi_receivers, node_theta_receivers), axis=-1)
+
+    # No rotation in this case.
+    if not (latitude_local_coordinates or longitude_local_coordinates):
+        return node_pos_senders[senders] - node_pos_receivers[receivers]
+
+    # Get rotation matrices for the local space space for every node.
+    rotation_matrices = get_rotation_matrices_to_local_coordinates(
+        reference_phi=node_phi_receivers,
+        reference_theta=node_theta_receivers,
+        rotate_latitude=latitude_local_coordinates,
+        rotate_longitude=longitude_local_coordinates)
+
+    # Each edge will be rotated according to the rotation matrix of its receiver
+    # node.
+    edge_rotation_matrices = rotation_matrices[receivers]
+
+    # Rotate all nodes to the rotated space of the corresponding edge.
+    # Note for receivers we can also do the matmul first and the gather second:
+    # ```
+    # receiver_pos_in_rotated_space = rotate_with_matrices(
+    #    rotation_matrices, node_pos)[receivers]
+    # ```
+    # which is more efficient, however, we do gather first to keep it more
+    # symmetric with the sender computation.
+    receiver_pos_in_rotated_space = rotate_with_matrices(
+        edge_rotation_matrices, node_pos_receivers[receivers])
+    sender_pos_in_in_rotated_space = rotate_with_matrices(
+        edge_rotation_matrices, node_pos_senders[senders])
+    # Note, here, that because the rotated space is chosen according to the
+    # receiver, if:
+    # * latitude_local_coordinates = True: latitude for the receivers will be
+    #   0, that is the z coordinate will always be 0.
+    # * longitude_local_coordinates = True: longitude for the receivers will be
+    #   0, that is the y coordinate will be 0.
+
+    # Now we can just subtract.
+    # Note we are rotating to a local coordinate system, where the y-z axes are
+    # parallel to a tangent plane to the sphere, but still remain in a 3d space.
+    # Note that if both `latitude_local_coordinates` and
+    # `longitude_local_coordinates` are True, and edges are short,
+    # then the difference in x coordinate between sender and receiver
+    # should be small, so we could consider dropping the new x coordinate if
+    # we wanted to the tangent plane, however in doing so
+    # we would lose information about the curvature of the mesh, which may be
+    # important for very coarse meshes.
+    return sender_pos_in_in_rotated_space - receiver_pos_in_rotated_space
+
+
+def get_rotation_matrices_to_local_coordinates(reference_phi, reference_theta,
+                                               rotate_latitude, rotate_longitude):
+
+    """Returns a rotation matrix to rotate to a point based on a reference vector.
+
+    The rotation matrix is build such that, a vector in the
+    same coordinate system at the reference point that points towards the pole
+    before the rotation, continues to point towards the pole after the rotation.
+
+    Args:
+        reference_phi: [leading_axis] Polar angles of the reference.
+        reference_theta: [leading_axis] Azimuthal angles of the reference.
+        rotate_latitude: Whether to produce a rotation matrix that would rotate
+            R^3 vectors to zero latitude.
+        rotate_longitude: Whether to produce a rotation matrix that would rotate
+            R^3 vectors to zero longitude.
+
+    Returns:
+        Matrices of shape [leading_axis] such that when applied to the reference
+            position with `rotate_with_matrices(rotation_matrices, reference_pos)`
+
+            * phi goes to 0. if "rotate_longitude" is True.
+
+            * theta goes to np.pi / 2 if "rotate_latitude" is True.
+
+            The rotation consists of:
+            * rotate_latitude = False, rotate_longitude = True:
+                Latitude preserving rotation.
+            * rotate_latitude = True, rotate_longitude = True:
+                Latitude preserving rotation, followed by longitude preserving
+                rotation.
+            * rotate_latitude = True, rotate_longitude = False:
+                Latitude preserving rotation, followed by longitude preserving
+                rotation, and the inverse of the latitude preserving rotation. Note
+                this is computationally different from rotating the longitude only
+                and is. We do it like this, so the polar geodesic curve, continues
+                to be aligned with one of the axis after the rotation.
+
+    """
+
+    if rotate_longitude and rotate_latitude:
+
+        # We first rotate around the z axis "minus the azimuthal angle", to get the
+        # point with zero longitude
+        azimuthal_rotation = - reference_phi
+
+        # One then we will do a polar rotation (which can be done along the y
+        # axis now that we are at longitude 0.), "minus the polar angle plus 2pi"
+        # to get the point with zero latitude.
+        polar_rotation = - reference_theta + np.pi/2
+
+        return transform.Rotation.from_euler(
+            "zy", np.stack([azimuthal_rotation, polar_rotation],
+                        axis=1)).as_matrix()
+    elif rotate_longitude:
+        # Just like the previous case, but applying only the azimuthal rotation.
+        azimuthal_rotation = - reference_phi
+        return transform.Rotation.from_euler("z", -reference_phi).as_matrix()
+    elif rotate_latitude:
+        # Just like the first case, but after doing the polar rotation, undoing
+        # the azimuthal rotation.
+        azimuthal_rotation = - reference_phi
+        polar_rotation = - reference_theta + np.pi/2
+
+        return transform.Rotation.from_euler(
+            "zyz", np.stack(
+                [azimuthal_rotation, polar_rotation, -azimuthal_rotation]
+                , axis=1)).as_matrix()
+    else:
+        raise ValueError(
+            "At least one of longitude and latitude should be rotated.")
+
+
+def rotate_with_matrices(rotation_matrices, positions):
+    return np.einsum("bji,bi->bj", rotation_matrices, positions)
 
 
 def date_to_idxs(year_start, month_start, day_start, year_end, month_end, day_end,
@@ -917,10 +1125,10 @@ class Trainer(object):
                     w_val.append(graph['high'].w)
                 
                 # Create tensors
-                train_mask_val = torch.stack(train_mask_val)
-                y_pred_val = torch.stack(y_pred_val)
-                y_val = torch.stack(y_val)
-                w_val = torch.stack(w_val)
+                train_mask_val = torch.cat(train_mask_val, dim=0)
+                y_pred_val = torch.cat(y_pred_val, dim=0)
+                y_val = torch.cat(y_val, dim=0)
+                w_val = torch.cat(w_val, dim=0)
 
                 # Log validation metrics for 1GPU
                 if args.loss_fn == "quantized_loss":
