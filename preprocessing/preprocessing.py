@@ -5,15 +5,16 @@ import time
 import argparse
 import sys
 import torch
-import matplotlib.pyplot as plt
 import netCDF4 as nc
+from torch_geometric.utils import degree
 
 from torch_geometric.data import Data, HeteroData
 import torch_geometric.transforms as T
 transform = T.AddLaplacianEigenvectorPE(k=2)
 sys.path.append("/leonardo_work/ICT24_ESP/vblasone/ICTP-GNN4CD")
 
-from utils.utils import write_log, cut_window, retain_valid_nodes, derive_edge_index_within, derive_edge_index_low2high
+from utils.tools import write_log
+from utils.graph import cut_window, retain_valid_nodes, derive_edge_index_within, derive_edge_index_multiscale
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
@@ -138,57 +139,7 @@ input_ds = torch.tensor(input_ds)
 input_ds = torch.flip(input_ds, [3])
 
 #### IMPORTANT CHANGE - NORMALIZATION NOW IN MAIN AND PREDICTION #### 
-
-# #-- Standardize the dataset--#
-# write_log(f'\nStandardizing the dataset.', args, accelerator=None, mode='a')
-
-# input_ds_standard = np.zeros((input_ds.shape), dtype=np.float32)
-
-# if args.load_stats:
-#     with open(args.stats_path+args.means_file_low, 'rb') as f:
-#         means = pickle.load(f)
-#     with open(args.stats_path+args.stds_file_low, 'rb') as f:
-#         stds = pickle.load(f)
-
-# if args.stats_mode == "var":
-#     if not args.load_stats:
-#         means = np.zeros((5))
-#         stds = np.zeros((5))
-#         for var in range(5):
-#             m = np.nanmean(input_ds[:,var,:,:,:])
-#             s = np.nanstd(input_ds[:,var,:,:,:])
-#             input_ds_standard[:,var,:,:,:] = (input_ds[:,var,:,:,:]-m)/s
-#             means[var] = m
-#             stds[var] = s
-#         with open(args.output_path + "means_var.pkl", 'wb') as f:
-#             pickle.dump(means, f)
-#         with open(args.output_path + "stds_var.pkl", 'wb') as f:
-#             pickle.dump(stds, f)
-#     else:
-#         for var in range(5):
-#             input_ds_standard[:,var,:,:,:] = (input_ds[:,var,:,:,:]-means[var])/stds[var]    
-# elif args.stats_mode == "field":
-#     if not args.load_stats:
-#         means = np.zeros((5,5))
-#         stds = np.zeros((5,5))
-#         for var in range(5):
-#             for lev in range(5):
-#                 m = np.nanmean(input_ds[:,var,lev,:,:])
-#                 s = np.nanstd(input_ds[:,var,lev,:,:])
-#                 input_ds_standard[:,var,lev,:,:] = (input_ds[:,var,lev,:,:]-m)/s
-#                 means[var, lev] = m
-#                 stds[var, lev] = s
-#         with open(args.output_path + "means_var_lev.pkl", 'wb') as f:
-#             pickle.dump(means, f)
-#         with open(args.output_path + "stds_var_lev.pkl", 'wb') as f:
-#             pickle.dump(stds, f)
-#     else:
-#         for var in range(5):
-#             for lev in range(5):
-#                 input_ds_standard[:,var,lev,:,:] = (input_ds[:,var,lev,:,:]-means[var, lev])/stds[var, lev]
-# else:
-#     raise Exception("Arg 'stats_mode' should be either 'var' or 'field'")
-# 
+ 
 input_ds = torch.permute(input_ds, (3,4,0,1,2)) # lat, lon, time, vars, levels
 input_ds = torch.flatten(input_ds, end_dim=1)   # num_nodes, time, vars, levels
 # input_ds = torch.flatten(input_ds, start_dim=2, end_dim=-1)
@@ -232,7 +183,7 @@ if args.predictors_type == "regcm":
 
 # Reading LAND USE data
 
-landU  = xr.open_dataset(args.land_use_path+args.land_use_file) #open nc file by default with netcdf4, if avail
+landU  = xr.open_dataset(args.land_use_path+args.land_use_file,  engine='netcdf4') #open nc file by default with netcdf4, if avail
 water = landU.water.to_numpy()
 coast = landU.coast.to_numpy()
 urban_MD = landU.urban_MD.to_numpy()
@@ -272,78 +223,21 @@ write_log(f"\nAfter removing the non land territory nodes, the high resolution g
 # CLASSIFICATION AND REGRESSION TARGETS #
 #---------------------------------------#
 
+#-- ROUND THE TARGET --#   
 threshold = 0.1 # mm
 pr_high[pr_high < 0.1] = 0.0
-
-#-- ROUND THE TARGET --#    
-
-# change tge following in case the target associated to era5 predictors should not be rounded
 if args.predictors_type == "era5":
     pr_high = np.round(pr_high, decimals=1)
 
-#-- CLASSIFICATION --#
-
 pr_high = torch.tensor(pr_high)
-
-pr_sel_cl = torch.where(pr_high >= threshold, 1, 0).float()
-pr_sel_cl[torch.isnan(pr_high)] = torch.nan
-
-#-- REGRESSION --#
-
-pr_sel_reg = torch.where(pr_high >= threshold, torch.log1p(pr_high), torch.nan).float()
-pr_sel_reg[torch.isnan(pr_high)] = torch.nan
-
-#### Add here the call to the function to compute the weights
 
 write_log("Writing some files...", args, accelerator=None, mode='a')
 
-#-- WRITE THE FILES --#    
-if args.predictors_type == "era5":
-    with open(args.output_path + 'target_train_cl.pkl', 'wb') as f:
-        pickle.dump(pr_sel_cl, f)    
-
-    with open(args.output_path + 'target_train_reg.pkl', 'wb') as f:
-        pickle.dump(pr_sel_reg, f)    
-
-#        with open(args.output_path + 'reg_weights.pkl', 'wb') as f:
-#            pickle.dump(reg_weights, f)    
-        
+#-- WRITE THE FILES --#       
 with open(args.output_path + 'pr_target.pkl', 'wb') as f:
-    pickle.dump(pr_high, f)    
+    pickle.dump(pr_high, f)
 
 #### IMPORTANT CHANGE - NORMALIZATION NOW IN MAIN AND PREDICTION #### 
-
-# #-------------------------------#
-# # STANDARDISE HIGH-RES FEATURES #
-# #-------------------------------#
-
-# load_stats_high = True
-# if load_stats_high:
-#     with open(args.stats_path + args.stats_file_high, 'rb') as f:
-#         precomputed_stats = pickle.load(f)
-#     mean_z = precomputed_stats[0]
-#     std_z = precomputed_stats[1]
-#     with open(args.stats_path + "land_stats_italy_upd.pkl", 'rb') as f:
-#         precomputed_stats_land = pickle.load(f)
-#     mean_land = precomputed_stats_land[0]
-#     std_land = precomputed_stats_land[1]
-#     mode = "precomputed"
-# else:
-#     mean_z = z_high.mean()
-#     std_z = z_high.std()
-#     mean_land = land_vars_high.mean()
-#     std_land = land_vars_high.std()
-#     mode = "local"
-#     stats_z = torch.tensor([mean_z, std_z])
-#     stats_land = torch.tensor([mean_land, std_land])
-#     with open(args.output_path + "stats_land.pkl", 'wb') as f:
-#         pickle.dump(stats_land, f)
-
-# write_log(f"\nUsing {mode} statistics for z: mean={mean_z}, std={std_z} and for land use: mean={mean_land}, std={std_land}", args, accelerator=None, mode='a')
-
-# z_high_std = (z_high - mean_z) / std_z
-# land_vars_high_std = (land_vars_high - mean_land) / std_land
-
 
 #-----------------#
 # BUILD THE GRAPH #
@@ -354,17 +248,17 @@ high_graph = Data()
 
 #-- EDGES --#
 
-edges_high = derive_edge_index_within(lon_radius=args.lon_grid_radius_high, lat_radius=args.lat_grid_radius_high,
+edges_low2high, edges_low2high_attr = derive_edge_index_multiscale(lon_senders=lon_low, lat_senders=lat_low,
+                                lon_receivers=lon_high, lat_receivers=lat_high, k=9, undirected=False)
+
+edges_high, edges_high_attr = derive_edge_index_within(lon_radius=args.lon_grid_radius_high, lat_radius=args.lat_grid_radius_high,
                                 lon_senders=lon_high, lat_senders=lat_high, lon_receivers=lon_high, lat_receivers=lat_high)
 
-edges_low2high, edges_low2high_attr = derive_edge_index_low2high(lon_low=lon_low, lat_low=lat_low,
-                                lon_high=lon_high, lat_high=lat_high, k=9, undirected=False)
-
-# edges_low2high_undirected, edges_low2high_weight_undirected = derive_edge_index_low2high(lon_low=lon_low, lat_low=lat_low,
-#                                 lon_high=lon_high, lat_high=lat_high, k=9, undirected=True)
-
-edges_low = derive_edge_index_within(lon_radius=args.lon_grid_radius_low, lat_radius=args.lat_grid_radius_low,
+edges_low, edges_low_attr = derive_edge_index_within(lon_radius=args.lon_grid_radius_low, lat_radius=args.lat_grid_radius_low,
                                 lon_senders=lon_low, lat_senders=lat_low, lon_receivers=lon_low, lat_receivers=lat_low)
+
+edges_high2low, edges_high2low_attr = derive_edge_index_multiscale(lon_senders=lon_high, lat_senders=lat_high,
+                                lon_receivers=lon_low, lat_receivers=lat_low, k=9, undirected=False)
 
 
 #-- TO GRAPH ATTRIBUTES --#
@@ -377,13 +271,25 @@ low_high_graph['high'].lat = torch.tensor(lat_high)
 low_high_graph['high'].lon = torch.tensor(lon_high)
 low_high_graph['high'].z_std = torch.tensor(z_high).unsqueeze(-1)
 low_high_graph['high'].land_std = torch.tensor(land_vars_high).float()
-low_high_graph['high'].x = torch.concatenate((low_high_graph['high'].z_std, low_high_graph['high'].land_std),dim=-1)
+# low_high_graph['high'].node_type = torch.where(degree(low_high_graph['high','within','high'].edge_index[0], low_high_graph['high'].num_nodes) == 8, 1, 0)
+low_high_graph['high'].x = torch.cat((low_high_graph['high'].z_std, low_high_graph['high'].land_std),dim=-1)
 
+# High within High
 low_high_graph['high', 'within', 'high'].edge_index = torch.tensor(edges_high)
+low_high_graph['high', 'within', 'high'].edge_attr = torch.tensor(edges_high_attr).float()
+
+# Low to High
 low_high_graph['low', 'to', 'high'].edge_index = torch.tensor(edges_low2high)
-low_high_graph['low', 'within', 'low'].edge_index = torch.tensor(edges_low)
-# low_high_graph['low', 'to_ud', 'high'].edge_index = torch.tensor(edges_low2high_undirected)
 low_high_graph['low', 'to', 'high'].edge_attr = torch.tensor(edges_low2high_attr).float()
+
+# Low within Low
+low_high_graph['low', 'within', 'low'].edge_index = torch.tensor(edges_low)
+low_high_graph['low', 'within', 'low'].edge_attr = torch.tensor(edges_low_attr).float()
+
+# Low to High
+low_high_graph['high', 'to', 'low'].edge_index = torch.tensor(edges_high2low)
+low_high_graph['high', 'to', 'low'].edge_attr = torch.tensor(edges_high2low_attr).float()
+
 
 #-- WRITE THE GRAPH --#
 

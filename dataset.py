@@ -1,18 +1,11 @@
-import pickle
-import sys
 import numpy as np
-
 import torch
 from torch.utils.data import Dataset
-from torch.utils.data._utils.collate import default_convert
-
-from torch_geometric.data import Data, HeteroData
+from torch_geometric.data import HeteroData, Batch
 
 import torch
 import numpy as np
 from typing import Sequence, Union
-from torch_geometric.data import Data, Batch
-from torch_geometric.utils import k_hop_subgraph
 from torch_geometric.utils import degree
 
 import torch_geometric.transforms as T
@@ -53,8 +46,7 @@ class Dataset_Graph(Dataset):
             self._get_features = self.__get_features_24h
 
     def __len__(self):
-        #return len(self.features)
-        return self.graph['low'].x.shape[1]
+        return self.graph['low'].x.shape[1] # time dimension
         
     def _check_temporal_consistency(self):
         if self.targets is not None:
@@ -132,11 +124,6 @@ class Dataset_Graph(Dataset):
         snapshot['low', 'to', 'high'].edge_attr = self.graph['low', 'to', 'high'].edge_attr
 
         snapshot['low'].x = x_low
-        #snapshot['high'].x_empty = self.graph['high'].x
-        # snapshot['high'].x = self.graph['high'].z_std # torch.zeros((snapshot['high'].num_nodes,1))
-        # snapshot['high'].z_std = self.graph['high'].z_std
-        # snapshot['high'].land_std = self.graph['high'].land_std
-        # snapshot['high'].x = torch.concatenate((snapshot['high'].z_std, snapshot['high'].land_std),dim=-1)
         snapshot['high'].x = self.graph['high'].x
 
         snapshot['high'].lon = self.graph['high'].lon
@@ -148,31 +135,6 @@ class Dataset_Graph(Dataset):
         #snapshot['high'].deg = self._get_high_nodes_degree(snapshot)
 
         return snapshot
-
-        node_idx = torch.randint(high=snapshot['high'].num_nodes, size=(1,)).item()
-        num_hops = torch.randint(low=2, high=5, size=(1,)).item()
-
-        subset_low, _, _, _ = k_hop_subgraph(node_idx=node_idx, num_hops=1,
-                edge_index=snapshot['low', 'to', 'high'].edge_index,
-                relabel_nodes=False)
-        
-        subset_high, _, _, _ = k_hop_subgraph(node_idx=node_idx, num_hops=2,
-                edge_index=snapshot['high', 'within', 'high'].edge_index,
-                relabel_nodes=False)
-
-        print(subset_low)
-        print(subset_high)
-        
-        
-        subset_dict = {
-            'low': subset_low,
-            'high': subset_high
-        }
-
-        s = snapshot.subgraph(subset_dict=subset_dict)
-        s['node_idx'] = node_idx
-        
-        return s
         
 
 class Iterable_Graph(object):

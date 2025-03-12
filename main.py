@@ -15,10 +15,12 @@ import os
 import dataset
 import importlib
 
-import utils.utils
-from utils.utils import write_log, check_freezed_layers, set_seed_everything
-from utils.utils import find_not_all_nan_times, derive_train_val_idxs, derive_train_val_test_idxs_random_months
-from utils.utils import compute_input_statistics, standardize_input, Trainer
+import utils.tools
+import utils.loss_functions
+from utils.tools import write_log, check_freezed_layers, set_seed_everything
+from utils.tools import find_not_all_nan_times, derive_train_val_idxs, derive_train_val_test_idxs_random_months
+from utils.tools import compute_input_statistics, standardize_input
+from utils.train_test import Trainer
 from accelerate import Accelerator
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -30,7 +32,6 @@ parser.add_argument('--log_file', type=str, default='log.txt', help='log file')
 
 parser.add_argument('--target_file', type=str, default=None)
 parser.add_argument('--graph_file', type=str, default=None) 
-parser.add_argument('--weights_file', type=str, default=None) 
 
 parser.add_argument('--out_checkpoint_file', type=str, default="checkpoint.pth")
 parser.add_argument('--out_loss_file', type=str, default="loss.csv")
@@ -126,13 +127,13 @@ if __name__ == '__main__':
     if args.loss_fn == 'sigmoid_focal_loss':
         loss_fn = getattr(torchvision.ops, args.loss_fn)
     elif args.loss_fn == 'quantized_loss':
-        loss_fn = getattr(utils.utils, args.loss_fn)(alpha=args.alpha)
+        loss_fn = getattr(utils.loss_functions, args.loss_fn)(alpha=args.alpha)
     elif args.loss_fn == 'quantized_loss_scaled':
-        loss_fn = getattr(utils.utils, args.loss_fn)()
+        loss_fn = getattr(utils.loss_functions, args.loss_fn)()
     elif args.loss_fn == 'weighted_mse_loss':
-        loss_fn = getattr(utils.utils, args.loss_fn)()
+        loss_fn = getattr(utils.loss_functions, args.loss_fn)()
     elif args.loss_fn == 'weighted_mae_loss':
-        loss_fn = getattr(utils.utils, args.loss_fn)()
+        loss_fn = getattr(utils.loss_functions, args.loss_fn)()
     else:
         loss_fn = getattr(nn.functional, args.loss_fn) 
     
@@ -147,6 +148,26 @@ if __name__ == '__main__':
 
     with open(args.input_path+args.target_file, 'rb') as f:
         target_train = pickle.load(f)
+
+    # derive two masks:
+    # - mask_not_nan, i.e. where the target is not nan
+    # - mask_geq_threshold, i.e. where the target is larger than the preferred threshold (now 0.1mm)
+    threshold = 0.1
+    mask_nan = torch.isnan(target_train)
+    mask_less_threshold = target_train < threshold
+
+    if args.model_type == "cl":
+        #-- CLASSIFIER --#        
+        target_train = torch.where(target_train >= threshold, 1, 0).float()
+    elif args.model_type == "reg":
+        #-- REGRESSOR ON pr >=threshold --#    
+        target_train = torch.log1p(target_train)
+        target_train[mask_less_threshold] = torch.nan
+    elif args.model_type =="all":
+        #-- REGRESSOR ON ALL --#    
+        target_train = torch.log1p(target_train)
+    
+    target_train[mask_nan] = torch.nan
 
     idxs_not_all_nan = find_not_all_nan_times(target_train)
 
@@ -186,6 +207,24 @@ if __name__ == '__main__':
     if tail_val_idxs != 0:
         val_idxs = val_idxs[:-tail_val_idxs]
 
+    # Compute the weights for the regressor
+    if args.model_type == "reg":
+        # This should be put in a function
+        bins = np.arange(np.log1p(threshold), np.log1p(200), np.log1p(0.5))
+        values_unif_log, edges_unif_log = np.histogram(target_train.numpy(), bins=bins, density=False)
+        # Assign bins to targets
+        target_bins = np.digitize(target_train.numpy(), edges_unif_log, right=False).astype(float) - 1
+
+        nbins = (np.nanmax(target_bins) + 1).astype(int)
+        if nbins > len(values_unif_log):
+            write_log(f"bins min: {np.nanmin(target_bins)}, bins max: {np.nanmax(target_bins)}, nbins: {nbins}, len weights: {len(values_unif_log)}", args, accelerator, 'a')
+            target_bins[target_bins == nbins -1] = nbins - 2
+            nbins = nbins - 1
+            write_log("\nUpdating last bin...", args, accelerator, 'a')
+        write_log(f"\nbins min: {np.nanmin(target_bins)}, bins max: {np.nanmax(target_bins)}, nbins: {nbins}", args, accelerator, 'a')
+        target_bins = torch.tensor(target_bins)
+        target_bins[mask_nan] = torch.nan
+
     means_low, stds_low, means_high, stds_high = compute_input_statistics(
         low_high_graph['low'].x[:,train_idxs,:], low_high_graph['high'].x, args, accelerator)
     
@@ -209,7 +248,7 @@ if __name__ == '__main__':
     write_log(f"\nHigh land_use: mean={low_high_graph['high'].x[:,1:].mean()}, std={low_high_graph['high'].x[:,1:].std()}",
               args, accelerator, 'a')
 
-    low_high_graph['low'].x = torch.flatten(low_high_graph['low'].x, start_dim=2, end_dim=-1)   # num_nodes, time, vars*levels
+    low_high_graph['low'].x = torch.flatten(low_high_graph['low'].x, start_dim=2, end_dim=-1)   # num_nodes, time, vars*levels   
 
     #-----------------------------------------------------
     #-------------- DATASET AND DATALOADER ---------------
@@ -217,17 +256,10 @@ if __name__ == '__main__':
     
     Dataset_Graph = getattr(dataset, args.dataset_name)
     
-    if args.loss_fn == 'weighted_mse_loss' or args.loss_fn == 'weighted_mae_loss' or "quantized" in args.loss_fn:
-        with open(args.input_path+args.weights_file, 'rb') as f:
-            weights_reg = pickle.load(f)
-
-        write_log("\nUsing weights in the loss.", args, accelerator, 'a')
-
+    if "quantized" in args.loss_fn:
         dataset_graph = Dataset_Graph(targets=target_train,
-            w=weights_reg, graph=low_high_graph, model_name=args.model_name)
+            w=target_bins, graph=low_high_graph, model_name=args.model_name)
     else:
-        if accelerator is None or accelerator.is_main_process:
-            write_log("\nNot using weights in the loss.", args, accelerator, 'a')
         dataset_graph = Dataset_Graph(targets=target_train,
             graph=low_high_graph, model_name=args.model_name)
 
@@ -244,7 +276,7 @@ if __name__ == '__main__':
     dataloader_train = torch.utils.data.DataLoader(dataset_graph, batch_size=args.batch_size, num_workers=0,
                     sampler=sampler_graph_train, collate_fn=custom_collate_fn)
 
-    dataloader_val = torch.utils.data.DataLoader(dataset_graph, batch_size=args.batch_size, num_workers=0,
+    dataloader_val = torch.utils.data.DataLoader(dataset_graph, batch_size=1, num_workers=0,
                     sampler=sampler_graph_val, collate_fn=custom_collate_fn)
 
     if accelerator is None or accelerator.is_main_process:
@@ -310,7 +342,8 @@ if __name__ == '__main__':
     if args.model_type == "cl":
         trainer.train_cl(model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=epoch_start)
     elif args.model_type == "reg":
-        trainer.train_reg(model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=epoch_start)      
+        trainer.train_reg(model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=epoch_start,
+                          G=low_high_graph)      
     end = time.time()
 
     write_log(f"\nCompleted in {end - start} seconds.\nDONE!")

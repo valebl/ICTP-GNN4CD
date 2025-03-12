@@ -15,17 +15,12 @@ from torch_geometric.data import HeteroData
 import dataset
 from dataset import Dataset_Graph, Iterable_Graph
 
-from utils.utils import date_to_idxs, Tester, set_seed_everything
+from utils.tools import date_to_idxs, Tester, set_seed_everything
 from torch_geometric.utils import degree
 
-from utils.utils_plots import create_zones, plot_italy, extremes_cmap
-from utils.utils_plots import plot_maps, plot_single_map, plot_mean_time_series, plot_seasonal_maps
-from utils.utils import date_to_idxs, write_log, standardize_input
-
-import matplotlib
-import matplotlib.ticker as ticker
-import matplotlib.colors as colors
-import matplotlib.patches as patches
+from utils.plots import create_zones, extremes_cmap
+from utils.plots import plot_maps, plot_single_map, plot_mean_time_series, plot_seasonal_maps
+from utils.tools import date_to_idxs, write_log, standardize_input
         
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -48,6 +43,7 @@ parser.add_argument('--model', type=str, default=None)
 parser.add_argument('--dataset_name', type=str, default=None) 
 parser.add_argument('--mode', type=str, default="cl_reg") 
 parser.add_argument('--test_idxs_file', type=str, default="")
+parser.add_argument('--stats_mode', type=str, default="var") 
 
 #-- start and end training dates
 parser.add_argument('--test_year_start', type=int)
@@ -111,13 +107,13 @@ if __name__ == '__main__':
     # Load the input data statistics used during training
     # (At the moment we assume that the same statistics has been used for
     # the regressor and classifier in the RC model case)
-    with open(args.train_path_reg + "means_low.pkl", 'wb') as f:
+    with open(args.train_path_reg + "means_low.pkl", 'rb') as f:
         means_low = pickle.load(f)
-    with open(args.train_path_reg + "stds_low.pkl", 'wb') as f:
+    with open(args.train_path_reg + "stds_low.pkl", 'rb') as f:
         stds_low = pickle.load(f)
-    with open(args.train_path_reg + "means_high.pkl", 'wb') as f:
+    with open(args.train_path_reg + "means_high.pkl", 'rb') as f:
         means_high = pickle.load(f)
-    with open(args.train_path_reg + "stds_high.pkl", 'wb') as f:
+    with open(args.train_path_reg + "stds_high.pkl", 'rb') as f:
         stds_high = pickle.load(f)
 
     # Standardizing the input data
@@ -197,13 +193,13 @@ if __name__ == '__main__':
     start = time.time()
 
     if args.mode == "encoding":
-        pr, times = tester.test_encoding(model, dataloader, low_high_graph=low_high_graph, args=args, accelerator=accelerator)
+        pr, times = tester.test_encoding(model, dataloader, args=args, accelerator=accelerator)
     elif args.mode == "cl_reg":
-        pr_cl, pr_reg, times = tester.test_cl_reg(model_cl, model_reg, dataloader, low_high_graph=low_high_graph, args=args, accelerator=accelerator)
+        pr_cl, pr_reg, times = tester.test_cl_reg(model_cl, model_reg, dataloader, args=args, accelerator=accelerator)
     elif args.mode == "reg" or args.mode == "all":
-        pr_reg, times = tester.test(model, dataloader, low_high_graph=low_high_graph, args=args, accelerator=accelerator)
+        pr_reg, times = tester.test(model, dataloader, args=args, accelerator=accelerator)
     elif args.mode == "cl":
-        pr_cl, times = tester.test(model, dataloader, low_high_graph=low_high_graph, args=args, accelerator=accelerator)
+        pr_cl, times = tester.test(model, dataloader, args=args, accelerator=accelerator)
     else:
         raise Exception("mode should be: 'reg', 'cl', 'all', 'encoding' or 'cl_reg'")
 
@@ -516,7 +512,7 @@ if __name__ == '__main__':
             plt.savefig(f'{args.output_path}extreme.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
             plt.close()
             
-            write_log(f"Exreme event - GNN4CD max={np.nanmax(G.pr[:,start:end])}, GRIPHO max={np.nanmax(G.pr_target[:,start:end])}", args, accelerator, 'a')
+            write_log(f"\nExreme event - GNN4CD max={np.nanmax(G.pr[:,start:end])}, GRIPHO max={np.nanmax(G.pr_target[:,start:end])}", args, accelerator, 'a')
         sys.exit()
         # Seasonal results
 
@@ -984,14 +980,14 @@ if __name__ == '__main__':
         plt.savefig(f'{args.output_path}time_series.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
         plt.close()
 
-        # QQ plot (nice but slow!)
-        import statsmodels.api as sm
+        # # QQ plot (nice but slow!)
+        # import statsmodels.api as sm
         
-        x = sm.ProbPlot(G.pr.flatten())
-        y = sm.ProbPlot(G.pr_target.flatten())
+        # x = sm.ProbPlot(G.pr.flatten())
+        # y = sm.ProbPlot(G.pr_target.flatten())
 
-        plt.rcParams.update({'font.size': 30})
-        fig, ax = plt.subplots(figsize=(20,20))
-        sm.qqplot_2samples(x,y, xlabel="GNN4CD [mm/h]", ylabel="OBSERVATION [mm/h]", ax=ax, line="45")
-        plt.savefig(f'{args.output_path}qqplot.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
-        plt.close()
+        # plt.rcParams.update({'font.size': 30})
+        # fig, ax = plt.subplots(figsize=(20,20))
+        # sm.qqplot_2samples(x,y, xlabel="GNN4CD [mm/h]", ylabel="OBSERVATION [mm/h]", ax=ax, line="45")
+        # plt.savefig(f'{args.output_path}qqplot.png', dpi=dpi, bbox_inches='tight', pad_inches=0.0)
+        # plt.close()
