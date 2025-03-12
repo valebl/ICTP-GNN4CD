@@ -164,14 +164,20 @@ class Trainer(object):
 
                 train_mask = graph['high'].train_mask
                 y = graph['high'].y
-                w = graph['high'].w
+
 
                 # Gather from all processes for metrics
-                all_y_pred, all_y, all_w, all_train_mask = accelerator.gather((y_pred, y, w, train_mask))
+                all_y_pred, all_y, all_train_mask = accelerator.gather((y_pred, y, train_mask))
 
                 # Apply mask
-                y_pred, y, w = y_pred[train_mask], y[train_mask], w[train_mask]
-                all_y_pred, all_y, all_w = all_y_pred[all_train_mask], all_y[all_train_mask], all_w[all_train_mask]
+                y_pred, y = y_pred[train_mask], y[train_mask]
+                all_y_pred, all_y = all_y_pred[all_train_mask], all_y[all_train_mask]
+
+                if "quantized" in args.loss_fn:
+                    w = graph['high'].w
+                    all_w =accelerator.gather((w))
+                    w = w[train_mask]
+                    all_w = all_w[all_train_mask]
 
                 # print(f"{accelerator.device} - all_y_pred.shape: {all_y_pred.shape}, all_y.shape: {all_y.shape}, all_w.shape: {all_w.shape}")
                 
@@ -179,8 +185,8 @@ class Trainer(object):
                     loss, _, _ = loss_fn(y_pred, y, w)
                     all_loss, loss_term1, loss_term2 = loss_fn(all_y_pred, all_y, all_w)
                 else:
-                    loss = loss_fn(y_pred, y, w)
-                    all_loss = loss_fn(all_y_pred, all_y, all_w)
+                    loss = loss_fn(y_pred, y)
+                    all_loss = loss_fn(all_y_pred, all_y)
                 
                 accelerator.backward(loss)
                 #accelerator.clip_grad_norm_(model.parameters(), 5)
@@ -217,8 +223,10 @@ class Trainer(object):
 
             y_pred_val = []
             y_val = []
-            w_val = []
             train_mask_val = []
+
+            if "quantized" in args.loss_fn:
+                w_val = []
 
             with torch.no_grad():    
                 for graph in dataloader_val:
@@ -226,13 +234,15 @@ class Trainer(object):
                     train_mask_val.append(graph["high"].train_mask)
                     y_pred_val.append(model(graph))
                     y_val.append(graph['high'].y)
-                    w_val.append(graph['high'].w)
+                    if "quantized" in args.loss_fn:
+                        w_val.append(graph['high'].w)
 
                 # Create tensors
                 train_mask_val = torch.stack(train_mask_val, dim=-1).squeeze().swapaxes(0,1) # time, nodes
                 y_pred_val = torch.stack(y_pred_val, dim=-1).squeeze().swapaxes(0,1)
                 y_val = torch.stack(y_val, dim=-1).squeeze().swapaxes(0,1)
-                w_val = torch.stack(w_val, dim=-1).squeeze().swapaxes(0,1)
+                if "quantized" in args.loss_fn:
+                    w_val = torch.stack(w_val, dim=-1).squeeze().swapaxes(0,1)
 
                 # Log validation metrics for 1GPU
                 if args.loss_fn == "quantized_loss":
@@ -241,35 +251,42 @@ class Trainer(object):
                                                    w_val.flatten()[train_mask_val.flatten()])
                 else:
                     loss_val_1gpu = loss_fn(y_pred_val.flatten()[train_mask_val.flatten()],
-                                            y_val.flatten()[train_mask_val.flatten()],
-                                            w_val.flatten()[train_mask_val.flatten()])
+                                            y_val.flatten()[train_mask_val.flatten()])
 
                 # Gather from all processes for metrics
-                y_pred_val, y_val, w_val, train_mask_val = accelerator.gather((y_pred_val, y_val, w_val, train_mask_val))
+                y_pred_val, y_val, train_mask_val = accelerator.gather((y_pred_val, y_val, train_mask_val))
 
                 # nodes, time
-                y_pred_val, y_val, w_val, train_mask_val = y_pred_val.swapaxes(0,1), y_val.swapaxes(0,1), w_val.swapaxes(0,1), train_mask_val.swapaxes(0,1)
+                y_pred_val, y_val, train_mask_val = y_pred_val.swapaxes(0,1), y_val.swapaxes(0,1), train_mask_val.swapaxes(0,1)
+
+                if "quantized" in args.loss_fn:
+                    w_val = accelerator.gather((w_val))
+                    w_val = w_val.swapaxes(0,1)
 
                 # Create a plot to compare
                 if G is not None:
                     pos = np.stack((G['high'].lon.cpu().numpy(), G['high'].lat.cpu().numpy()),axis=-1)
-                    write_log(f"\n{y_pred_val.shape}, {y_val.shape}, {pos.shape}", args, accelerator, 'a')
                     zones_file='/leonardo_work/ICT24_ESP/SHARED/HiResPrecipNet/Italia.txt'
                     zones = create_zones(zones_file=zones_file)
-                    fig = plot_maps(pos, torch.expm1(y_pred_val).cpu().numpy(),
-                        torch.expm1(y_val).cpu().numpy(), pr_min=0, aggr=np.nanmean, pr_max=0.30,
+                    y_pred_plot = torch.expm1(y_pred_val)
+                    y_plot = torch.expm1(y_val)
+                    y_pred_plot[~train_mask_val] = torch.nan
+                    y_plot[~train_mask_val] = torch.nan
+                    fig = plot_maps(pos, y_pred_plot.cpu().numpy(), y_plot.cpu().numpy(), pr_min=0, aggr=np.nansum, pr_max=2750,
                         title="", legend_title="[mm/h]", cmap='jet', save_path=None, save_file_name=None, zones=zones,
-                        x_size=15, y_size=18, font_size_title=40, font_size=50, cbar_title_size=50, s=600,
+                        x_size=8, y_size=12, font_size_title=20, font_size=20, cbar_title_size=20, s=250,
                         ylim=[45.45, 46.8], xlim=[12.70, 14.05], cbar_y=0.95, subtitle_x=0.55)
 
                 # Apply mask
-                y_pred_val, y_val, w_val = y_pred_val[train_mask_val], y_val[train_mask_val], w_val[train_mask_val]
+                y_pred_val, y_val = y_pred_val[train_mask_val], y_val[train_mask_val]
                     
                 if args.loss_fn == "quantized_loss":
+                    w_val = w_val[train_mask_val]
                     loss_val, loss_term1_val, loss_term2_val = loss_fn(y_pred_val.flatten(), y_val.flatten(), w_val.flatten())
                 else:
-                    loss_val = loss_fn(y_pred_val.flatten(), y_val.flatten(), w_val.flatten())
+                    loss_val = loss_fn(y_pred_val.flatten(), y_val.flatten())
                 
+                fig.canvas.draw()
                 accelerator.log({"cumulative pr": [wandb.Image(fig)]}, step=step)
 
             if lr_scheduler is not None:
@@ -278,10 +295,10 @@ class Trainer(object):
             if args.loss_fn == "quantized_loss":
                 accelerator.log({'epoch':epoch, 'validation loss (1GPU)': loss_val_1gpu.item(), 'validation loss': loss_val.item(),
                                  'validation mse loss': loss_term1_val.item(),'validation quantized loss': loss_term2_val.item(),
-                                 'lr': np.mean(lr_scheduler.get_last_lr)}, step=step)
+                                 'lr': np.mean(lr_scheduler.get_last_lr())}, step=step)
             else:
                 accelerator.log({'epoch':epoch, 'validation loss (1GPU)': loss_val_1gpu.item(), 'validation loss': loss_val.item(),
-                                 'lr': np.mean(lr_scheduler.get_last_lr)}, step=step)
+                                 'lr': np.mean(lr_scheduler.get_last_lr())}, step=step)
         
 
 

@@ -184,8 +184,7 @@ def plot_maps(pos, pr_pred, pr, zones, save_path, save_file_name,
     else:
         _ = fig.suptitle(title, x=subtitle_x, y=subtitle_y)
     
-    plt.subplots_adjust(wspace=0, hspace=0)
-    plt.tight_layout()
+    plt.subplots_adjust(wspace=0, hspace=0, left=0.05, right=0.95)
 
     return fig
 

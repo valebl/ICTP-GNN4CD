@@ -208,7 +208,7 @@ if __name__ == '__main__':
         val_idxs = val_idxs[:-tail_val_idxs]
 
     # Compute the weights for the regressor
-    if args.model_type == "reg":
+    if args.model_type == "reg" and "quantized" in args.loss_fn:
         # This should be put in a function
         bins = np.arange(np.log1p(threshold), np.log1p(200), np.log1p(0.5))
         values_unif_log, edges_unif_log = np.histogram(target_train.numpy(), bins=bins, density=False)
@@ -217,11 +217,11 @@ if __name__ == '__main__':
 
         nbins = (np.nanmax(target_bins) + 1).astype(int)
         if nbins > len(values_unif_log):
-            write_log(f"bins min: {np.nanmin(target_bins)}, bins max: {np.nanmax(target_bins)}, nbins: {nbins}, len weights: {len(values_unif_log)}", args, accelerator, 'a')
+            write_log(f"bins min: {np.nanmin(target_bins).astype(int)}, bins max: {np.nanmax(target_bins).astype(int)}, nbins: {nbins}, len weights: {len(values_unif_log)}", args, accelerator, 'a')
             target_bins[target_bins == nbins -1] = nbins - 2
             nbins = nbins - 1
             write_log("\nUpdating last bin...", args, accelerator, 'a')
-        write_log(f"\nbins min: {np.nanmin(target_bins)}, bins max: {np.nanmax(target_bins)}, nbins: {nbins}", args, accelerator, 'a')
+        write_log(f"\nbins min: {np.nanmin(target_bins).astype(int)}, bins max: {np.nanmax(target_bins).astype(int)}, nbins: {nbins}", args, accelerator, 'a')
         target_bins = torch.tensor(target_bins)
         target_bins[mask_nan] = torch.nan
 
