@@ -36,14 +36,14 @@ class Dataset_Graph(Dataset):
             self.additional_feature_keys.append(key)
         self._check_temporal_consistency()
         #self._add_node_degree()
-        if "1h" in self.model_name:
-            self._get_features = self.__get_features_1h
+        if "1h" in self.model_name or "MS_MGN" in self.model_name:
+            self._get_features = self.__get_features_t
         elif "3h" in self.model_name:
-            self._get_features = self.__get_features_3h
+            self._get_features = self.__get_features_tminus25_to_t_every_3h
         elif "6h" in self.model_name:
-            self._get_features = self.__get_features_6h
+            self._get_features = self.__get_features_tminus25_to_t_every_6h
         else:
-            self._get_features = self.__get_features_24h
+            self._get_features = self.__get_features_tminus25_to_t_every_1h
 
     def __len__(self):
         return self.graph['low'].x.shape[1] # time dimension
@@ -59,24 +59,24 @@ class Dataset_Graph(Dataset):
         node_degree = (degree(snapshot['high','within','high'].edge_index[0], snapshot['high'].num_nodes) / 8).unsqueeze(-1)
         return node_degree
 
-    def __get_features_3h(self, time_index: int):
-        x_low = self.graph['low'].x[:,time_index-24:time_index+1:3,:]   # model HiResPrecipNet
-        x_low = x_low.flatten(start_dim=2, end_dim=-1)                  # model HiResPrecipNet
+    def __get_features_tminus25_to_t_every_3h(self, time_index: int):
+        x_low = self.graph['low'].x[:,time_index-24:time_index+1:3,:]   
+        x_low = x_low.flatten(start_dim=2, end_dim=-1)                  
         return x_low
 
-    def __get_features_6h(self, time_index: int):
-        x_low = self.graph['low'].x[:,time_index-24:time_index+1:6,:]   # model HiResPrecipNet
-        x_low = x_low.flatten(start_dim=2, end_dim=-1)                  # model HiResPrecipNet
+    def __get_features_tminus25_to_t_every_6h(self, time_index: int):
+        x_low = self.graph['low'].x[:,time_index-24:time_index+1:6,:]   
+        x_low = x_low.flatten(start_dim=2, end_dim=-1)                  
         return x_low
 
-    def __get_features_24h(self, time_index: int):
-        x_low = self.graph['low'].x[:,time_index-24:time_index+1,:]     # model TEST
-        x_low = x_low.flatten(start_dim=2, end_dim=-1)                  # model TEST
+    def __get_features_tminus25_to_t_every_1h(self, time_index: int):
+        x_low = self.graph['low'].x[:,time_index-24:time_index+1,:]     
+        x_low = x_low.flatten(start_dim=2, end_dim=-1)                  
         return x_low
 
-    def __get_features_1h(self, time_index: int):
-        x_low = self.graph['low'].x[:,time_index,:]                     # model HiResPrecipNet
-        x_low = x_low.flatten(start_dim=1, end_dim=-1)                  # model HiResPrecipNet
+    def __get_features_t(self, time_index: int):
+        x_low = self.graph['low'].x[:,time_index,:]                     
+        x_low = x_low.flatten(start_dim=1, end_dim=-1)                  
         return x_low
     
     def _get_target(self, time_index: int):
@@ -119,9 +119,15 @@ class Dataset_Graph(Dataset):
         snapshot.t = time_index
         
         #snapshot['low', 'within', 'low'].edge_index = self.graph['low', 'within', 'low'].edge_index
-        snapshot['high', 'within', 'high'].edge_index = self.graph['high', 'within', 'high'].edge_index
-        snapshot['low', 'to', 'high'].edge_index = self.graph['low', 'to', 'high'].edge_index
-        snapshot['low', 'to', 'high'].edge_attr = self.graph['low', 'to', 'high'].edge_attr
+        # snapshot['high', 'within', 'high'].edge_index = self.graph['high', 'within', 'high'].edge_index
+        # snapshot['low', 'to', 'high'].edge_index = self.graph['low', 'to', 'high'].edge_index
+        # snapshot['low', 'to', 'high'].edge_attr = self.graph['low', 'to', 'high'].edge_attr
+
+        for edge_key in self.graph.edge_types: 
+            if 'edge_index' in self.graph[edge_key]:  # Copy edge_index if it exists
+                snapshot[edge_key].edge_index = self.graph[edge_key].edge_index
+            if 'edge_attr' in self.graph[edge_key]:  # Copy edge_attr if it exists
+                snapshot[edge_key].edge_attr = self.graph[edge_key].edge_attr
 
         snapshot['low'].x = x_low
         snapshot['high'].x = self.graph['high'].x
