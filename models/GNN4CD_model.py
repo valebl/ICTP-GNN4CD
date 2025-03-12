@@ -33,7 +33,7 @@ class GNN4CD_model(nn.Module):
         )
 
         self.downscaler = geometric_nn.Sequential('x, edge_index', [
-            (GraphConv((encoding_dim, high_in), out_channels=low2high_out, dropout=0.2, heads=1, aggr='mean', add_self_loops=False, bias=True), 'x, edge_index -> x')
+            (GraphConv((encoding_dim, high_in), out_channels=low2high_out, aggr='mean'), 'x, edge_index -> x')
             ])
         
         self.processor = geometric_nn.Sequential('x, edge_index', [
@@ -66,8 +66,7 @@ class GNN4CD_model(nn.Module):
         encod_rnn, _ = self.rnn(data.x_dict['low']) # out, h
         encod_rnn = encod_rnn.flatten(start_dim=1)
         encod_rnn = self.dense(encod_rnn)
-        x_zland  = torch.concatenate((data['high'].z_std, data['high'].land_std),dim=-1)
-        encod_low2high  = self.downscaler((encod_rnn, x_zland), data["low", "to", "high"].edge_index)
+        encod_low2high  = self.downscaler((encod_rnn, data.x_dict['high']), data["low", "to", "high"].edge_index)
         encod_high = self.processor(encod_low2high , data.edge_index_dict[('high','within','high')])
         y_pred = self.predictor(encod_high)
         return y_pred

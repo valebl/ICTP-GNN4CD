@@ -28,7 +28,7 @@ class GNN4CD_model_NOREG(nn.Module):
         )
 
         self.downscaler = geometric_nn.Sequential('x, edge_index', [
-            (GraphConv((encoding_dim, high_in), out_channels=low2high_out, dropout=0.0, heads=1, aggr='mean', add_self_loops=False, bias=True), 'x, edge_index -> x')
+            (GraphConv((encoding_dim, high_in), out_channels=low2high_out, aggr='mean'), 'x, edge_index -> x')
             ])
         
         self.processor = geometric_nn.Sequential('x, edge_index', [
