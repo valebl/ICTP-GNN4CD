@@ -310,4 +310,5 @@ dependencies:
       - fonttools==4.56.0
       - kiwisolver==1.4.8
       - matplotlib==3.10.1
+      - torch-scatter==2.1.2+pt24cu118
 prefix: /leonardo/home/userexternal/vblasone/.conda/envs/GNN4CDenv
