@@ -271,7 +271,7 @@ class Trainer(object):
                 # Create a plot to compare
                 if G is not None:
                     pos = np.stack((G['high'].lon.cpu().numpy(), G['high'].lat.cpu().numpy()),axis=-1)
-                    zones_file='/leonardo_work/ICT24_ESP/SHARED/HiResPrecipNet/Italia.txt'
+                    zones_file='./utils/Italia.txt'
                     zones = create_zones(zones_file=zones_file)
                     y_pred_plot = torch.expm1(y_pred_val)
                     y_plot = torch.expm1(y_val)
