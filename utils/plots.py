@@ -350,3 +350,42 @@ def plot_mean_time_series(pos, pr, pr_pred, points, aggr=np.nanmean, title="Prec
 
     return rmse, rmse_perc
 
+def plot_pdf(pr_pred, y, fontsize=18):
+    plt.rcParams.update({'font.size': fontsize})
+
+    pr_pred = pr_pred.flatten()
+    y = y.flatten()
+    
+    hist_pr, bin_edges_pr = np.histogram(pr_pred, bins=np.arange(0,200,0.5).astype(np.float32), density=False)
+    hist_y, bin_edges_y = np.histogram(y, bins=np.arange(0,200,0.5).astype(np.float32), density=False)
+    
+    Ntot_pr = hist_pr.sum()
+    Ntot_y = hist_y.sum()
+    
+    bin_edges_pr_centre = (bin_edges_pr[:-1] + bin_edges_pr[1:]) / 2
+    bin_edges_y_centre = (bin_edges_y[:-1] + bin_edges_y[1:]) / 2
+        
+    p99_pred = np.nanpercentile(pr_pred, q=99)
+    p999_pred = np.nanpercentile(pr_pred, q=99.9)
+
+    p99 = np.nanpercentile(y, q=99)
+    p999 = np.nanpercentile(y, q=99.9)
+    
+    fig, ax = plt.subplots(figsize=(8,8))
+    ax.scatter(bin_edges_y_centre, hist_y/Ntot_y, color='darkturquoise', s=80, label="GRIPHO", alpha=0.4, zorder=2)
+    ax.scatter(bin_edges_pr_centre, hist_pr/Ntot_pr, color='indigo', s=80, label="GNN4CD R", alpha=0.4, zorder=2)
+    ax.plot([p99, p99], [0,50], '-', color='gold', label='GRIPHO - p99', zorder=1)
+    ax.plot([p999, p999], [0,50], '-r', label='GRIPHO - p99.9', zorder=1)
+    ax.plot([p99_pred, p99_pred], [0,50], ':', color='gold', label='GNN4CD R - p99', zorder=1)
+    ax.plot([p999_pred, p999_pred], [0,50], ':r', label='GNN4CD R - p99.9', zorder=1)
+    l = plt.legend(loc='upper right', facecolor='white', framealpha=1, fontsize=16)
+    ax.set_ylim([10**(-7),5])
+    ax.set_yscale('log')
+    ax.set_xscale('log')
+    ax.minorticks_on()
+    ax.grid(visible=True, which='both', axis='both', color='lightgrey', zorder=0)
+    ax.set_xlabel('precipitation [mm/h]', fontsize=fontsize)
+    ax.set_ylabel('frequency', fontsize=fontsize)
+
+    return fig
+

@@ -208,9 +208,11 @@ if __name__ == '__main__':
         val_idxs = val_idxs[:-tail_val_idxs]
 
     # Compute the weights for the regressor
-    if args.model_type == "reg" and "quantized" in args.loss_fn:
+    if args.model_type == "reg" or args.model_type == "all" and "quantized" in args.loss_fn:
         # This should be put in a function
         bins = np.arange(np.log1p(threshold), np.log1p(200), np.log1p(0.5))
+        if args.model_type == "all":
+            bins = np.insert(bins, 0, np.log1p(0))
         values_unif_log, edges_unif_log = np.histogram(target_train.numpy(), bins=bins, density=False)
         # Assign bins to targets
         target_bins = np.digitize(target_train.numpy(), edges_unif_log, right=False).astype(float) - 1
@@ -248,7 +250,7 @@ if __name__ == '__main__':
     write_log(f"\nHigh land_use: mean={low_high_graph['high'].x[:,1:].mean()}, std={low_high_graph['high'].x[:,1:].std()}",
               args, accelerator, 'a')
 
-    low_high_graph['low'].x = torch.flatten(low_high_graph['low'].x, start_dim=2, end_dim=-1)   # num_nodes, time, vars*levels   
+    low_high_graph['low'].x = torch.flatten(low_high_graph['low'].x, start_dim=2, end_dim=-1)   # num_nodes, time, vars*levels
 
     #-----------------------------------------------------
     #-------------- DATASET AND DATALOADER ---------------
@@ -268,7 +270,7 @@ if __name__ == '__main__':
         
     # Define the custom samplers
     sampler_graph_train = Iterable_Graph(dataset_graph=dataset_graph, shuffle=True, idxs_vector=train_idxs)
-    sampler_graph_val = Iterable_Graph(dataset_graph=dataset_graph, shuffle=True, idxs_vector=val_idxs)
+    sampler_graph_val = Iterable_Graph(dataset_graph=dataset_graph, shuffle=False, idxs_vector=val_idxs)
 
     write_log(f'\nTrainset size = {train_idxs.shape[0]}, validationset size = {val_idxs.shape[0]}.', args, accelerator, 'a')
 
@@ -276,7 +278,7 @@ if __name__ == '__main__':
     dataloader_train = torch.utils.data.DataLoader(dataset_graph, batch_size=args.batch_size, num_workers=0,
                     sampler=sampler_graph_train, collate_fn=custom_collate_fn)
 
-    dataloader_val = torch.utils.data.DataLoader(dataset_graph, batch_size=1, num_workers=0,
+    dataloader_val = torch.utils.data.DataLoader(dataset_graph, batch_size=40, num_workers=0,
                     sampler=sampler_graph_val, collate_fn=custom_collate_fn)
 
     if accelerator is None or accelerator.is_main_process:
@@ -341,11 +343,11 @@ if __name__ == '__main__':
     trainer = Trainer()
     if args.model_type == "cl":
         trainer.train_cl(model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=epoch_start)
-    elif args.model_type == "reg":
+    elif args.model_type == "reg" or args.model_type == "all":
         trainer.train_reg(model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=epoch_start,
                           G=low_high_graph)      
     end = time.time()
 
-    write_log(f"\nCompleted in {end - start} seconds.\nDONE!")
+    write_log(f"\nCompleted in {end - start} seconds.\nDONE!", args, accelerator, 'a')
     
 

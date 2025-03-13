@@ -62,7 +62,7 @@ class GNN4CD_model(nn.Module):
             nn.Linear(32, 1)
             )
 
-    def forward(self, data):   
+    def forward(self, data):
         encod_rnn, _ = self.rnn(data.x_dict['low']) # out, h
         encod_rnn = encod_rnn.flatten(start_dim=1)
         encod_rnn = self.dense(encod_rnn)
