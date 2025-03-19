@@ -251,14 +251,23 @@ high_graph = Data()
 edges_low2high, edges_low2high_attr = derive_edge_index_multiscale(lon_senders=lon_low, lat_senders=lat_low,
                                 lon_receivers=lon_high, lat_receivers=lat_high, k=9, undirected=False)
 
+edges_high2low, edges_high2low_attr = derive_edge_index_multiscale(lon_senders=lon_high, lat_senders=lat_high,
+                                lon_receivers=lon_low, lat_receivers=lat_low, k=9, undirected=False)
+
 edges_high, edges_high_attr = derive_edge_index_within(lon_radius=args.lon_grid_radius_high, lat_radius=args.lat_grid_radius_high,
                                 lon_senders=lon_high, lat_senders=lat_high, lon_receivers=lon_high, lat_receivers=lat_high)
 
 edges_low, edges_low_attr = derive_edge_index_within(lon_radius=args.lon_grid_radius_low, lat_radius=args.lat_grid_radius_low,
                                 lon_senders=lon_low, lat_senders=lat_low, lon_receivers=lon_low, lat_receivers=lat_low)
 
-edges_high2low, edges_high2low_attr = derive_edge_index_multiscale(lon_senders=lon_high, lat_senders=lat_high,
-                                lon_receivers=lon_low, lat_receivers=lat_low, k=9, undirected=False)
+# edges_low, edges_low_attr = derive_edge_index_within(lon_radius=0.251, lat_radius=0.251,
+#                                 lon_senders=lon_low, lat_senders=lat_low, lon_receivers=lon_low, lat_receivers=lat_low)
+
+# edges_high, edges_high_attr = derive_edge_index_multiscale(lon_senders=lon_high, lat_senders=lat_high,
+#                                 lon_receivers=lon_high, lat_receivers=lat_high, k=4, undirected=True)
+
+# edges_low, edges_low_attr = derive_edge_index_multiscale(lon_senders=lon_low, lat_senders=lat_low,
+#                                 lon_receivers=lon_low, lat_receivers=lat_low, k=4, undirected=False)
 
 
 #-- TO GRAPH ATTRIBUTES --#

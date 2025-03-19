@@ -5,7 +5,8 @@ import time
 import wandb
 from utils.metrics import AverageMeter, accuracy_binary_one, accuracy_binary_one_classes
 from utils.tools import write_log
-from utils.plots import create_zones, plot_maps, plot_pdf
+from utils.plots import create_zones, plot_maps, plot_pdf, plot_diurnal_cycles
+import matplotlib.pyplot as plt
 
 
 #-----------------------------------------------------
@@ -184,6 +185,9 @@ class Trainer(object):
                 if args.loss_fn == "quantized_loss":
                     loss, _, _ = loss_fn(y_pred, y, w)
                     all_loss, loss_term1, loss_term2 = loss_fn(all_y_pred, all_y, all_w)
+                elif args.loss_fn == "quantized_loss_scaled":
+                    loss = loss_fn(y_pred, y, w, epoch)
+                    all_loss = loss_fn(all_y_pred, all_y, all_y, epoch)
                 else:
                     loss = loss_fn(y_pred, y)
                     all_loss = loss_fn(all_y_pred, all_y)
@@ -214,7 +218,7 @@ class Trainer(object):
             write_log(f"\nEpoch {epoch+1} completed in {end - start:.4f} seconds." +
                       f"Loss - total: {all_loss_meter.sum:.4f} - average: {all_loss_meter.avg:.10f}. ", args, accelerator, 'a')
                     
-            accelerator.save_state(output_dir=args.output_path+f"checkpoint_{epoch}/")
+            accelerator.save_state(output_dir=args.output_path+f"checkpoint_{epoch}/", safe_serialization=False)
             torch.save({"epoch": epoch}, args.output_path+f"checkpoint_{epoch}/epoch")
 
             # VALIDATION
@@ -224,6 +228,7 @@ class Trainer(object):
             y_pred_val = []
             y_val = []
             train_mask_val = []
+            t = []
 
             if "quantized" in args.loss_fn:
                 w_val = []
@@ -235,6 +240,7 @@ class Trainer(object):
                     graph = graph.to_data_list()
                     [train_mask_val.append(graph_i["high"].train_mask) for graph_i in graph]
                     [y_val.append(graph_i['high'].y) for graph_i in graph]
+                    [t.append(graph_i.t) for graph_i in graph]
                     if "quantized" in args.loss_fn:
                         [w_val.append(graph_i['high'].w) for graph_i in graph]
 
@@ -244,6 +250,7 @@ class Trainer(object):
                 train_mask_val = torch.stack(train_mask_val, dim=-1).squeeze().swapaxes(0,1) # time, nodes
                 y_pred_val = torch.stack(y_pred_val, dim=-1).squeeze().swapaxes(0,1)
                 y_val = torch.stack(y_val, dim=-1).squeeze().swapaxes(0,1)
+                t = torch.stack(t, dim=-1).squeeze()
                 if "quantized" in args.loss_fn:
                     w_val = torch.stack(w_val, dim=-1).squeeze().swapaxes(0,1)
 
@@ -254,22 +261,33 @@ class Trainer(object):
                     loss_val_1gpu,  _, _ = loss_fn(y_pred_val.flatten()[train_mask_val.flatten()],
                                                    y_val.flatten()[train_mask_val.flatten()],
                                                    w_val.flatten()[train_mask_val.flatten()])
+                elif args.loss_fn == "quantized_loss_scaled":
+                    loss_val_1gpu = loss_fn(y_pred_val.flatten()[train_mask_val.flatten()],
+                                                   y_val.flatten()[train_mask_val.flatten()],
+                                                   w_val.flatten()[train_mask_val.flatten()],
+                                                   epoch) 
                 else:
                     loss_val_1gpu = loss_fn(y_pred_val.flatten()[train_mask_val.flatten()],
                                             y_val.flatten()[train_mask_val.flatten()])
 
                 # Gather from all processes for metrics
-                y_pred_val, y_val, train_mask_val = accelerator.gather((y_pred_val, y_val, train_mask_val))
+                y_pred_val, y_val, train_mask_val, t = accelerator.gather((y_pred_val, y_val, train_mask_val, t))
 
                 # nodes, time
-                y_pred_val, y_val, train_mask_val = y_pred_val.swapaxes(0,1), y_val.swapaxes(0,1), train_mask_val.swapaxes(0,1)
+                y_pred_val, y_val, train_mask_val = y_pred_val.swapaxes(0,1), y_val.swapaxes(0,1), train_mask_val.swapaxes(0,1) # nodes, time
+
 
                 if "quantized" in args.loss_fn:
                     w_val = accelerator.gather((w_val))
                     w_val = w_val.swapaxes(0,1)
 
-                # Create a plot to compare
+                ###### PLOTS ######
+                # Create a few plots to compare
                 if G is not None:
+                    if "fvg" in args.input_path:
+                        p = {"xsize": 8, "ysize": 12, "ylim": [45.45, 46.8], "xlim": [12.70, 14.05], "s": 250}
+                    else:
+                        p = {"xsize": 16, "ysize": 12, "ylim": [43.75, 47.05], "xlim": [6.70, 14.05], "s": 150}
                     pos = np.stack((G['high'].lon.cpu().numpy(), G['high'].lat.cpu().numpy()),axis=-1)
                     zones_file='./utils/Italia.txt'
                     zones = create_zones(zones_file=zones_file)
@@ -277,12 +295,19 @@ class Trainer(object):
                     y_plot = torch.expm1(y_val)
                     y_pred_plot[~train_mask_val] = torch.nan
                     y_plot[~train_mask_val] = torch.nan
-                    fig_avg = plot_maps(pos, y_pred_plot.cpu().numpy(), y_plot.cpu().numpy(), pr_min=0, aggr=np.nansum, pr_max=2750,
+                    # convert to cpu and numpy
+                    _, indices = torch.sort(t)
+                    indices = indices.cpu().numpy()
+                    y_pred_plot = y_pred_plot.cpu().numpy()[:,indices]
+                    y_plot = y_plot.cpu().numpy()[:,indices]
+                    with open(args.output_path+"indices.pkl", 'wb') as f:
+                        pickle.dump(indices, f)
+                    fig_avg = plot_maps(pos, y_pred_plot, y_plot, pr_min=0, aggr=np.nansum, pr_max=2750,
                         title="", legend_title="[mm/h]", cmap='jet', save_path=None, save_file_name=None, zones=zones,
-                        x_size=8, y_size=12, font_size_title=20, font_size=20, cbar_title_size=20, s=250,
-                        ylim=[45.45, 46.8], xlim=[12.70, 14.05], cbar_y=0.95, subtitle_x=0.55)
-                    fig_pdf = plot_pdf(y_pred_plot.cpu().numpy(), y_plot.cpu().numpy())
-                
+                        x_size=p["xsize"], y_size=p["ysize"], font_size_title=20, font_size=20, cbar_title_size=20, s=p["s"],
+                        ylim=p["ylim"], xlim=p["xlim"], cbar_y=0.95, subtitle_x=0.55)
+                    fig_pdf = plot_pdf(y_pred_plot, y_plot)
+                    fig_avg_dc = plot_diurnal_cycles(y_pred_plot, y_plot, ylim=[0.5,3.0])
 
                 # Apply mask
                 y_pred_val, y_val = y_pred_val[train_mask_val], y_val[train_mask_val]
@@ -290,12 +315,14 @@ class Trainer(object):
                 if args.loss_fn == "quantized_loss":
                     w_val = w_val[train_mask_val]
                     loss_val, loss_term1_val, loss_term2_val = loss_fn(y_pred_val.flatten(), y_val.flatten(), w_val.flatten())
+                elif args.loss_fn == "quantized_loss_scaled":
+                    w_val = w_val[train_mask_val]
+                    loss_val = loss_fn(y_pred_val.flatten(), y_val.flatten(), w_val.flatten(), epoch)
                 else:
                     loss_val = loss_fn(y_pred_val.flatten(), y_val.flatten())
                 
-                fig_avg.canvas.draw()
-                fig_pdf.canvas.draw()
-                accelerator.log({"cumulative pr": [wandb.Image(fig_avg)], "pdf": [wandb.Image(fig_pdf)]}, step=step)
+                accelerator.log({"cumulative pr": [wandb.Image(fig_avg)], "pdf": [wandb.Image(fig_pdf)], "intensity diurnal cycle": [wandb.Image(fig_avg_dc)]}, step=step)
+                plt.close()
 
             if lr_scheduler is not None:
                 lr_scheduler.step(loss_val.item())

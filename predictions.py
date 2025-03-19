@@ -8,15 +8,18 @@ import matplotlib.pyplot as plt
 import sys
 import importlib
 
+import safetensors
+
 from accelerate import Accelerator
 
 from torch_geometric.data import HeteroData
+from torch_geometric.utils import degree
 
 import dataset
 from dataset import Dataset_Graph, Iterable_Graph
 
-from utils.tools import date_to_idxs, Tester, set_seed_everything
-from torch_geometric.utils import degree
+from utils.tools import date_to_idxs, set_seed_everything
+from utils.train_test import Tester
 
 from utils.plots import create_zones, extremes_cmap
 from utils.plots import plot_maps, plot_single_map, plot_mean_time_series, plot_seasonal_maps
@@ -167,10 +170,20 @@ if __name__ == '__main__':
         device = 'cpu'
     else:
         if args.mode == "cl_reg":
-            checkpoint_cl = torch.load(args.train_path_cl+args.checkpoint_cl)
-            checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg)
+            try:
+                checkpoint_cl = torch.load(args.train_path_cl+args.checkpoint_cl+"/pytorch_model.bin")
+                checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg+"/pytorch_model.bin")
+            except:
+                checkpoint_cl = safetensors.torch.load_file(args.train_path_cl+args.checkpoint_cl+"/model.safetensors")
+                checkpoint_reg = safetensors.torch.load_file(args.train_path_reg+args.checkpoint_reg+"/model.safetensors")
+                torch.save(checkpoint_cl, args.train_path_cl+args.checkpoint_cl+"pytorch_model.bin")
+                torch.save(checkpoint_reg, args.train_path_reg+args.checkpoint_reg+"pytorch_model.bin")
         else:
-            checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg)
+            try:
+                checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg+"/pytorch_model.bin")
+            except:
+                checkpoint_reg = safetensors.torch.load_file(args.train_path_reg+args.checkpoint_reg+"/model.safetensors")
+                torch.save(checkpoint_reg, args.train_path_reg+args.checkpoint_reg+"pytorch_model.bin")
         device = accelerator.device
     
     write_log("\nLoading state dict.", args, accelerator, 'a')
@@ -513,7 +526,7 @@ if __name__ == '__main__':
             plt.close()
             
             write_log(f"\nExreme event - GNN4CD max={np.nanmax(G.pr[:,start:end])}, GRIPHO max={np.nanmax(G.pr_target[:,start:end])}", args, accelerator, 'a')
-        sys.exit()
+
         # Seasonal results
 
         if make_seasonal_plots: 

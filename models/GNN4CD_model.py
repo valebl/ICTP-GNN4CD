@@ -62,11 +62,19 @@ class GNN4CD_model(nn.Module):
             nn.Linear(32, 1)
             )
 
-    def forward(self, data):
+    def forward(self, data, inference=False):
         encod_rnn, _ = self.rnn(data.x_dict['low']) # out, h
         encod_rnn = encod_rnn.flatten(start_dim=1)
         encod_rnn = self.dense(encod_rnn)
         encod_low2high  = self.downscaler((encod_rnn, data.x_dict['high']), data["low", "to", "high"].edge_index)
         encod_high = self.processor(encod_low2high , data.edge_index_dict[('high','within','high')])
-        y_pred = self.predictor(encod_high)
-        return y_pred
+        x_high = self.predictor(encod_high)
+
+        if inference:
+            data['high'].x_high = x_high
+            data._slice_dict['high']['x_high'] = data._slice_dict['high']['y']
+            data._inc_dict['high']['x_high'] = data._inc_dict['high']['y']
+            data = data.to_data_list()
+            x_high = [data_i['high'].x_high for data_i in data]
+
+        return x_high

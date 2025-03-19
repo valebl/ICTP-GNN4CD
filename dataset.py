@@ -36,7 +36,7 @@ class Dataset_Graph(Dataset):
             self.additional_feature_keys.append(key)
         self._check_temporal_consistency()
         #self._add_node_degree()
-        if "1h" in self.model_name or "MS_MGN" in self.model_name:
+        if "1h" in self.model_name:# or "MS_MGN" in self.model_name:
             self._get_features = self.__get_features_t
         elif "3h" in self.model_name:
             self._get_features = self.__get_features_tminus25_to_t_every_3h
@@ -96,6 +96,9 @@ class Dataset_Graph(Dataset):
         }
         return additional_features
     
+    def set_t_offset(self, t_offset: int):
+        self.t_offset = t_offset
+    
     def __getitem__(self, time_index: int):
         x_low = self._get_features(time_index)
         y = self._get_target(time_index) if self.targets is not None else None
@@ -116,7 +119,7 @@ class Dataset_Graph(Dataset):
         snapshot.num_nodes = self.graph.num_nodes
         snapshot['high'].num_nodes = self.graph['high'].num_nodes
         snapshot['low'].num_nodes = self.graph['low'].num_nodes
-        snapshot.t = time_index
+        snapshot.t = time_index - self.t_offset
         
         #snapshot['low', 'within', 'low'].edge_index = self.graph['low', 'within', 'low'].edge_index
         # snapshot['high', 'within', 'high'].edge_index = self.graph['high', 'within', 'high'].edge_index
@@ -145,8 +148,9 @@ class Dataset_Graph(Dataset):
 
 class Iterable_Graph(object):
 
-    def __init__(self, dataset_graph, shuffle, idxs_vector=None):
+    def __init__(self, dataset_graph, shuffle, idxs_vector=None, t_offset=0):
         self.dataset_graph = dataset_graph
+        self.dataset_graph.set_t_offset(t_offset)
         self.shuffle = shuffle
         self.idxs_vector = idxs_vector
 

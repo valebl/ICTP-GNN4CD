@@ -60,7 +60,7 @@ def retain_valid_nodes(lon, lat, pr, e, mask_land=None, *argv):
     return lon, lat, pr, e, *v
 
 
-def derive_edge_index_within(lon_radius, lat_radius, lon_senders ,lat_senders, lon_receivers, lat_receivers, use_edge_attr=True):
+def derive_edge_index_within(lon_radius, lat_radius, lon_senders, lat_senders, lon_receivers, lat_receivers, use_edge_attr=True, radius=0.251):
     r'''
     Derives edge_indexes within two sets of nodes based on specified lon, lat distances
     Args:
@@ -79,9 +79,12 @@ def derive_edge_index_within(lon_radius, lat_radius, lon_senders ,lat_senders, l
 
     for ii, xi in enumerate(lonlat_senders):
         
-        bool_lon = np.abs(lon_receivers - xi[0]) < lon_radius
-        bool_lat = np.abs(lat_receivers - xi[1]) < lat_radius
-        bool_both = np.logical_and(bool_lon, bool_lat)
+        if lon_radius is not None:
+            bool_both = ((lon_receivers - xi[0]) ** 2 + (lat_receivers - xi[1]) ** 2) ** 0.5 < radius
+        else:
+            bool_lon = np.abs(lon_receivers - xi[0]) < lon_radius
+            bool_lat = np.abs(lat_receivers - xi[1]) < lat_radius
+            bool_both = np.logical_and(bool_lon, bool_lat)
 
         jj_list = np.nonzero(bool_both)[0] # to get indices
         xj_list = lonlat_receivers[bool_both]
@@ -121,15 +124,18 @@ def derive_edge_index_multiscale(lon_senders ,lat_senders, lon_receivers, lat_re
     lonlat_receivers = np.column_stack((lon_receivers,lat_receivers))
 
     dist = cdist(lonlat_receivers, lonlat_senders, metric='euclidean')
-    neighbours = np.argsort(dist, axis=-1)[:, :k]
+    neighbours = np.argsort(dist, axis=-1)[:, 1:k+1]
     # _ , neighbours = dist.topk(k, largest=False, dim=-1)
 
     for n_n2 in range(lonlat_receivers.shape[0]):
         for n_n1 in neighbours[n_n2,:]:
-            edge_index.append(np.array([n_n1, n_n2]))
+            if n_n1 == n_n2:
+                continue
+            if [n_n1, n_n2] not in edge_index:
+                edge_index.append([n_n1, n_n2])
             # edge_attr.append(dist[n_n2, n_n1])
-            if undirected:
-                edge_index.append(np.array([n_n2, n_n1]))
+            if undirected and [n_n2, n_n1] not in edge_index:
+                edge_index.append([n_n2, n_n1])
 
     edge_index = np.array(edge_index).T
     

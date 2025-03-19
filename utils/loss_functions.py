@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import numpy as np
 
 #-----------------------------------------------------
 #--------------- CUSTOM LOSS FUNCTIONS ---------------
@@ -42,18 +43,28 @@ class quantized_loss_scaled():
     bins:   array containing the bin number for each of the nodes
             shape = (n_nodes)
     '''
-    def __init__(self, gamma=0.5, scale=0.001):
-        self.gamma = gamma
+    def __init__(self, gamma_min=0.0, gamma_max=0.5, epoch_max=50, scale=1):
+        self.gamma = gamma_min
+        self.gamma_min = gamma_min
+        self.gamma_max = gamma_max
+        self.epoch_max = epoch_max
         self.scale = scale
         print(f"gamma: {self.gamma}, scale: {self.scale}")
 
-    def __call__(self, prediction_batch, target_batch, bins):
+    def __call__(self, prediction_batch, target_batch, bins, epoch):
+        self._update_gamma(epoch)
         loss_quantized = 0
+        w = 0
         bins = bins.int()
         for b in torch.unique(bins):
             mask_b = (bins == b)
-            loss_quantized += torch.sum((prediction_batch[mask_b] - target_batch[mask_b])**2) * (1/torch.sum(mask_b))**self.gamma
-        return self.scale * loss_quantized
+            w_b = (1/torch.sum(mask_b))**self.gamma
+            w += w_b
+            loss_quantized += torch.sum((prediction_batch[mask_b] - target_batch[mask_b])**2) * w_b
+        return self.scale * loss_quantized * 1/w
+    
+    def _update_gamma(self, epoch):
+        self.gamma = self.gamma_min + 1/2 * (self.gamma_max - self.gamma_min) * (1 + torch.cos(torch.tensor(epoch/self.epoch_max) * np.pi))
     
 
 class quantized_loss_mod():

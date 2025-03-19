@@ -379,7 +379,7 @@ def plot_pdf(pr_pred, y, fontsize=18):
     ax.plot([p99_pred, p99_pred], [0,50], ':', color='gold', label='GNN4CD R - p99', zorder=1)
     ax.plot([p999_pred, p999_pred], [0,50], ':r', label='GNN4CD R - p99.9', zorder=1)
     l = plt.legend(loc='upper right', facecolor='white', framealpha=1, fontsize=16)
-    ax.set_ylim([10**(-7),5])
+    ax.set_ylim([10**(-8),5])
     ax.set_yscale('log')
     ax.set_xscale('log')
     ax.minorticks_on()
@@ -389,3 +389,59 @@ def plot_pdf(pr_pred, y, fontsize=18):
 
     return fig
 
+def plot_diurnal_cycles(y_pred, y, aggr=np.nanmean, fontsize=25, figsize=(16,18),
+                        xlim=[0,24], ylim=[0.5, 3.0]):
+
+    plt.rcParams.update({'font.size': fontsize})
+    fig, ax = plt.subplots(nrows=2, ncols=2, figsize=figsize)
+
+    # create seasons
+    jf_start = 0 # january-february
+    if y_pred.shape[1] == 8760:
+        jf_end = (31 + 28) * 24
+    elif y_pred.shape[1] == 8784:
+        jf_end = (31 + 29) * 24
+    else:
+        print("\nInvalid number of hours in a year: {y_pred.shape[1]}")
+        return fig
+
+    mam_start = jf_end
+    mam_end = mam_start + (31 + 30 + 31) * 24
+    jja_start = mam_end
+    jja_end = jja_start + (31 + 31 + 30) * 24
+    son_start = jja_end
+    son_end = son_start + (30 + 31 + 30) * 24
+    d_start = son_end
+    d_end = son_end + 31 * 24 # december
+
+    idxs_seasons = [np.concatenate((np.arange(d_start, d_end), np.arange(jf_start, jf_end)), axis=0),
+                    np.arange(mam_start, mam_end),
+                    np.arange(jja_start, jja_end),
+                    np.arange(son_start, son_end)]
+    
+    text_list = ['DJF', 'MAM', 'JJA', 'SON']
+
+    for s in range(4):
+        idxs = idxs_seasons[s]
+        y_pred_s = y_pred[:,idxs]
+        y_s = y[:,idxs]
+        y_pred_daily_cycles = np.zeros(24)
+        y_daily_cycles = np.zeros(24)
+        axi = ax[s//2, s%2]
+        for i in range(0,24):
+            y_pred_daily_cycles[i] = aggr(y_pred_s[:,i::24][y_pred_s[:,i::24]>0])
+            y_daily_cycles[i] = aggr(y_s[:,i::24][y_s[:,i::24]>0])
+        n = 25
+        axi.plot(range(1,n), y_pred_daily_cycles, label='GNN4CD', linestyle='-', linewidth=2, color='red')
+        axi.plot(range(1,n), y_daily_cycles, label='GRIPHO', linestyle=':', linewidth=2, color='black')
+        axi.set_ylabel("pr [mm/h]", fontsize=40)
+        axi.set_xlabel("time [h]", fontsize=40)
+        axi.set_xlim(xlim)
+        axi.set_ylim(ylim)
+        axi.set_xticks(ticks=range(0,n,6))
+        axi.set_title(text_list[s], fontsize=45)
+        axi.grid(which='major', color='lightgrey')
+    plt.legend(loc='upper left', prop={'size': 30})
+    plt.tight_layout()
+
+    return fig

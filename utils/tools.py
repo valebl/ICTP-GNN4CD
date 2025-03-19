@@ -295,7 +295,8 @@ def standardize_input(x_low, x_high, means_low, stds_low, means_high, stds_high,
 
     write_log(f'\nStandardizing the low-res input data.', args, accelerator, 'a')
 
-    x_low_standard = torch.zeros((x_low.size()), dtype=torch.float32)
+    # Preallocate memory efficiently
+    x_low_standard = torch.empty_like(x_low, dtype=torch.float32)
 
     # Standardize the data
     if args.stats_mode == "var":

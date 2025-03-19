@@ -219,7 +219,7 @@ if __name__ == '__main__':
 
         nbins = (np.nanmax(target_bins) + 1).astype(int)
         if nbins > len(values_unif_log):
-            write_log(f"bins min: {np.nanmin(target_bins).astype(int)}, bins max: {np.nanmax(target_bins).astype(int)}, nbins: {nbins}, len weights: {len(values_unif_log)}", args, accelerator, 'a')
+            write_log(f"\nBins min: {np.nanmin(target_bins).astype(int)}, bins max: {np.nanmax(target_bins).astype(int)}, nbins: {nbins}, len weights: {len(values_unif_log)}", args, accelerator, 'a')
             target_bins[target_bins == nbins -1] = nbins - 2
             nbins = nbins - 1
             write_log("\nUpdating last bin...", args, accelerator, 'a')
@@ -270,7 +270,7 @@ if __name__ == '__main__':
         
     # Define the custom samplers
     sampler_graph_train = Iterable_Graph(dataset_graph=dataset_graph, shuffle=True, idxs_vector=train_idxs)
-    sampler_graph_val = Iterable_Graph(dataset_graph=dataset_graph, shuffle=False, idxs_vector=val_idxs)
+    sampler_graph_val = Iterable_Graph(dataset_graph=dataset_graph, shuffle=False, idxs_vector=val_idxs, t_offset=val_idxs.min())
 
     write_log(f'\nTrainset size = {train_idxs.shape[0]}, validationset size = {val_idxs.shape[0]}.', args, accelerator, 'a')
 
@@ -278,7 +278,7 @@ if __name__ == '__main__':
     dataloader_train = torch.utils.data.DataLoader(dataset_graph, batch_size=args.batch_size, num_workers=0,
                     sampler=sampler_graph_train, collate_fn=custom_collate_fn)
 
-    dataloader_val = torch.utils.data.DataLoader(dataset_graph, batch_size=40, num_workers=0,
+    dataloader_val = torch.utils.data.DataLoader(dataset_graph, batch_size=10, num_workers=0,
                     sampler=sampler_graph_val, collate_fn=custom_collate_fn)
 
     if accelerator is None or accelerator.is_main_process:
