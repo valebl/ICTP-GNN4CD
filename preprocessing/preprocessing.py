@@ -41,15 +41,8 @@ parser.add_argument('--lat_grid_radius_low', type=float, default=0.36)
 
 #-- other
 parser.add_argument('--suffix_phase_2', type=str, default='')
-parser.add_argument('--load_stats', action='store_true', default=True)
-parser.add_argument('--no-load_stats', dest='load_stats', action='store_false')
-parser.add_argument('--stats_path', type=str)
-parser.add_argument('--stats_file_high', type=str)
 parser.add_argument('--mask_path', type=str)
 parser.add_argument('--mask_file', type=str)
-parser.add_argument('--means_file_low', type=str, default='means.pkl')
-parser.add_argument('--stds_file_low', type=str, default='stds.pkl')
-parser.add_argument('--stats_mode', type=str)
 parser.add_argument('--predictors_type', type=str)
 
 #-- era5
