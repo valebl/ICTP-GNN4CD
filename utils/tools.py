@@ -11,15 +11,19 @@ from calendar import monthrange
 
 import numpy as np
 
+
 ######################################################
 #------------------ GENERAL UTILITIES ---------------
 ######################################################
 
 
-def write_log(s, args, accelerator=None, mode='a'):
+def write_log(s, args=None, accelerator=None, mode='a'):
     if accelerator is None or accelerator.is_main_process:
-        with open(args.output_path + args.log_file, mode) as f:
-            f.write(s)
+        if args is not None:
+            with open(args.output_path + args.log_file, mode) as f:
+                f.write(s)
+        else:
+            print(s)
 
 
 def use_gpu_if_possible():
@@ -275,8 +279,12 @@ def compute_input_statistics(x_low, x_high, args, accelerator=None):
     write_log(f'\nComputing statistics for the high-res input data.', args, accelerator, 'a')
 
     # High-res data
-    means_high = torch.tensor([x_high[:,0].mean(), x_high[:,1:].mean()])
-    stds_high = torch.tensor([x_high[:,0].std(), x_high[:,1:].std()])
+    if x_high.shape[1] > 1:
+        means_high = torch.tensor([x_high[:,0].mean(), x_high[:,1:].mean()])
+        stds_high = torch.tensor([x_high[:,0].std(), x_high[:,1:].std()])
+    else:
+        means_high = torch.tensor(x_high.mean())
+        stds_high = torch.tensor(x_high.std())        
 
     # Write the standardized data to disk
     with open(args.output_path + "means_low.pkl", 'wb') as f:
@@ -291,18 +299,23 @@ def compute_input_statistics(x_low, x_high, args, accelerator=None):
     return means_low, stds_low, means_high, stds_high
 
 
-def standardize_input(x_low, x_high, means_low, stds_low, means_high, stds_high, args, accelerator=None):
+def standardize_input(x_low, x_high, means_low, stds_low, means_high, stds_high, args=None, accelerator=None, stats_mode_default="var"):
 
     write_log(f'\nStandardizing the low-res input data.', args, accelerator, 'a')
 
     # Preallocate memory efficiently
     x_low_standard = torch.empty_like(x_low, dtype=torch.float32)
 
+    if args is not None:
+        stats_mode = args.stats_mode
+    else:
+        stats_mode = stats_mode_default
+
     # Standardize the data
-    if args.stats_mode == "var":
+    if stats_mode == "var":
         for var in range(5):
             x_low_standard[:,:,var,:] = (x_low[:,:,var,:]-means_low[var])/stds_low[var]  # num_nodes, time, vars, levels
-    elif args.stats_mode == "field":
+    elif stats_mode == "field":
         for var in range(5):
             for lev in range(5):
                 x_low_standard[:,:,var,lev] = (x_low[:,:,var,lev]-means_low[var, lev])/stds_low[var, lev]  # num_nodes, time, vars, levels
@@ -314,8 +327,11 @@ def standardize_input(x_low, x_high, means_low, stds_low, means_high, stds_high,
     # Standardize the data
     x_high_standard = torch.zeros((x_high.size()), dtype=torch.float32)
     
-    x_high_standard[:,0] = (x_high[:,0] - means_high[0]) / stds_high[0]
-    x_high_standard[:,1:] = (x_high[:,1:] - means_high[1]) / stds_high[1]
+    if x_high.shape[1] > 1:
+        x_high_standard[:,0] = (x_high[:,0] - means_high[0]) / stds_high[0]
+        x_high_standard[:,1:] = (x_high[:,1:] - means_high[1]) / stds_high[1]
+    else:
+        x_high_standard = x_high - means_high / stds_high
 
     return x_low_standard, x_high_standard
     

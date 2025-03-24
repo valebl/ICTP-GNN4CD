@@ -1,6 +1,13 @@
 import numpy as np
 from scipy.spatial import transform
 from scipy.spatial.distance import cdist
+from torch_geometric.data.datapipes import functional_transform
+from torch_geometric.transforms import BaseTransform
+from torch_geometric.data import Data, HeteroData
+from typing import Union
+from collections import defaultdict
+import copy
+import torch
 
 
 def cut_window(lon_min, lon_max, lat_min, lat_max, lon, lat, pr, z, mask_land, *argv):
@@ -60,7 +67,7 @@ def retain_valid_nodes(lon, lat, pr, e, mask_land=None, *argv):
     return lon, lat, pr, e, *v
 
 
-def derive_edge_index_within(lon_radius, lat_radius, lon_senders, lat_senders, lon_receivers, lat_receivers, use_edge_attr=True, radius=0.251):
+def derive_edge_index_within(lon_radius, lat_radius, lon_senders, lat_senders, lon_receivers, lat_receivers, use_edge_attr=True, radius=None):
     r'''
     Derives edge_indexes within two sets of nodes based on specified lon, lat distances
     Args:
@@ -79,7 +86,7 @@ def derive_edge_index_within(lon_radius, lat_radius, lon_senders, lat_senders, l
 
     for ii, xi in enumerate(lonlat_senders):
         
-        if lon_radius is not None:
+        if radius is not None:
             bool_both = ((lon_receivers - xi[0]) ** 2 + (lat_receivers - xi[1]) ** 2) ** 0.5 < radius
         else:
             bool_lon = np.abs(lon_receivers - xi[0]) < lon_radius
@@ -344,3 +351,66 @@ def get_rotation_matrices_to_local_coordinates(reference_phi, reference_theta,
 
 def rotate_with_matrices(rotation_matrices, positions):
     return np.einsum("bji,bi->bj", rotation_matrices, positions)
+
+
+
+class RemoveNanNodes(BaseTransform):
+    r"""Removes nodes with NaN values in `y` from the graph
+    (functional name: :obj:`remove_nan_nodes`)."""
+    def forward(self, data: Union[Data, HeteroData]) -> Union[Data, HeteroData]:
+        # Identify nodes with NaN values
+        nan_mask_dict = {
+            node_store._key: torch.isnan(node_store.y)
+            for node_store in data.node_stores if 'y' in node_store
+        }
+        
+        # Gather all valid nodes (i.e., those without NaNs)
+        valid_n_ids_dict = {
+            k: torch.where(~v)[0] for k, v in nan_mask_dict.items()
+        }
+        
+        n_map_dict = {}
+        for node_store in data.node_stores:
+            has_y = True
+            if 'y' not in node_store:
+                node_store['y'] = torch.zeros(node_store.num_nodes, dtype=torch.float32, device=node_store.x.device)
+                has_y = False
+            if node_store._key not in valid_n_ids_dict:
+                valid_n_ids_dict[node_store._key] = torch.arange(
+                    node_store.y.size(0), device=node_store.y.device
+                )
+        
+            idx = valid_n_ids_dict[node_store._key]
+            mapping = torch.full((node_store.y.size(0),), -1, dtype=torch.long, device=node_store.y.device)
+            mapping[idx] = torch.arange(idx.numel(), device=node_store.y.device)
+            n_map_dict[node_store._key] = mapping
+            if not has_y:
+                del node_store['y']
+        
+        # Update edge indices
+        for edge_store in data.edge_stores:
+            if 'edge_index' not in edge_store:
+                continue
+
+            if edge_store._key is None:
+                src = dst = None
+            else:
+                src, _, dst = edge_store._key
+
+            row, col = edge_store.edge_index
+            valid_mask = (n_map_dict[src][row] != -1) & (n_map_dict[dst][col] != -1)
+            edge_store.edge_index = torch.stack([
+                n_map_dict[src][row[valid_mask]],
+                n_map_dict[dst][col[valid_mask]]
+            ], dim=0)
+        
+        # Update node features
+        old_data = copy.copy(data)
+        for out, node_store in zip(data.node_stores, old_data.node_stores):
+            for key, value in node_store.items():
+                if key == 'num_nodes':
+                    out.num_nodes = valid_n_ids_dict[node_store._key].numel()
+                elif node_store.is_node_attr(key):
+                    out[key] = value[valid_n_ids_dict[node_store._key]]
+        
+        return data
