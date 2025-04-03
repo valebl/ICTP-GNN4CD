@@ -153,8 +153,14 @@ if __name__ == '__main__':
     # - mask_not_nan, i.e. where the target is not nan
     # - mask_geq_threshold, i.e. where the target is larger than the preferred threshold (now 0.1mm)
     threshold = 0.1
+
     mask_nan = torch.isnan(target_train)
-    mask_less_threshold = target_train < threshold
+    mask_threshold = target_train < threshold #mm
+
+    # set to 0.0 everything below sensitivity threshold
+    target_train[mask_threshold] = 0.0
+    # round to comply with instrument sensitivity
+    target_train = torch.round(target_train, decimals=1)
 
     if args.model_type == "cl":
         #-- CLASSIFIER --#        
@@ -162,7 +168,7 @@ if __name__ == '__main__':
     elif args.model_type == "reg":
         #-- REGRESSOR ON pr >=threshold --#    
         target_train = torch.log1p(target_train)
-        target_train[mask_less_threshold] = torch.nan
+        target_train[target_train < threshold] = torch.nan
     elif args.model_type =="all":
         #-- REGRESSOR ON ALL --#    
         target_train = torch.log1p(target_train)
