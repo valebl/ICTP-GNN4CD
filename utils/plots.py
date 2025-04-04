@@ -94,9 +94,8 @@ def extremes_cmap():
     return cmap
 
 
-def plot_maps(pos, pr_pred, pr, zones, save_path, save_file_name, 
-        x_size, y_size, font_size_title=None, font_size=None, pr_min=0, pr_max=2500, aggr=np.nanmean, title="", 
-        cmap='jet', legend_title="pr", xlim=None, ylim=None, cbar_y=1, cmap_type=None,
+def plot_maps(pos, pr_pred, pr, zones, x_size, y_size, font_size_title=None, font_size=None, pr_min=0, pr_max=2500, aggr=np.nanmean, title="", 
+        cmap='jet', legend_title="pr", xlim=None, ylim=None, cbar_y=1, cmap_type=None, pad_cbar_title=80,
         cbar_title_size=None, cbar_pad=0, subtitle_y=1, subtitle_x=0.45, s=150, show_ticks=True, num=16, bounds=None):
 
     if font_size is not None:
@@ -176,9 +175,9 @@ def plot_maps(pos, pr_pred, pr, zones, save_path, save_file_name,
     cbar_ax = fig.add_axes([0.95, 0.15, 0.02, 0.7]) 
     cbar = fig.colorbar(im, cax=cbar_ax, aspect=25, pad=cbar_pad)
     if cbar_title_size is not None:
-        cbar.ax.set_title(legend_title, rotation=0, fontsize=cbar_title_size, pad=80)
+        cbar.ax.set_title(legend_title, rotation=0, fontsize=cbar_title_size, pad=pad_cbar_title)
     else:
-        cbar.ax.set_title(legend_title, rotation=0, pad=80)
+        cbar.ax.set_title(legend_title, rotation=0, pad=pad_cbar_title)
     if font_size_title is not None:
         _ = fig.suptitle(title, fontsize=font_size_title, x=subtitle_x, y=subtitle_y)
     else:
@@ -189,8 +188,7 @@ def plot_maps(pos, pr_pred, pr, zones, save_path, save_file_name,
     return fig
 
 
-def plot_single_map(pos, pr, zones, save_path, save_file_name, 
-        x_size, y_size, font_size_title, font_size=80, pr_min=0, pr_max=2500, aggr=np.nanmean, title="", 
+def plot_single_map(pos, pr, zones, x_size, y_size, font_size_title, font_size=80, pr_min=0, pr_max=2500, aggr=np.nanmean, title="", 
         cmap='jet', legend_title="pr", xlim=None, ylim=None, cbar_y=1, cmap_type=None,
         cbar_title_size=80, cbar_pad=0, subtitle_y=0.98, subtitle_x=0.45, s=150, show_ticks=True, num=16, bounds=None):
 
