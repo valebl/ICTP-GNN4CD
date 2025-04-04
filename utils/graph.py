@@ -10,7 +10,7 @@ import copy
 import torch
 
 
-def cut_window(lon_min, lon_max, lat_min, lat_max, lon, lat, pr, z, mask_land, *argv):
+def cut_window(lon_min, lon_max, lat_min, lat_max, lon, lat, *argv):
     r'''
     Derives a new version of the longitude, latitude and precipitation
     tensors, by only retaining the values inside the specified lon-lat rectangle
@@ -23,19 +23,19 @@ def cut_window(lon_min, lon_max, lat_min, lat_max, lon, lat, pr, z, mask_land, *
 
     bool_lon = np.logical_and(lon >= lon_min, lon <= lon_max)
     bool_lat = np.logical_and(lat >= lat_min, lat <= lat_max)
-    bool_both = np.logical_and(bool_lon, bool_lat)
-    lon_sel = lon[bool_both]
-    lat_sel = lat[bool_both]
-    z_sel = z[bool_both]
-    pr_sel = pr[:,bool_both]
+    bool_both = np.logical_and(bool_lon, bool_lat).flatten()
+    lon_sel = lon.flatten()[bool_both]
+    lat_sel = lat.flatten()[bool_both]
     v = []
     for arg in argv:
-        v.append(arg[bool_both])
-    if mask_land is None:
-        return lon_sel, lat_sel, pr_sel, z_sel, None, *v
-    else:
-        mask_land = mask_land[bool_both]
-        return lon_sel, lat_sel, pr_sel, z_sel, mask_land, *v
+        if arg.ndim > 2:
+            arg = arg.reshape(arg.shape[0], -1)
+            v.append(arg[:, bool_both])
+        else:
+            arg = arg.flatten()
+            v.append(arg[bool_both])
+    print(lon_sel.shape, lat_sel.shape, v[-1].shape)
+    return lon_sel, lat_sel, *v
 
 
 def retain_valid_nodes(lon, lat, pr, e, mask_land=None, *argv):

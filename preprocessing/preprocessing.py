@@ -11,7 +11,7 @@ from torch_geometric.utils import degree
 from torch_geometric.data import Data, HeteroData
 import torch_geometric.transforms as T
 transform = T.AddLaplacianEigenvectorPE(k=2)
-sys.path.append("/leonardo_work/ICT24_ESP/vblasone/ICTP-GNN4CD")
+# sys.path.append("/leonardo_work/ICT25_ESP/vblasone/ICTP-GNN4CD")
 
 from utils.tools import write_log
 from utils.graph import cut_window, retain_valid_nodes, derive_edge_index_within, derive_edge_index_multiscale
@@ -49,6 +49,7 @@ parser.add_argument('--predictors_type', type=str)
 parser.add_argument('--input_files_prefix_low', type=str, help='prefix for the input files (convenction: {prefix}{parameter}.nc)', default='sliced_')
 parser.add_argument('--n_levels_low', type=int, help='number of pressure levels considered', default=5)
 
+target_type = "temperature"
 
 ######################################################
 ##------------- PRELIMINARY OPERATIONS -------------##
@@ -152,26 +153,35 @@ write_log(f"\n\nStarting the preprocessing of high resolution data.", args, acce
 # CUT LON, LAT, PR, Z TO WINDOW #
 #-------------------------------#
 
-gripho = xr.open_dataset(args.input_path_gripho + args.gripho_file)
+dataset_high = xr.open_dataset(args.input_path_gripho + args.gripho_file)
 topo = xr.open_dataset(args.input_path_topo + args.topo_file)
 
 #lon = torch.tensor(gripho.longitude.to_numpy())
 #lat = torch.tensor(gripho.latitude.to_numpy())
 #lat, lon = torch.meshgrid(lat, lon)
-lon = gripho.lon.to_numpy()
-lat = gripho.lat.to_numpy()
-pr = gripho.pr.to_numpy()
+lon = dataset_high.lon.to_numpy()
+lat = dataset_high.lat.to_numpy()
+lon, lat = np.meshgrid(lon, lat)
+if target_type == "precipitation":
+    target_high = dataset_high.pr.to_numpy()
+elif target_type == "temperature":
+    target_high = dataset_high.t2m.to_numpy()
 
 if args.predictors_type == "regcm":
     z = topo.orog.to_numpy()
     mask_land = xr.open_dataset(args.mask_path + args.mask_file)
-    mask_land = mask_land.pr.to_numpy().squeeze()    
+    mask_land = mask_land.pr.to_numpy().squeeze()
+    lon_z = topo.lon.to_numpy()
+    lat_z = topo.lat.to_numpy()
 else:
     z = topo.z.to_numpy()
     mask_land = None
+    lon_z = topo.lon.to_numpy()
+    lat_z = topo.lat.to_numpy()
+lon_z, lat_z = np.meshgrid(lon_z, lat_z)
     
 if args.predictors_type == "regcm":
-    pr *= 3600
+    target_high *= 3600
     write_log(f'\nMultiplying pr by 3600 to get mm.', args, accelerator=None, mode='a')
 
 # Reading LAND USE data
@@ -183,31 +193,59 @@ urban_MD = landU.urban_MD.to_numpy()
 urban_HD = landU.urban_HD.to_numpy()
 forest = landU.forest.to_numpy()
 ucrop = landU.ucrop.to_numpy()
+lon_landU = landU.lon.to_numpy()
+lat_landU = landU.lat.to_numpy()
+lon_landU, lat_landU = np.meshgrid(lon_landU, lat_landU)
 
 write_log("\nCutting the window...", args, accelerator=None, mode='a')
 
 #-- Cut gripho and topo to the desired window --#
-lon_high, lat_high, pr_high, z_high, mask_land_high, water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high = cut_window(
-        args.lon_min, args.lon_max, args.lat_min, args.lat_max, lon, lat, pr, z, mask_land, water, coast, urban_MD, urban_HD, forest, ucrop)
+# lon_high, lat_high, target_high, z_high, mask_land_high, water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high = cut_window(
+#         args.lon_min, args.lon_max, args.lat_min, args.lat_max, lon, lat, target_high, z, mask_land, water, coast, urban_MD, urban_HD, forest, ucrop)
 
-write_log(f"\nDone! Window is [{lon_high.min()}, {lon_high.max()}] x [{lat_high.min()}, {lat_high.max()}] with {pr_high.shape[1]} nodes.", args, accelerator=None, mode='a')
+lon_high, lat_high, target_high = cut_window(
+        args.lon_min, args.lon_max, args.lat_min, args.lat_max, lon, lat, target_high)
 
-write_log(f"\nlon shape {lon_high.shape}, lat shape {lat_high.shape}, pr shape {pr_high.shape}, z shape {z_high.shape}, land vars shape {water_high.shape}", args, accelerator=None, mode='a')
+print("target done!")
+
+if mask_land is not None:
+    lon_high_z, lat_high_z, z_high, mask_land_high = cut_window(
+            args.lon_min, args.lon_max, args.lat_min, args.lat_max, lon_z, lat_z, z, mask_land)
+else:
+    lon_high_z, lat_high_z, z_high = cut_window(
+            args.lon_min, args.lon_max, args.lat_min, args.lat_max, lon_z, lat_z, z)
+    mask_land_high = None
+
+print("z done!")
+
+lon_high_landU, lat_high_landU, water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high = cut_window(
+        args.lon_min, args.lon_max, args.lat_min, args.lat_max, lon_landU, lat_landU, water, coast, urban_MD, urban_HD, forest, ucrop)
+
+print("land use done!")
+
+assert np.array_equal(lon_high, lon_high_z)
+assert np.array_equal(lon_high, lon_high_landU)
+assert np.array_equal(lat_high, lat_high_z)
+assert np.array_equal(lat_high, lat_high_landU)
+
+write_log(f"\nDone! Window is [{lon_high.min()}, {lon_high.max()}] x [{lat_high.min()}, {lat_high.max()}] with {target_high.shape[1]} nodes.", args, accelerator=None, mode='a')
+
+write_log(f"\nlon shape {lon_high.shape}, lat shape {lat_high.shape}, pr shape {target_high.shape}, z shape {z_high.shape}, land vars shape {water_high.shape}", args, accelerator=None, mode='a')
 
 #------------------------------------#
 # REMOVE NODES NOT IN LAND TERRITORY #
 #------------------------------------#
 
-lon_high, lat_high, pr_high, z_high, water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high = retain_valid_nodes(
-        lon_high, lat_high, pr_high, z_high, mask_land_high, water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high)
+lon_high, lat_high, target_high, z_high, water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high = retain_valid_nodes(
+        lon_high, lat_high, target_high, z_high, mask_land_high, water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high)
 
-pr_high = pr_high.swapaxes(0,1) # (num_nodes, time)
+target_high = target_high.swapaxes(0,1) # (num_nodes, time)
 
 land_vars_high = np.stack([water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high], axis=-1)
 
 # print(lon_high.shape, lat_high.shape, pr_high.shape, z_high.shape, land_vars_high.shape)
 
-num_nodes_high = pr_high.shape[0]
+num_nodes_high = target_high.shape[0]
 
 write_log(f"\nAfter removing the non land territory nodes, the high resolution graph has {num_nodes_high} nodes.", args, accelerator=None, mode='a')
 
@@ -218,17 +256,17 @@ write_log(f"\nAfter removing the non land territory nodes, the high resolution g
 
 #-- ROUND THE TARGET --#   
 threshold = 0.1 # mm
-pr_high[pr_high < 0.1] = 0.0
+target_high[target_high < 0.1] = 0.0
 if args.predictors_type == "era5":
-    pr_high = np.round(pr_high, decimals=1)
+    target_high = np.round(target_high, decimals=1)
 
-pr_high = torch.tensor(pr_high)
+target_high = torch.tensor(target_high)
 
 write_log("Writing some files...", args, accelerator=None, mode='a')
 
 #-- WRITE THE FILES --#       
 with open(args.output_path + 'pr_target.pkl', 'wb') as f:
-    pickle.dump(pr_high, f)
+    pickle.dump(target_high, f)
 
 #### IMPORTANT CHANGE - NORMALIZATION NOW IN MAIN AND PREDICTION #### 
 

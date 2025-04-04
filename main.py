@@ -15,7 +15,6 @@ import os
 import dataset
 import importlib
 
-import utils.tools
 import utils.loss_functions
 from utils.tools import write_log, check_freezed_layers, set_seed_everything
 from utils.tools import find_not_all_nan_times, derive_train_val_idxs, derive_train_val_test_idxs_random_months
