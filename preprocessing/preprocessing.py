@@ -168,7 +168,9 @@ if args.predictors_type == "regcm":
     mask_land = mask_land.pr.to_numpy().squeeze()    
 else:
     z = topo.z.to_numpy()
-    mask_land = None
+    # mask_land = None
+    mask_land = xr.open_dataset(args.mask_path + args.mask_file)
+    mask_land = mask_land.pr.to_numpy().squeeze()
     
 if args.predictors_type == "regcm":
     pr *= 3600
