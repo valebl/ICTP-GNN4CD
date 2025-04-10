@@ -175,7 +175,9 @@ if args.predictors_type == "regcm":
     lat_z = topo.lat.to_numpy()
 else:
     z = topo.z.to_numpy()
-    mask_land = None
+    # mask_land = None
+    mask_land = xr.open_dataset(args.mask_path + args.mask_file)
+    mask_land = mask_land.pr.to_numpy().squeeze()
     lon_z = topo.lon.to_numpy()
     lat_z = topo.lat.to_numpy()
 lon_z, lat_z = np.meshgrid(lon_z, lat_z)

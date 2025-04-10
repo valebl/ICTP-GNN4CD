@@ -80,12 +80,14 @@ def find_not_all_nan_times(target_train):
         train_idxs (tensor)
         val_idxs (tensor)
     '''
-    mask_not_all_nan = [torch.tensor(True) for i in range(24)]
+    # mask_not_all_nan = [torch.tensor(True) for i in range(24)
+    mask_not_all_nan = []
     initial_time_dim = target_train.shape[1]
     for t in range(initial_time_dim):
         nan_sum = target_train[:,t].isnan().sum()
         mask_not_all_nan.append(nan_sum < target_train.shape[0])
     mask_not_all_nan = torch.stack(mask_not_all_nan)
+    mask_not_all_nan[:24] = True
     idxs_not_all_nan = torch.argwhere(mask_not_all_nan)
 
     return idxs_not_all_nan
@@ -279,7 +281,7 @@ def compute_input_statistics(x_low, x_high, args, accelerator=None):
     write_log(f'\nComputing statistics for the high-res input data.', args, accelerator, 'a')
 
     # High-res data
-    if x_high.shape[1] > 1:
+    if x_high.size()[1] > 1:
         means_high = torch.tensor([x_high[:,0].mean(), x_high[:,1:].mean()])
         stds_high = torch.tensor([x_high[:,0].std(), x_high[:,1:].std()])
     else:
@@ -327,7 +329,7 @@ def standardize_input(x_low, x_high, means_low, stds_low, means_high, stds_high,
     # Standardize the data
     x_high_standard = torch.zeros((x_high.size()), dtype=torch.float32)
     
-    if x_high.shape[1] > 1:
+    if x_high.size()[1] > 1:
         x_high_standard[:,0] = (x_high[:,0] - means_high[0]) / stds_high[0]
         x_high_standard[:,1:] = (x_high[:,1:] - means_high[1]) / stds_high[1]
     else:

@@ -78,6 +78,8 @@ parser.add_argument('--train_day_end', type=int)
 parser.add_argument('--first_year', type=int)
 parser.add_argument('--validation_year', type=int, default=None)
 
+target_type = "temperature"
+
 if __name__ == '__main__':
 
     args = parser.parse_args()
@@ -120,7 +122,10 @@ if __name__ == '__main__':
 
     models = importlib.import_module(f"models.{args.model_name}")
     Model = getattr(models, args.model_name)
-    model = Model()
+    if target_type == "temperature":
+        model = Model(h_in=4*5, h_hid=4*5, high_in=1)
+    else:
+        model = Model()
 
     # Loss
     if args.loss_fn == 'sigmoid_focal_loss':
@@ -148,31 +153,32 @@ if __name__ == '__main__':
     with open(args.input_path+args.target_file, 'rb') as f:
         target_train = pickle.load(f)
 
-    # derive two masks:
-    # - mask_not_nan, i.e. where the target is not nan
-    # - mask_geq_threshold, i.e. where the target is larger than the preferred threshold (now 0.1mm)
-    threshold = 0.1
+    if target_type == "precipitation":
+        # derive two masks:
+        # - mask_not_nan, i.e. where the target is not nan
+        # - mask_geq_threshold, i.e. where the target is larger than the preferred threshold (now 0.1mm)
+        threshold = 0.1
 
-    mask_nan = torch.isnan(target_train)
-    mask_threshold = target_train < threshold #mm
+        mask_nan = torch.isnan(target_train)
+        mask_threshold = target_train < threshold #mm
 
-    # set to 0.0 everything below sensitivity threshold
-    target_train[mask_threshold] = 0.0
-    # round to comply with instrument sensitivity
-    target_train = torch.round(target_train, decimals=1)
+        # set to 0.0 everything below sensitivity threshold
+        target_train[mask_threshold] = 0.0
+        # round to comply with instrument sensitivity
+        target_train = torch.round(target_train, decimals=1)
 
-    if args.model_type == "cl":
-        #-- CLASSIFIER --#        
-        target_train = torch.where(target_train >= threshold, 1, 0).float()
-    elif args.model_type == "reg":
-        #-- REGRESSOR ON pr >=threshold --#    
-        target_train = torch.log1p(target_train)
-        target_train[target_train < threshold] = torch.nan
-    elif args.model_type =="all":
-        #-- REGRESSOR ON ALL --#    
-        target_train = torch.log1p(target_train)
+        if args.model_type == "cl":
+            #-- CLASSIFIER --#        
+            target_train = torch.where(target_train >= threshold, 1, 0).float()
+        elif args.model_type == "reg":
+            #-- REGRESSOR ON pr >=threshold --#    
+            target_train = torch.log1p(target_train)
+            target_train[target_train < threshold] = torch.nan
+        elif args.model_type =="all":
+            #-- REGRESSOR ON ALL --#    
+            target_train = torch.log1p(target_train)
     
-    target_train[mask_nan] = torch.nan
+        target_train[mask_nan] = torch.nan
 
     idxs_not_all_nan = find_not_all_nan_times(target_train)
 
@@ -252,8 +258,12 @@ if __name__ == '__main__':
     
     write_log(f"\nHigh z: mean={low_high_graph['high'].x[:,0].mean()}, std={low_high_graph['high'].x[:,0].std()}",
               args, accelerator, 'a')
-    write_log(f"\nHigh land_use: mean={low_high_graph['high'].x[:,1:].mean()}, std={low_high_graph['high'].x[:,1:].std()}",
+    if low_high_graph['high'].x.size()[1] > 1:
+        write_log(f"\nHigh land_use: mean={low_high_graph['high'].x[:,1:].mean()}, std={low_high_graph['high'].x[:,1:].std()}",
               args, accelerator, 'a')
+    
+    if target_type == "temperature":
+        low_high_graph['low'].x = torch.cat((low_high_graph['low'].x[:,:,:1,:], low_high_graph['low'].x[:,:,2:,:]), dim=2)
 
     low_high_graph['low'].x = torch.flatten(low_high_graph['low'].x, start_dim=2, end_dim=-1)   # num_nodes, time, vars*levels
 
@@ -350,7 +360,7 @@ if __name__ == '__main__':
         trainer.train_cl(model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=epoch_start)
     elif args.model_type == "reg" or args.model_type == "all":
         trainer.train_reg(model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=epoch_start,
-                          G=low_high_graph)      
+                          G=low_high_graph)
     end = time.time()
 
     write_log(f"\nCompleted in {end - start} seconds.\nDONE!", args, accelerator, 'a')

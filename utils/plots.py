@@ -188,8 +188,9 @@ def plot_maps(pos, pr_pred, pr, zones, x_size, y_size, font_size_title=None, fon
     return fig
 
 
-def plot_single_map(pos, pr, zones, x_size, y_size, font_size_title, font_size=80, pr_min=0, pr_max=2500, aggr=np.nanmean, title="", 
-        cmap='jet', legend_title="pr", xlim=None, ylim=None, cbar_y=1, cmap_type=None,
+def plot_single_map(pos, pr, zones, save_path, save_file_name, 
+        x_size, y_size, font_size_title, font_size=80, pr_min=0, pr_max=2500, aggr=np.nanmean, title="", 
+        cmap='jet', legend_title="pr", xlim=None, ylim=None, cbar_y=1, cmap_type=None, pad_cbar_title=80,
         cbar_title_size=80, cbar_pad=0, subtitle_y=0.98, subtitle_x=0.45, s=150, show_ticks=True, num=16, bounds=None):
 
     plt.rcParams.update({'font.size': int(font_size)})
@@ -257,7 +258,7 @@ def plot_single_map(pos, pr, zones, x_size, y_size, font_size_title, font_size=8
     
     cbar_ax = fig.add_axes([0.95, 0.15, 0.05, 0.7]) # (left, bottom, width, height) in fractions of figure width and height
     cbar = fig.colorbar(im, cax=cbar_ax, aspect=25, pad=cbar_pad)
-    cbar.ax.set_title(legend_title, rotation=0, fontsize=cbar_title_size, pad=80)
+    cbar.ax.set_title(legend_title, rotation=0, fontsize=cbar_title_size, pad=pad_cbar_title)
     _ = fig.suptitle(title, fontsize=font_size_title, x=subtitle_x, y=subtitle_y)
     
     plt.subplots_adjust(wspace=0, hspace=0)
@@ -348,14 +349,14 @@ def plot_mean_time_series(pos, pr, pr_pred, points, aggr=np.nanmean, title="Prec
 
     return rmse, rmse_perc
 
-def plot_pdf(pr_pred, y, fontsize=18):
+def plot_pdf(pr_pred, y, fontsize=18, range=[0,200,0.5], ylim=[10**(-8),5]):
     plt.rcParams.update({'font.size': fontsize})
 
     pr_pred = pr_pred.flatten()
     y = y.flatten()
     
-    hist_pr, bin_edges_pr = np.histogram(pr_pred, bins=np.arange(0,200,0.5).astype(np.float32), density=False)
-    hist_y, bin_edges_y = np.histogram(y, bins=np.arange(0,200,0.5).astype(np.float32), density=False)
+    hist_pr, bin_edges_pr = np.histogram(pr_pred, bins=np.arange(range[0],range[1],range[2]).astype(np.float32), density=False)
+    hist_y, bin_edges_y = np.histogram(y, bins=np.arange(range[0],range[1],range[2]).astype(np.float32), density=False)
     
     Ntot_pr = hist_pr.sum()
     Ntot_y = hist_y.sum()
@@ -363,25 +364,28 @@ def plot_pdf(pr_pred, y, fontsize=18):
     bin_edges_pr_centre = (bin_edges_pr[:-1] + bin_edges_pr[1:]) / 2
     bin_edges_y_centre = (bin_edges_y[:-1] + bin_edges_y[1:]) / 2
         
-    p99_pred = np.nanpercentile(pr_pred, q=99)
-    p999_pred = np.nanpercentile(pr_pred, q=99.9)
+    # p99_pred = np.nanpercentile(pr_pred, q=99)
+    # p999_pred = np.nanpercentile(pr_pred, q=99.9)
 
-    p99 = np.nanpercentile(y, q=99)
-    p999 = np.nanpercentile(y, q=99.9)
+    # p99 = np.nanpercentile(y, q=99)
+    # p999 = np.nanpercentile(y, q=99.9)
     
     fig, ax = plt.subplots(figsize=(8,8))
-    ax.scatter(bin_edges_y_centre, hist_y/Ntot_y, color='darkturquoise', s=80, label="GRIPHO", alpha=0.4, zorder=2)
-    ax.scatter(bin_edges_pr_centre, hist_pr/Ntot_pr, color='indigo', s=80, label="GNN4CD R", alpha=0.4, zorder=2)
-    ax.plot([p99, p99], [0,50], '-', color='gold', label='GRIPHO - p99', zorder=1)
-    ax.plot([p999, p999], [0,50], '-r', label='GRIPHO - p99.9', zorder=1)
-    ax.plot([p99_pred, p99_pred], [0,50], ':', color='gold', label='GNN4CD R - p99', zorder=1)
-    ax.plot([p999_pred, p999_pred], [0,50], ':r', label='GNN4CD R - p99.9', zorder=1)
+    plt.fill_between(bin_edges_y_centre,hist_y/Ntot_y, color='grey', step="mid", alpha=0.25, label="GRIPHO", zorder=2)
+    ax.step(bin_edges_pr_centre, hist_pr/Ntot_pr, color='darkturquoise', where="mid", linewidth=1, label="GNN4CD R", zorder=3)
+    # ax.scatter(bin_edges_y_centre, hist_y/Ntot_y, color='darkturquoise', s=80, label="GRIPHO", alpha=0.4, zorder=2)
+    # ax.scatter(bin_edges_pr_centre, hist_pr/Ntot_pr, color='indigo', s=80, label="GNN4CD R", alpha=0.4, zorder=2)
+    # ax.plot([p99, p99], [0,50], '-', color='gold', label='GRIPHO - p99', zorder=1)
+    # ax.plot([p999, p999], [0,50], '-r', label='GRIPHO - p99.9', zorder=1)
+    # ax.plot([p99_pred, p99_pred], [0,50], ':', color='gold', label='GNN4CD R - p99', zorder=1)
+    # ax.plot([p999_pred, p999_pred], [0,50], ':r', label='GNN4CD R - p99.9', zorder=1)
     l = plt.legend(loc='upper right', facecolor='white', framealpha=1, fontsize=16)
-    ax.set_ylim([10**(-8),5])
+    if ylim is not None:
+        ax.set_ylim(ylim)
     ax.set_yscale('log')
-    ax.set_xscale('log')
-    ax.minorticks_on()
-    ax.grid(visible=True, which='both', axis='both', color='lightgrey', zorder=0)
+    # ax.set_xscale('log')
+    # ax.minorticks_on()
+    # ax.grid(visible=True, which='both', axis='both', color='lightgrey', zorder=0)
     ax.set_xlabel('precipitation [mm/h]', fontsize=fontsize)
     ax.set_ylabel('frequency', fontsize=fontsize)
 

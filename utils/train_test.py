@@ -8,6 +8,7 @@ from utils.tools import write_log
 from utils.plots import create_zones, plot_maps, plot_pdf, plot_diurnal_cycles
 import matplotlib.pyplot as plt
 
+target_type = "temperature"
 
 #-----------------------------------------------------
 #---------------------- TRAIN ------------------------
@@ -291,8 +292,12 @@ class Trainer(object):
                     pos = np.stack((G['high'].lon.cpu().numpy(), G['high'].lat.cpu().numpy()),axis=-1)
                     zones_file='./utils/Italia.txt'
                     zones = create_zones(zones_file=zones_file)
-                    y_pred_plot = torch.expm1(y_pred_val)
-                    y_plot = torch.expm1(y_val)
+                    if target_type == "precipitation":
+                        y_pred_plot = torch.expm1(y_pred_val)
+                        y_plot = torch.expm1(y_val)
+                    else:
+                        y_pred_plot = y_pred_val
+                        y_plot = y_val
                     y_pred_plot[~train_mask_val] = torch.nan
                     y_plot[~train_mask_val] = torch.nan
                     # convert to cpu and numpy
@@ -302,12 +307,26 @@ class Trainer(object):
                     y_plot = y_plot.cpu().numpy()[:,indices]
                     with open(args.output_path+"indices.pkl", 'wb') as f:
                         pickle.dump(indices, f)
-                    fig_avg = plot_maps(pos, y_pred_plot, y_plot, pr_min=0, aggr=np.nansum, pr_max=2750,
-                        title="", legend_title="[mm/h]", cmap='jet', save_path=None, save_file_name=None, zones=zones,
+                    if target_type == "temperature":
+                        v_min=270
+                        v_max=290
+                        range_bins=[250,350,1]
+                        ylim_pdf=None
+                        ylim_diurnal_cycles=[270,300]
+                        cmap="coolwarm"
+                    else:
+                        v_min=0
+                        v_max=2750
+                        range_bins=[0,75,1]
+                        ylim_pdf=[10**(-8),5]
+                        ylim_diurnal_cycles=[0.5,3.0]
+                        cmap="jet"
+                    fig_avg = plot_maps(pos, y_pred_plot, y_plot, pr_min=v_min, aggr=np.nanmean, pr_max=v_max,
+                        title="", legend_title="[mm/h]", cmap=cmap, save_path=None, save_file_name=None, zones=zones,
                         x_size=p["xsize"], y_size=p["ysize"], font_size_title=20, font_size=20, cbar_title_size=20, s=p["s"],
                         ylim=p["ylim"], xlim=p["xlim"], cbar_y=0.95, subtitle_x=0.55)
-                    fig_pdf = plot_pdf(y_pred_plot, y_plot)
-                    fig_avg_dc = plot_diurnal_cycles(y_pred_plot, y_plot, ylim=[0.5,3.0])
+                    fig_pdf = plot_pdf(y_pred_plot, y_plot, range=range_bins, ylim=ylim_pdf)
+                    fig_avg_dc = plot_diurnal_cycles(y_pred_plot, y_plot, ylim=ylim_diurnal_cycles)
 
                 # Apply mask
                 y_pred_val, y_val = y_pred_val[train_mask_val], y_val[train_mask_val]
