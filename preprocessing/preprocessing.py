@@ -49,8 +49,8 @@ parser.add_argument('--predictors_type', type=str)
 parser.add_argument('--input_files_prefix_low', type=str, help='prefix for the input files (convenction: {prefix}{parameter}.nc)', default='sliced_')
 parser.add_argument('--n_levels_low', type=int, help='number of pressure levels considered', default=5)
 
-# target_type = "temperature"
-target_type = "precipitation"
+target_type = "temperature"
+# target_type = "precipitation"
 
 ######################################################
 ##------------- PRELIMINARY OPERATIONS -------------##
@@ -251,9 +251,15 @@ valid_nodes = retain_valid_nodes(target_high, mask_land_high)
 
 # Apply the mask
 target_high = target_high[:,valid_nodes]
-for v in [lon_high, lat_high, z_high, water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high]:
-    v = v[valid_nodes]
 lon_high = lon_high[valid_nodes]
+lat_high = lat_high[valid_nodes]
+z_high = z_high[valid_nodes]
+water_high = water_high[valid_nodes]
+coast_high = coast_high[valid_nodes]
+urban_MD_high = urban_MD_high[valid_nodes]
+urban_HD_high = urban_HD_high[valid_nodes]
+forest_high = forest_high[valid_nodes]
+ucrop_high = ucrop_high[valid_nodes]
 
 # lon_high, lat_high, target_high, z_high, water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high = retain_valid_nodes(
 #         lon_high, lat_high, target_high, z_high, mask_land_high, water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high)
