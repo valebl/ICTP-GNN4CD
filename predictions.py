@@ -141,11 +141,11 @@ if __name__ == '__main__':
               args, accelerator, 'a')
     write_log(f"\nHigh land_use: mean={low_high_graph['high'].x[:,1:].mean()}, std={low_high_graph['high'].x[:,1:].std()}",
               args, accelerator, 'a')
-
-    low_high_graph['low'].x = torch.flatten(low_high_graph['low'].x, start_dim=2, end_dim=-1)   # num_nodes, time, vars*levels
-
+    
     if target_type == "temperature":
         low_high_graph['low'].x = torch.cat((low_high_graph['low'].x[:,:,:1,:], low_high_graph['low'].x[:,:,2:,:]), dim=2)
+
+    low_high_graph['low'].x = torch.flatten(low_high_graph['low'].x, start_dim=2, end_dim=-1)   # num_nodes, time, vars*levels
 
     Dataset_Graph = getattr(dataset, args.dataset_name)
     
