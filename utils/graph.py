@@ -38,7 +38,7 @@ def cut_window(lon_min, lon_max, lat_min, lat_max, lon, lat, *argv):
     return lon_sel, lat_sel, *v
 
 
-def retain_valid_nodes(lon, lat, pr, e, mask_land=None, *argv):
+def retain_valid_nodes(pr,mask_land=None):
     r'''
     Selects only the nodes for which precipitation is not
     nan in at least one timestamp. All the other nodes are
@@ -57,15 +57,7 @@ def retain_valid_nodes(lon, lat, pr, e, mask_land=None, *argv):
     valid_nodes = ~np.isnan(pr).all(axis=0)
     if mask_land is not None:
         valid_nodes = np.logical_and(valid_nodes, ~np.isnan(mask_land))
-    lon = lon[valid_nodes]
-    lat = lat[valid_nodes]
-    pr = pr[:,valid_nodes]
-    e = e[valid_nodes]
-    v = []
-    for arg in argv:
-        v.append(arg[valid_nodes])
-    return lon, lat, pr, e, *v
-
+    return valid_nodes
 
 def derive_edge_index_within(lon_radius, lat_radius, lon_senders, lat_senders, lon_receivers, lat_receivers, use_edge_attr=True, radius=None):
     r'''
@@ -138,6 +130,9 @@ def derive_edge_index_multiscale(lon_senders ,lat_senders, lon_receivers, lat_re
         for n_n1 in neighbours[n_n2,:]:
             if n_n1 == n_n2:
                 continue
+            # if np.abs(lon_receivers[n_n2] - lon_senders[n_n1]) > 0.01 and np.abs(lat_receivers[n_n2] - lat_senders[n_n1]) > 0.01:
+            #     print(np.abs(lon_receivers[n_n2] - lon_senders[n_n1]), np.abs(lat_receivers[n_n2] - lat_senders[n_n1]))
+            #     continue
             if [n_n1, n_n2] not in edge_index:
                 edge_index.append([n_n1, n_n2])
             # edge_attr.append(dist[n_n2, n_n1])

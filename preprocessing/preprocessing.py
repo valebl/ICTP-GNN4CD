@@ -49,7 +49,8 @@ parser.add_argument('--predictors_type', type=str)
 parser.add_argument('--input_files_prefix_low', type=str, help='prefix for the input files (convenction: {prefix}{parameter}.nc)', default='sliced_')
 parser.add_argument('--n_levels_low', type=int, help='number of pressure levels considered', default=5)
 
-target_type = "temperature"
+# target_type = "temperature"
+target_type = "precipitation"
 
 ######################################################
 ##------------- PRELIMINARY OPERATIONS -------------##
@@ -153,6 +154,7 @@ write_log(f"\n\nStarting the preprocessing of high resolution data.", args, acce
 # CUT LON, LAT, PR, Z TO WINDOW #
 #-------------------------------#
 
+write_log(f"\nLoading target and topography.", args, accelerator=None, mode='a')
 dataset_high = xr.open_dataset(args.input_path_gripho + args.gripho_file)
 topo = xr.open_dataset(args.input_path_topo + args.topo_file)
 
@@ -161,11 +163,15 @@ topo = xr.open_dataset(args.input_path_topo + args.topo_file)
 #lat, lon = torch.meshgrid(lat, lon)
 lon = dataset_high.lon.to_numpy()
 lat = dataset_high.lat.to_numpy()
-lon, lat = np.meshgrid(lon, lat)
+write_log(f"\nLon shape: {len(lon.shape)}", args, accelerator=None, mode='a')
+# if len(lon.shape)==1:
+#     lon, lat = np.meshgrid(lon, lat)
 if target_type == "precipitation":
     target_high = dataset_high.pr.to_numpy()
 elif target_type == "temperature":
     target_high = dataset_high.t2m.to_numpy()
+
+write_log(f"\nLoading mask_land.", args, accelerator=None, mode='a')
 
 if args.predictors_type == "regcm":
     z = topo.orog.to_numpy()
@@ -180,13 +186,15 @@ else:
     mask_land = mask_land.pr.to_numpy().squeeze()
     lon_z = topo.lon.to_numpy()
     lat_z = topo.lat.to_numpy()
-lon_z, lat_z = np.meshgrid(lon_z, lat_z)
+# if len(lon_z.shape)==1:
+#     lon_z, lat_z = np.meshgrid(lon_z, lat_z)
     
 if args.predictors_type == "regcm":
     target_high *= 3600
     write_log(f'\nMultiplying pr by 3600 to get mm.', args, accelerator=None, mode='a')
 
 # Reading LAND USE data
+write_log(f"\nLoading land use.", args, accelerator=None, mode='a')
 
 landU  = xr.open_dataset(args.land_use_path+args.land_use_file,  engine='netcdf4') #open nc file by default with netcdf4, if avail
 water = landU.water.to_numpy()
@@ -197,7 +205,8 @@ forest = landU.forest.to_numpy()
 ucrop = landU.ucrop.to_numpy()
 lon_landU = landU.lon.to_numpy()
 lat_landU = landU.lat.to_numpy()
-lon_landU, lat_landU = np.meshgrid(lon_landU, lat_landU)
+# if len(lon_landU.shape)==1:
+#     lon_landU, lat_landU = np.meshgrid(lon_landU, lat_landU)
 
 write_log("\nCutting the window...", args, accelerator=None, mode='a')
 
@@ -225,10 +234,10 @@ lon_high_landU, lat_high_landU, water_high, coast_high, urban_MD_high, urban_HD_
 
 print("land use done!")
 
-assert np.array_equal(lon_high, lon_high_z)
-assert np.array_equal(lon_high, lon_high_landU)
-assert np.array_equal(lat_high, lat_high_z)
-assert np.array_equal(lat_high, lat_high_landU)
+assert (np.allclose(lon_high, lon_high_z, atol=0.01) and lon_high.shape == lon_high_z.shape)
+assert (np.allclose(lon_high, lon_high_landU, atol=0.01) and lon_high.shape == lon_high_landU.shape)
+assert (np.allclose(lat_high, lat_high_z, atol=0.01) and lon_high.shape == lat_high_z.shape)
+assert (np.allclose(lat_high, lat_high_landU, atol=0.01) and lon_high.shape == lat_high_landU.shape)
 
 write_log(f"\nDone! Window is [{lon_high.min()}, {lon_high.max()}] x [{lat_high.min()}, {lat_high.max()}] with {target_high.shape[1]} nodes.", args, accelerator=None, mode='a')
 
@@ -238,8 +247,16 @@ write_log(f"\nlon shape {lon_high.shape}, lat shape {lat_high.shape}, pr shape {
 # REMOVE NODES NOT IN LAND TERRITORY #
 #------------------------------------#
 
-lon_high, lat_high, target_high, z_high, water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high = retain_valid_nodes(
-        lon_high, lat_high, target_high, z_high, mask_land_high, water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high)
+valid_nodes = retain_valid_nodes(target_high, mask_land_high)
+
+# Apply the mask
+target_high = target_high[:,valid_nodes]
+for v in [lon_high, lat_high, z_high, water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high]:
+    v = v[valid_nodes]
+lon_high = lon_high[valid_nodes]
+
+# lon_high, lat_high, target_high, z_high, water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high = retain_valid_nodes(
+#         lon_high, lat_high, target_high, z_high, mask_land_high, water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high)
 
 target_high = target_high.swapaxes(0,1) # (num_nodes, time)
 
@@ -290,6 +307,9 @@ edges_high2low, edges_high2low_attr = derive_edge_index_multiscale(lon_senders=l
 edges_high, edges_high_attr = derive_edge_index_within(lon_radius=args.lon_grid_radius_high, lat_radius=args.lat_grid_radius_high,
                                 lon_senders=lon_high, lat_senders=lat_high, lon_receivers=lon_high, lat_receivers=lat_high)
 
+# edges_high, edges_high_attr = derive_edge_index_multiscale(lon_senders=lon_high, lat_senders=lat_high, lon_receivers=lon_high, lat_receivers=lat_high,
+#                                                            k=4, undirected=True, lon_radius=args.lon_grid_radius_high, lat_radius=args.lat_grid_radius_high)
+
 edges_low, edges_low_attr = derive_edge_index_within(lon_radius=args.lon_grid_radius_low, lat_radius=args.lat_grid_radius_low,
                                 lon_senders=lon_low, lat_senders=lat_low, lon_receivers=lon_low, lat_receivers=lat_low)
 
@@ -331,6 +351,8 @@ low_high_graph['low', 'within', 'low'].edge_attr = torch.tensor(edges_low_attr).
 # Low to High
 low_high_graph['high', 'to', 'low'].edge_index = torch.tensor(edges_high2low)
 low_high_graph['high', 'to', 'low'].edge_attr = torch.tensor(edges_high2low_attr).float()
+
+# low_high_graph["high"].valid_nodes = valid_nodes
 
 
 #-- WRITE THE GRAPH --#
