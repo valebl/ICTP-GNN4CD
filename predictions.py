@@ -67,6 +67,8 @@ parser.add_argument('--no-use_accelerate', dest='use_accelerate', action='store_
 parser.add_argument('--make_plots',  action='store_true')
 parser.add_argument('--no-make_plots', dest='make_plots', action='store_false')
 
+# target_type = "temperature"
+target_type = "precipitation"
 
 if __name__ == '__main__':
 
@@ -142,6 +144,9 @@ if __name__ == '__main__':
 
     low_high_graph['low'].x = torch.flatten(low_high_graph['low'].x, start_dim=2, end_dim=-1)   # num_nodes, time, vars*levels
 
+    if target_type == "temperature":
+        low_high_graph['low'].x = torch.cat((low_high_graph['low'].x[:,:,:1,:], low_high_graph['low'].x[:,:,2:,:]), dim=2)
+
     Dataset_Graph = getattr(dataset, args.dataset_name)
     
     dataset_graph = Dataset_Graph(targets=None, graph=low_high_graph, model_name=args.model)
@@ -159,20 +164,23 @@ if __name__ == '__main__':
         model_cl = Model()
         model_reg = Model()
     else:
-        model = Model()
+        if target_type == "temperature":
+            model = Model(h_in=4*5, h_hid=4*5, high_in=1)
+        else:
+            model = Model()
 
     if accelerator is None:
         if args.mode == "cl_reg":
-            checkpoint_cl = torch.load(args.train_path_cl+args.checkpoint_cl, map_location=torch.device('cpu'))
-            checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg, map_location=torch.device('cpu'))
+            checkpoint_cl = torch.load(args.train_path_cl+args.checkpoint_cl, map_location=torch.device('cpu'), weights_only=True)
+            checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg, map_location=torch.device('cpu'), weights_only=True)
         else:
-            checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg, map_location=torch.device('cpu'))
+            checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg, map_location=torch.device('cpu'), weights_only=True)
         device = 'cpu'
     else:
         if args.mode == "cl_reg":
             try:
-                checkpoint_cl = torch.load(args.train_path_cl+args.checkpoint_cl+"/pytorch_model.bin")
-                checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg+"/pytorch_model.bin")
+                checkpoint_cl = torch.load(args.train_path_cl+args.checkpoint_cl+"/pytorch_model.bin", weights_only=True)
+                checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg+"/pytorch_model.bin", weights_only=True)
             except:
                 checkpoint_cl = safetensors.torch.load_file(args.train_path_cl+args.checkpoint_cl+"/model.safetensors")
                 checkpoint_reg = safetensors.torch.load_file(args.train_path_reg+args.checkpoint_reg+"/model.safetensors")
@@ -180,7 +188,7 @@ if __name__ == '__main__':
                 torch.save(checkpoint_reg, args.train_path_reg+args.checkpoint_reg+"pytorch_model.bin")
         else:
             try:
-                checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg+"/pytorch_model.bin")
+                checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg+"/pytorch_model.bin", weights_only=True)
             except:
                 checkpoint_reg = safetensors.torch.load_file(args.train_path_reg+args.checkpoint_reg+"/model.safetensors")
                 torch.save(checkpoint_reg, args.train_path_reg+args.checkpoint_reg+"pytorch_model.bin")
