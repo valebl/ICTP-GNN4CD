@@ -349,7 +349,7 @@ def plot_mean_time_series(pos, pr, pr_pred, points, aggr=np.nanmean, title="Prec
 
     return rmse, rmse_perc
 
-def plot_pdf(pr_pred, y, fontsize=18, range=[0,200,0.5], ylim=[10**(-8),5]):
+def plot_pdf(pr_pred, y, fontsize=18, range=[0,200,0.5], ylim=[10**(-8),5], xlabel="[mm/h]"):
     plt.rcParams.update({'font.size': fontsize})
 
     pr_pred = pr_pred.flatten()
@@ -392,7 +392,7 @@ def plot_pdf(pr_pred, y, fontsize=18, range=[0,200,0.5], ylim=[10**(-8),5]):
     return fig
 
 def plot_diurnal_cycles(y_pred, y, aggr=np.nanmean, fontsize=25, figsize=(16,18),
-                        xlim=[0,24], ylim=[0.5, 3.0]):
+                        xlim=[0,24], ylim=[0.5, 3.0], ylablel="[mm/h]"):
 
     plt.rcParams.update({'font.size': fontsize})
     fig, ax = plt.subplots(nrows=2, ncols=2, figsize=figsize)
@@ -436,7 +436,7 @@ def plot_diurnal_cycles(y_pred, y, aggr=np.nanmean, fontsize=25, figsize=(16,18)
         n = 25
         axi.plot(range(1,n), y_pred_daily_cycles, label='GNN4CD', linestyle='-', linewidth=2, color='red')
         axi.plot(range(1,n), y_daily_cycles, label='GRIPHO', linestyle=':', linewidth=2, color='black')
-        axi.set_ylabel("pr [mm/h]", fontsize=40)
+        axi.set_ylabel(ylablel, fontsize=40)
         axi.set_xlabel("time [h]", fontsize=40)
         axi.set_xlim(xlim)
         axi.set_ylim(ylim)
