@@ -78,7 +78,8 @@ parser.add_argument('--train_day_end', type=int)
 parser.add_argument('--first_year', type=int)
 parser.add_argument('--validation_year', type=int, default=None)
 
-target_type = "temperature"
+# target_type = "temperature"
+target_type = "precipitation"
 
 if __name__ == '__main__':
 
@@ -304,8 +305,8 @@ if __name__ == '__main__':
     # optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     
     #lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=0.1)
-    lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
-    #lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=0.0, last_epoch=-1)
+    # lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
+    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=0.000001, last_epoch=-1)
 
 #-----------------------------------------------------
 #------------------ LOAD PARAMETERS ------------------
@@ -359,8 +360,7 @@ if __name__ == '__main__':
     if args.model_type == "cl":
         trainer.train_cl(model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=epoch_start)
     elif args.model_type == "reg" or args.model_type == "all":
-        trainer.train_reg(model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=epoch_start,
-                          G=low_high_graph)
+        trainer.train_reg(model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=epoch_start)
     end = time.time()
 
     write_log(f"\nCompleted in {end - start} seconds.\nDONE!", args, accelerator, 'a')

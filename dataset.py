@@ -133,7 +133,8 @@ class Dataset_Graph(Dataset):
                 snapshot[edge_key].edge_attr = self.graph[edge_key].edge_attr
 
         snapshot['low'].x = x_low
-        snapshot['high'].x = self.graph['high'].x[:,:1]
+        # snapshot['high'].x = self.graph['high'].x[:,:1]
+        snapshot['high'].x = self.graph['high'].x
 
         snapshot['high'].lon = self.graph['high'].lon
         snapshot['high'].lat = self.graph['high'].lat
