@@ -46,7 +46,7 @@ parser.add_argument('--mask_file', type=str)
 parser.add_argument('--predictors_type', type=str)
 
 #-- era5
-parser.add_argument('--input_files_prefix_low', type=str, help='prefix for the input files (convenction: {prefix}{parameter}.nc)', default='sliced_')
+parser.add_argument('--input_files_prefix_low', type=str, help='prefix for the input files (convenction: {prefix}{parameter}.nc)', default='')
 parser.add_argument('--n_levels_low', type=int, help='number of pressure levels considered', default=5)
 
 target_type = "temperature"
@@ -163,9 +163,8 @@ topo = xr.open_dataset(args.input_path_topo + args.topo_file)
 #lat, lon = torch.meshgrid(lat, lon)
 lon = dataset_high.lon.to_numpy()
 lat = dataset_high.lat.to_numpy()
-write_log(f"\nLon shape: {len(lon.shape)}", args, accelerator=None, mode='a')
-# if len(lon.shape)==1:
-#     lon, lat = np.meshgrid(lon, lat)
+if lon.shape != lat.shape:
+    lon, lat = np.meshgrid(lon, lat)
 if target_type == "precipitation":
     target_high = dataset_high.pr.to_numpy()
 elif target_type == "temperature":
@@ -186,8 +185,8 @@ else:
     mask_land = mask_land.pr.to_numpy().squeeze()
     lon_z = topo.lon.to_numpy()
     lat_z = topo.lat.to_numpy()
-# if len(lon_z.shape)==1:
-#     lon_z, lat_z = np.meshgrid(lon_z, lat_z)
+if lon_z.shape != lat_z.shape:
+    lon_z, lat_z = np.meshgrid(lon_z, lat_z)
     
 if args.predictors_type == "regcm":
     target_high *= 3600
@@ -205,8 +204,8 @@ forest = landU.forest.to_numpy()
 ucrop = landU.ucrop.to_numpy()
 lon_landU = landU.lon.to_numpy()
 lat_landU = landU.lat.to_numpy()
-# if len(lon_landU.shape)==1:
-#     lon_landU, lat_landU = np.meshgrid(lon_landU, lat_landU)
+if lon_landU.shape != lat_landU.shape:
+    lon_landU, lat_landU = np.meshgrid(lon_landU, lat_landU)
 
 write_log("\nCutting the window...", args, accelerator=None, mode='a')
 

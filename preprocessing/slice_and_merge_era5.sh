@@ -25,7 +25,7 @@ cd ${INPUT_PATH_PHASE_1}
 for v in 'q' 't' 'u' 'v' 'z' ; do
 	files=$(ls "${v}_"*".nc")
 	for file in $files ; do
-		cdo sellonlatbox,$lon_min_era5,$lon_max_era5,$lat_min_era5,$lat_max_era5 "${INPUT_PATH_PHASE_1}${file}" "${OUTPUT_PATH_PHASE_1}${PREFIX}${file}"
+		cdo sellonlatbox,$lon_min_era5,$lon_max_era5,$lat_min_era5,$lat_max_era5 "${INPUT_PATH_PHASE_1}"${file}"" "${OUTPUT_PATH_PHASE_1}${PREFIX}${file}"
 	done
 done
 

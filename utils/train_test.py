@@ -8,7 +8,8 @@ from utils.tools import write_log
 from utils.plots import create_zones, plot_maps, plot_pdf, plot_diurnal_cycles
 import matplotlib.pyplot as plt
 
-target_type = "temperature"
+# target_type = "temperature"
+target_type = "precipitation"
 
 #-----------------------------------------------------
 #---------------------- TRAIN ------------------------
@@ -137,7 +138,7 @@ class Trainer(object):
                              'lr': np.mean(lr_scheduler._last_lr)}, step=step)
                 
     #--- REGRESSOR
-    def train_reg(self, model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=0, G=None):
+    def train_reg(self, model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=0):
         
         write_log(f"\nStart training the regressor.", args, accelerator, 'a')
 
@@ -159,8 +160,8 @@ class Trainer(object):
             start = time.time()
             
             # TRAIN
-            for graph in dataloader_train:
-            
+            for i, graph in enumerate(dataloader_train):
+
                 optimizer.zero_grad()
                 y_pred = model(graph).squeeze()
 
@@ -284,50 +285,58 @@ class Trainer(object):
 
                 ###### PLOTS ######
                 # Create a few plots to compare
-                if G is not None:
-                    if "fvg" in args.input_path:
-                        p = {"xsize": 8, "ysize": 12, "ylim": [45.45, 46.8], "xlim": [12.70, 14.05], "s": 250}
-                    else:
-                        p = {"xsize": 16, "ysize": 12, "ylim": [43.75, 47.05], "xlim": [6.70, 14.05], "s": 150}
-                    pos = np.stack((G['high'].lon.cpu().numpy(), G['high'].lat.cpu().numpy()),axis=-1)
-                    zones_file='./utils/Italia.txt'
-                    zones = create_zones(zones_file=zones_file)
-                    if target_type == "precipitation":
-                        y_pred_plot = torch.expm1(y_pred_val)
-                        y_plot = torch.expm1(y_val)
-                    else:
-                        y_pred_plot = y_pred_val
-                        y_plot = y_val
-                    y_pred_plot[~train_mask_val] = torch.nan
-                    y_plot[~train_mask_val] = torch.nan
-                    # convert to cpu and numpy
-                    _, indices = torch.sort(t)
-                    indices = indices.cpu().numpy()
-                    y_pred_plot = y_pred_plot.cpu().numpy()[:,indices]
-                    y_plot = y_plot.cpu().numpy()[:,indices]
-                    with open(args.output_path+"indices.pkl", 'wb') as f:
-                        pickle.dump(indices, f)
-                    if target_type == "temperature":
-                        v_min=270
-                        v_max=290
-                        range_bins=[250,350,1]
-                        ylim_pdf=None
-                        ylim_diurnal_cycles=[270,300]
-                        cmap="coolwarm"
-                    else:
-                        v_min=0
-                        v_max=2750
-                        range_bins=[0,75,1]
-                        ylim_pdf=[10**(-8),5]
-                        ylim_diurnal_cycles=[0.5,3.0]
-                        cmap="jet"
-                    fig_avg = plot_maps(pos, y_pred_plot, y_plot, pr_min=v_min, aggr=np.nanmean, pr_max=v_max,
-                        title="", legend_title="[mm/h]", cmap=cmap, save_path=None, save_file_name=None, zones=zones,
-                        x_size=p["xsize"], y_size=p["ysize"], font_size_title=20, font_size=20, cbar_title_size=20, s=p["s"],
-                        ylim=p["ylim"], xlim=p["xlim"], cbar_y=0.95, subtitle_x=0.55)
-                    fig_pdf = plot_pdf(y_pred_plot, y_plot, range=range_bins, ylim=ylim_pdf)
-                    fig_avg_dc = plot_diurnal_cycles(y_pred_plot, y_plot, ylim=ylim_diurnal_cycles)
-
+                if "fvg" in args.input_path:
+                    p = {"xsize": 8, "ysize": 12, "ylim": [45.45, 46.8], "xlim": [12.70, 14.05], "s": 250}
+                else:
+                    p = {"xsize": 16, "ysize": 12, "ylim": [43.75, 47.05], "xlim": [6.70, 14.05], "s": 150}
+                pos = np.stack((graph[0]['high'].lon.cpu().numpy(), graph[0]['high'].lat.cpu().numpy()),axis=-1)
+                zones_file='./utils/Italia.txt'
+                zones = create_zones(zones_file=zones_file)
+                if target_type == "precipitation":
+                    y_pred_plot = torch.expm1(y_pred_val)
+                    y_plot = torch.expm1(y_val)
+                else:
+                    min_val = 250
+                    max_val= 350
+                    y_pred_plot = y_pred_val * (max_val - min_val) + min_val
+                    y_plot = y_val * (max_val - min_val) + min_val
+                y_pred_plot[~train_mask_val] = torch.nan
+                y_plot[~train_mask_val] = torch.nan
+                # convert to cpu and numpy
+                _, indices = torch.sort(t)
+                indices = indices.cpu().numpy()
+                y_pred_plot = y_pred_plot.cpu().numpy()[:,indices]
+                y_plot = y_plot.cpu().numpy()[:,indices]
+                with open(args.output_path+"indices.pkl", 'wb') as f:
+                    pickle.dump(indices, f)
+                if target_type == "temperature":
+                    v_min=270
+                    v_max=290
+                    range_bins=[250,350,1]
+                    ylim_pdf=None
+                    ylim_diurnal_cycles=[270,300]
+                    cmap="coolwarm"
+                    unit="[K]"
+                    map_title="average temperature"
+                    diurnal_cycle_title="temperature diurnal cycle"
+                    aggr=np.nanmean
+                else:
+                    v_min=0
+                    v_max=2750
+                    range_bins=[0,75,1]
+                    ylim_pdf=None
+                    ylim_diurnal_cycles=[0.5,3.5]
+                    cmap="jet"
+                    unit="[mm/h]"
+                    map_title="cumulative precipitation"
+                    diurnal_cycle_title="intensity diurnal cycle"
+                    aggr=np.nansum
+                fig_avg = plot_maps(pos, y_pred_plot, y_plot, pr_min=v_min, aggr=aggr, pr_max=v_max,
+                    title="", legend_title=unit, cmap=cmap, zones=zones, x_size=p["xsize"], y_size=p["ysize"],
+                    font_size_title=20, font_size=20, cbar_title_size=20, s=p["s"], ylim=p["ylim"], xlim=p["xlim"], cbar_y=0.95, subtitle_x=0.55)
+                fig_pdf = plot_pdf(y_pred_plot, y_plot, range=range_bins, ylim=ylim_pdf, xlabel=unit)
+                fig_avg_dc = plot_diurnal_cycles(y_pred_plot, y_plot, ylim=ylim_diurnal_cycles, ylablel=unit)
+                
                 # Apply mask
                 y_pred_val, y_val = y_pred_val[train_mask_val], y_val[train_mask_val]
                     
@@ -339,12 +348,13 @@ class Trainer(object):
                     loss_val = loss_fn(y_pred_val.flatten(), y_val.flatten(), w_val.flatten(), epoch)
                 else:
                     loss_val = loss_fn(y_pred_val.flatten(), y_val.flatten())
-                
-                accelerator.log({"cumulative pr": [wandb.Image(fig_avg)], "pdf": [wandb.Image(fig_pdf)], "intensity diurnal cycle": [wandb.Image(fig_avg_dc)]}, step=step)
-                plt.close()
+
+                accelerator.log({map_title: [wandb.Image(fig_avg)], "pdf": [wandb.Image(fig_pdf)], diurnal_cycle_title: [wandb.Image(fig_avg_dc)]}, step=step)
+                plt.close()                
 
             if lr_scheduler is not None:
-                lr_scheduler.step(loss_val.item())
+                # lr_scheduler.step(loss_val.item())
+                lr_scheduler.step()
             
             if args.loss_fn == "quantized_loss":
                 accelerator.log({'epoch':epoch, 'validation loss (1GPU)': loss_val_1gpu.item(), 'validation loss': loss_val.item(),
@@ -353,8 +363,7 @@ class Trainer(object):
             else:
                 accelerator.log({'epoch':epoch, 'validation loss (1GPU)': loss_val_1gpu.item(), 'validation loss': loss_val.item(),
                                  'lr': np.mean(lr_scheduler.get_last_lr())}, step=step)
-        
-
+                
 
 #-----------------------------------------------------
 #----------------------- TEST ------------------------

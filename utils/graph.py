@@ -34,7 +34,7 @@ def cut_window(lon_min, lon_max, lat_min, lat_max, lon, lat, *argv):
         else:
             arg = arg.flatten()
             v.append(arg[bool_both])
-    print(lon_sel.shape, lat_sel.shape, v[-1].shape)
+    # print(lon_sel.shape, lat_sel.shape, v[-1].shape)
     return lon_sel, lat_sel, *v
 
 

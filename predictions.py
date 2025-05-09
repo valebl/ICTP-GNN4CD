@@ -67,8 +67,8 @@ parser.add_argument('--no-use_accelerate', dest='use_accelerate', action='store_
 parser.add_argument('--make_plots',  action='store_true')
 parser.add_argument('--no-make_plots', dest='make_plots', action='store_false')
 
-target_type = "temperature"
-# target_type = "precipitation"
+# target_type = "temperature"
+target_type = "precipitation"
 
 if __name__ == '__main__':
 
