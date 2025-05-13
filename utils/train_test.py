@@ -153,7 +153,7 @@ class Trainer(object):
             loss_meter = AverageMeter()
             all_loss_meter = AverageMeter()
             
-            if args.loss_fn == "quantized_loss":
+            if "quantized_loss" in args.loss_fn:
                 loss_term1_meter = AverageMeter()
                 loss_term2_meter = AverageMeter()
 
@@ -184,12 +184,12 @@ class Trainer(object):
 
                 # print(f"{accelerator.device} - all_y_pred.shape: {all_y_pred.shape}, all_y.shape: {all_y.shape}, all_w.shape: {all_w.shape}")
                 
-                if args.loss_fn == "quantized_loss":
+                if "quantized_loss" in args.loss_fn:
                     loss, _, _ = loss_fn(y_pred, y, w)
                     all_loss, loss_term1, loss_term2 = loss_fn(all_y_pred, all_y, all_w)
-                elif args.loss_fn == "quantized_loss_scaled":
-                    loss = loss_fn(y_pred, y, w, epoch)
-                    all_loss = loss_fn(all_y_pred, all_y, all_y, epoch)
+                # elif args.loss_fn == "quantized_loss_scaled":
+                #     loss = loss_fn(y_pred, y, w, epoch)
+                #     all_loss = loss_fn(all_y_pred, all_y, all_y, epoch)
                 else:
                     loss = loss_fn(y_pred, y)
                     all_loss = loss_fn(all_y_pred, all_y)
@@ -203,7 +203,7 @@ class Trainer(object):
                 loss_meter.update(val=loss.item(), n=y_pred.shape[0])    
                 all_loss_meter.update(val=all_loss.item(), n=all_y_pred.shape[0])
                 
-                if args.loss_fn == "quantized_loss":
+                if "quantized_loss" in args.loss_fn:
                     loss_term1_meter.update(val=loss_term1.item(), n=all_y_pred.shape[0])
                     loss_term2_meter.update(val=loss_term2.item(), n=all_y_pred.shape[0])
                     
@@ -211,7 +211,7 @@ class Trainer(object):
 
             end = time.time()
 
-            if args.loss_fn == "quantized_loss":
+            if "quantized_loss" in args.loss_fn:
                 accelerator.log({'epoch':epoch, 'train loss (1GPU)': loss_meter.avg, 'train loss': all_loss_meter.avg,
                                  'train mse loss': loss_term1_meter.avg, 'train quantized loss': loss_term2_meter.avg}, step=step)
             else:
@@ -259,15 +259,15 @@ class Trainer(object):
                 # write_log(f"\n{y_pred_val.shape}, {train_mask_val.shape}, {y_val.shape}", args, accelerator, 'a')
 
                 # Log validation metrics for 1GPU
-                if args.loss_fn == "quantized_loss":
+                if "quantized_loss" in args.loss_fn:
                     loss_val_1gpu,  _, _ = loss_fn(y_pred_val.flatten()[train_mask_val.flatten()],
                                                    y_val.flatten()[train_mask_val.flatten()],
                                                    w_val.flatten()[train_mask_val.flatten()])
-                elif args.loss_fn == "quantized_loss_scaled":
-                    loss_val_1gpu = loss_fn(y_pred_val.flatten()[train_mask_val.flatten()],
-                                                   y_val.flatten()[train_mask_val.flatten()],
-                                                   w_val.flatten()[train_mask_val.flatten()],
-                                                   epoch) 
+                # elif args.loss_fn == "quantized_loss_scaled":
+                #     loss_val_1gpu = loss_fn(y_pred_val.flatten()[train_mask_val.flatten()],
+                #                                    y_val.flatten()[train_mask_val.flatten()],
+                #                                    w_val.flatten()[train_mask_val.flatten()],
+                #                                    epoch) 
                 else:
                     loss_val_1gpu = loss_fn(y_pred_val.flatten()[train_mask_val.flatten()],
                                             y_val.flatten()[train_mask_val.flatten()])
@@ -340,12 +340,12 @@ class Trainer(object):
                 # Apply mask
                 y_pred_val, y_val = y_pred_val[train_mask_val], y_val[train_mask_val]
                     
-                if args.loss_fn == "quantized_loss":
+                if "quantized" in args.loss_fn:
                     w_val = w_val[train_mask_val]
                     loss_val, loss_term1_val, loss_term2_val = loss_fn(y_pred_val.flatten(), y_val.flatten(), w_val.flatten())
-                elif args.loss_fn == "quantized_loss_scaled":
-                    w_val = w_val[train_mask_val]
-                    loss_val = loss_fn(y_pred_val.flatten(), y_val.flatten(), w_val.flatten(), epoch)
+                # elif args.loss_fn == "quantized_loss_scaled":
+                #     w_val = w_val[train_mask_val]
+                #     loss_val = loss_fn(y_pred_val.flatten(), y_val.flatten(), w_val.flatten(), epoch)
                 else:
                     loss_val = loss_fn(y_pred_val.flatten(), y_val.flatten())
 
@@ -356,7 +356,7 @@ class Trainer(object):
                 # lr_scheduler.step(loss_val.item())
                 lr_scheduler.step()
             
-            if args.loss_fn == "quantized_loss":
+            if "quantized" in args.loss_fn:
                 accelerator.log({'epoch':epoch, 'validation loss (1GPU)': loss_val_1gpu.item(), 'validation loss': loss_val.item(),
                                  'validation mse loss': loss_term1_val.item(),'validation quantized loss': loss_term2_val.item(),
                                  'lr': np.mean(lr_scheduler.get_last_lr())}, step=step)

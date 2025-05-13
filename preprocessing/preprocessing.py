@@ -49,8 +49,8 @@ parser.add_argument('--predictors_type', type=str)
 parser.add_argument('--input_files_prefix_low', type=str, help='prefix for the input files (convenction: {prefix}{parameter}.nc)', default='')
 parser.add_argument('--n_levels_low', type=int, help='number of pressure levels considered', default=5)
 
-target_type = "temperature"
-# target_type = "precipitation"
+# target_type = "temperature"
+target_type = "precipitation"
 
 ######################################################
 ##------------- PRELIMINARY OPERATIONS -------------##
@@ -286,7 +286,7 @@ if args.predictors_type == "era5":
 
 target_high = torch.tensor(target_high)
 
-write_log("Writing some files...", args, accelerator=None, mode='a')
+write_log("\nWriting some files...", args, accelerator=None, mode='a')
 
 #-- WRITE THE FILES --#       
 with open(args.output_path + 'pr_target.pkl', 'wb') as f:

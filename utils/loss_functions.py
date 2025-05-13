@@ -110,3 +110,33 @@ class quantized_loss_bins():
             losses[b] = self.mse_loss(prediction_batch[mask_b], target_batch[mask_b])
         return losses, None, None
 
+
+class quantized_loss_asym():
+    '''
+    bins:   array containing the bin number for each of the nodes
+            shape = (n_nodes)
+    '''
+    def __init__(self, alpha=0.005, beta=1):
+        self.mse_loss = nn.MSELoss()
+        self.alpha = alpha
+        self.beta = beta
+        print(f"alpha: {self.alpha}, beta: {self.beta}")
+
+    def __call__(self, prediction_batch, target_batch, bins):
+        loss_mse = self.mse_loss(prediction_batch, target_batch)
+        loss_quantized = 0
+        bins = bins.int()
+        for b in torch.unique(bins):
+            mask_b = (bins == b)
+            loss_quantized += self.mse_loss(prediction_batch[mask_b], target_batch[mask_b])
+        penalty = self.false_positive_penalty(prediction_batch, target_batch)
+        return loss_mse + self.alpha * loss_quantized + self.beta * penalty, loss_mse, loss_quantized
+    
+    def false_positive_penalty(self, prediction_batch, target_batch, threshold=0.1):
+        # Create masks
+        no_rain_mask = (target_batch < threshold).float()
+        false_positive_mask = (prediction_batch >= threshold).float()
+        
+        # Penalize only false positives
+        penalty = ((prediction_batch - threshold)**2) * no_rain_mask * false_positive_mask
+        return penalty.mean()

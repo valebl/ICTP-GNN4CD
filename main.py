@@ -131,10 +131,8 @@ if __name__ == '__main__':
     # Loss
     if args.loss_fn == 'sigmoid_focal_loss':
         loss_fn = getattr(torchvision.ops, args.loss_fn)
-    elif args.loss_fn == 'quantized_loss':
+    elif 'quantized_loss' in args.loss_fn:
         loss_fn = getattr(utils.loss_functions, args.loss_fn)(alpha=args.alpha)
-    elif args.loss_fn == 'quantized_loss_scaled':
-        loss_fn = getattr(utils.loss_functions, args.loss_fn)()
     elif args.loss_fn == 'weighted_mse_loss':
         loss_fn = getattr(utils.loss_functions, args.loss_fn)()
     elif args.loss_fn == 'weighted_mae_loss':
