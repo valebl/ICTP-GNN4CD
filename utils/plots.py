@@ -392,10 +392,9 @@ def plot_pdf(pr_pred, y, fontsize=18, range=[0,200,0.5], ylim=[10**(-8),5], xlab
     return fig
 
 def plot_diurnal_cycles(y_pred, y, aggr=np.nanmean, fontsize=25, figsize=(16,18),
-                        xlim=[0,24], ylim=[0.5, 3.0], ylablel="[mm/h]"):
+                        xlim=[0,24], ylim=[0.5, 3.0], ylablel="[mm/h]", which='all'):
 
     plt.rcParams.update({'font.size': fontsize})
-    fig, ax = plt.subplots(nrows=2, ncols=2, figsize=figsize)
 
     # create seasons
     jf_start = 0 # january-february
@@ -423,27 +422,72 @@ def plot_diurnal_cycles(y_pred, y, aggr=np.nanmean, fontsize=25, figsize=(16,18)
     
     text_list = ['DJF', 'MAM', 'JJA', 'SON']
 
+    fig_1, ax_1 = plt.subplots(nrows=2, ncols=2, figsize=figsize)
+    fig_1.set_tight_layout(True)
+    if which == 'all':
+        fig_2, ax_2 = plt.subplots(nrows=2, ncols=2, figsize=figsize)
+        fig_3, ax_3 = plt.subplots(nrows=2, ncols=2, figsize=figsize)
+        fig_2.set_tight_layout(True)
+        fig_3.set_tight_layout(True)
+
     for s in range(4):
         idxs = idxs_seasons[s]
         y_pred_s = y_pred[:,idxs]
         y_s = y[:,idxs]
         y_pred_daily_cycles = np.zeros(24)
         y_daily_cycles = np.zeros(24)
-        axi = ax[s//2, s%2]
-        for i in range(0,24):
-            y_pred_daily_cycles[i] = aggr(y_pred_s[:,i::24][y_pred_s[:,i::24]>0])
-            y_daily_cycles[i] = aggr(y_s[:,i::24][y_s[:,i::24]>0])
         n = 25
+        # average precipitation
+        axi = ax_1[s//2, s%2]
+        for i in range(0,24):
+            y_pred_daily_cycles[i] = aggr(y_pred_s[:,i::24])
+            y_daily_cycles[i] = aggr(y_s[:,i::24])
         axi.plot(range(1,n), y_pred_daily_cycles, label='GNN4CD', linestyle='-', linewidth=2, color='red')
         axi.plot(range(1,n), y_daily_cycles, label='GRIPHO', linestyle=':', linewidth=2, color='black')
         axi.set_ylabel(ylablel, fontsize=40)
         axi.set_xlabel("time [h]", fontsize=40)
         axi.set_xlim(xlim)
-        axi.set_ylim(ylim)
+        axi.set_ylim(ylim[0],ylim[1])
         axi.set_xticks(ticks=range(0,n,6))
         axi.set_title(text_list[s], fontsize=45)
         axi.grid(which='major', color='lightgrey')
-    plt.legend(loc='upper left', prop={'size': 30})
-    plt.tight_layout()
+        if s == 0:
+            axi.legend(loc='upper left', prop={'size': 30})
+        if which == 'all':
+            # frequency of precipitation
+            axi = ax_2[s//2, s%2]
+            for i in range(0,24):
+                y_pred_daily_cycles[i] = (y_pred_s[:,i::24]>=0.1).sum() / y_pred_s[:,i::24].flatten().shape[0] * 100
+                y_daily_cycles[i] = (y_s[:,i::24]>=0.1).sum() / y_s[:,i::24].flatten().shape[0] * 100
+            axi.plot(range(1,n), y_pred_daily_cycles, label='GNN4CD', linestyle='-', linewidth=2, color='red')
+            axi.plot(range(1,n), y_daily_cycles, label='GRIPHO', linestyle=':', linewidth=2, color='black')
+            axi.set_ylabel(ylablel, fontsize=40)
+            axi.set_xlabel("time [h]", fontsize=40)
+            axi.set_xlim(xlim)
+            axi.set_ylim(ylim[2],ylim[3])
+            axi.set_xticks(ticks=range(0,n,6))
+            axi.set_title(text_list[s], fontsize=45)
+            axi.grid(which='major', color='lightgrey')
+            if s == 0:
+                axi.legend(loc='upper left', prop={'size': 30})
+            # intensity of precipitation
+            axi = ax_3[s//2, s%2]
+            for i in range(0,24):
+                y_pred_daily_cycles[i] = aggr(y_pred_s[:,i::24][y_pred_s[:,i::24]>=0.1])
+                y_daily_cycles[i] = aggr(y_s[:,i::24][y_s[:,i::24]>=0.1])
+            axi.plot(range(1,n), y_pred_daily_cycles, label='GNN4CD', linestyle='-', linewidth=2, color='red')
+            axi.plot(range(1,n), y_daily_cycles, label='GRIPHO', linestyle=':', linewidth=2, color='black')
+            axi.set_ylabel(ylablel, fontsize=40)
+            axi.set_xlabel("time [h]", fontsize=40)
+            axi.set_xlim(xlim)
+            axi.set_ylim(ylim[4],ylim[5])
+            axi.set_xticks(ticks=range(0,n,6))
+            axi.set_title(text_list[s], fontsize=45)
+            axi.grid(which='major', color='lightgrey')
+            if s == 0:
+                axi.legend(loc='upper left', prop={'size': 30})
 
-    return fig
+    if which == 'all':
+        return fig_1, fig_2, fig_3
+    else:
+        return fig_1

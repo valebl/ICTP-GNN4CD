@@ -161,6 +161,8 @@ class Trainer(object):
             
             # TRAIN
             for i, graph in enumerate(dataloader_train):
+                if i > 100:
+                    break
 
                 optimizer.zero_grad()
                 y_pred = model(graph).squeeze()
@@ -286,9 +288,9 @@ class Trainer(object):
                 ###### PLOTS ######
                 # Create a few plots to compare
                 if "fvg" in args.input_path:
-                    p = {"xsize": 8, "ysize": 12, "ylim": [45.45, 46.8], "xlim": [12.70, 14.05], "s": 250}
+                    p = {"xsize": 8, "ysize": 12, "ylim": [45.45, 46.8], "xlim": [12.70, 14.05], "s": 200}
                 else:
-                    p = {"xsize": 16, "ysize": 12, "ylim": [43.75, 47.05], "xlim": [6.70, 14.05], "s": 150}
+                    p = {"xsize": 16, "ysize": 12, "ylim": [43.75, 47.05], "xlim": [6.70, 14.05], "s": 100}
                 pos = np.stack((graph[0]['high'].lon.cpu().numpy(), graph[0]['high'].lat.cpu().numpy()),axis=-1)
                 zones_file='./utils/Italia.txt'
                 zones = create_zones(zones_file=zones_file)
@@ -318,25 +320,25 @@ class Trainer(object):
                     cmap="coolwarm"
                     unit="[K]"
                     map_title="average temperature"
-                    diurnal_cycle_title="temperature diurnal cycle"
                     aggr=np.nanmean
                 else:
                     v_min=0
-                    v_max=2750
-                    range_bins=[0,75,1]
+                    v_max=0.3
+                    range_bins=[0,150,0.5]
                     ylim_pdf=None
-                    ylim_diurnal_cycles=[0.5,3.5]
+                    ylim_diurnal_cycles=[0.0,0.3,0,30,0.5,3]
                     cmap="jet"
                     unit="[mm/h]"
-                    map_title="cumulative precipitation"
-                    diurnal_cycle_title="intensity diurnal cycle"
-                    aggr=np.nansum
+                    map_title="average precipitation"
+                    aggr=np.nanmean
                 fig_avg = plot_maps(pos, y_pred_plot, y_plot, pr_min=v_min, aggr=aggr, pr_max=v_max,
                     title="", legend_title=unit, cmap=cmap, zones=zones, x_size=p["xsize"], y_size=p["ysize"],
                     font_size_title=20, font_size=20, cbar_title_size=20, s=p["s"], ylim=p["ylim"], xlim=p["xlim"], cbar_y=0.95, subtitle_x=0.55)
                 fig_pdf = plot_pdf(y_pred_plot, y_plot, range=range_bins, ylim=ylim_pdf, xlabel=unit)
-                fig_avg_dc = plot_diurnal_cycles(y_pred_plot, y_plot, ylim=ylim_diurnal_cycles, ylablel=unit)
-                
+                if target_type == "precipitation":
+                    fig_avg_dc, fig_freq_dc, fig_int_dc = plot_diurnal_cycles(y_pred_plot, y_plot, ylim=ylim_diurnal_cycles, ylablel=unit, which='all')
+                else:
+                    fig_avg_dc = plot_diurnal_cycles(y_pred_plot, y_plot, ylim=ylim_diurnal_cycles, ylablel=unit, which='avg')
                 # Apply mask
                 y_pred_val, y_val = y_pred_val[train_mask_val], y_val[train_mask_val]
                     
@@ -349,7 +351,16 @@ class Trainer(object):
                 else:
                     loss_val = loss_fn(y_pred_val.flatten(), y_val.flatten())
 
-                accelerator.log({map_title: [wandb.Image(fig_avg)], "pdf": [wandb.Image(fig_pdf)], diurnal_cycle_title: [wandb.Image(fig_avg_dc)]}, step=step)
+                if target_type == "precipitation":
+                    accelerator.log({map_title: [wandb.Image(fig_avg)], "pdf": [wandb.Image(fig_pdf)],
+                                 "average diurnal cycle": [wandb.Image(fig_avg_dc)],
+                                 "frequency diurnal cycle": [wandb.Image(fig_freq_dc)],
+                                 "intensity diurnal cycle": [wandb.Image(fig_int_dc)]
+                                 }, step=step)
+                else:
+                    accelerator.log({map_title: [wandb.Image(fig_avg)], "pdf": [wandb.Image(fig_pdf)],
+                                 "average diurnal cycle": [wandb.Image(fig_avg_dc)],
+                                 }, step=step)
                 plt.close()                
 
             if lr_scheduler is not None:
