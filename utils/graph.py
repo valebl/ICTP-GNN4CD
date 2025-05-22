@@ -104,7 +104,7 @@ def derive_edge_index_within(lon_radius, lat_radius, lon_senders, lat_senders, l
         return edge_index
 
 
-def derive_edge_index_multiscale(lon_senders ,lat_senders, lon_receivers, lat_receivers, k, undirected=False, use_edge_attr=True):
+def derive_edge_index_multiscale(lon_senders, lat_senders, lon_receivers, lat_receivers, k, undirected=False, use_edge_attr=True):
     '''
     Derives edge_indexes between two sets of nodes based on specified number of neighbours k
     Args:
@@ -123,7 +123,7 @@ def derive_edge_index_multiscale(lon_senders ,lat_senders, lon_receivers, lat_re
     lonlat_receivers = np.column_stack((lon_receivers,lat_receivers))
 
     dist = cdist(lonlat_receivers, lonlat_senders, metric='euclidean')
-    neighbours = np.argsort(dist, axis=-1)[:, 1:k+1]
+    neighbours = np.argsort(dist, axis=-1)[:, :k]
     # _ , neighbours = dist.topk(k, largest=False, dim=-1)
 
     for n_n2 in range(lonlat_receivers.shape[0]):
