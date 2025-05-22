@@ -161,8 +161,6 @@ class Trainer(object):
             
             # TRAIN
             for i, graph in enumerate(dataloader_train):
-                if i > 100:
-                    break
 
                 optimizer.zero_grad()
                 y_pred = model(graph).squeeze()
