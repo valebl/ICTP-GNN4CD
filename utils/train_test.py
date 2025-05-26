@@ -8,8 +8,6 @@ from utils.tools import write_log
 from utils.plots import create_zones, plot_maps, plot_pdf, plot_diurnal_cycles
 import matplotlib.pyplot as plt
 
-# target_type = "temperature"
-target_type = "precipitation"
 
 #-----------------------------------------------------
 #---------------------- TRAIN ------------------------
@@ -292,7 +290,7 @@ class Trainer(object):
                 pos = np.stack((graph[0]['high'].lon.cpu().numpy(), graph[0]['high'].lat.cpu().numpy()),axis=-1)
                 zones_file='./utils/Italia.txt'
                 zones = create_zones(zones_file=zones_file)
-                if target_type == "precipitation":
+                if args.target_type == "precipitation":
                     y_pred_plot = torch.expm1(y_pred_val)
                     y_plot = torch.expm1(y_val)
                 else:
@@ -309,7 +307,7 @@ class Trainer(object):
                 y_plot = y_plot.cpu().numpy()[:,indices]
                 with open(args.output_path+"indices.pkl", 'wb') as f:
                     pickle.dump(indices, f)
-                if target_type == "temperature":
+                if args.target_type == "temperature":
                     v_min=270
                     v_max=290
                     range_bins=[250,350,1]
@@ -333,7 +331,7 @@ class Trainer(object):
                     title="", legend_title=unit, cmap=cmap, zones=zones, x_size=p["xsize"], y_size=p["ysize"],
                     font_size_title=20, font_size=20, cbar_title_size=20, s=p["s"], ylim=p["ylim"], xlim=p["xlim"], cbar_y=0.95, subtitle_x=0.55)
                 fig_pdf = plot_pdf(y_pred_plot, y_plot, range=range_bins, ylim=ylim_pdf, xlabel=unit)
-                if target_type == "precipitation":
+                if args.target_type == "precipitation":
                     fig_avg_dc, fig_freq_dc, fig_int_dc = plot_diurnal_cycles(y_pred_plot, y_plot, ylim=ylim_diurnal_cycles, ylablel=unit, which='all')
                 else:
                     fig_avg_dc = plot_diurnal_cycles(y_pred_plot, y_plot, ylim=ylim_diurnal_cycles, ylablel=unit, which='avg')
@@ -349,7 +347,7 @@ class Trainer(object):
                 else:
                     loss_val = loss_fn(y_pred_val.flatten(), y_val.flatten())
 
-                if target_type == "precipitation":
+                if args.target_type == "precipitation":
                     accelerator.log({map_title: [wandb.Image(fig_avg)], "pdf": [wandb.Image(fig_pdf)],
                                  "average diurnal cycle": [wandb.Image(fig_avg_dc)],
                                  "frequency diurnal cycle": [wandb.Image(fig_freq_dc)],

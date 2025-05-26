@@ -66,7 +66,7 @@ parser.add_argument('--dataset_name', type=str, default='Dataset_Graph')
 parser.add_argument('--collate_name', type=str)
 
 parser.add_argument('--stats_mode', type=str, default="var")
-
+parser.add_argument('--target_type', type=str, default="precipitation")
 
 #-- start and end training dates
 parser.add_argument('--train_year_start', type=int)
@@ -78,8 +78,6 @@ parser.add_argument('--train_day_end', type=int)
 parser.add_argument('--first_year', type=int)
 parser.add_argument('--validation_year', type=int, default=None)
 
-# target_type = "temperature"
-target_type = "precipitation"
 
 if __name__ == '__main__':
 
@@ -123,7 +121,7 @@ if __name__ == '__main__':
 
     models = importlib.import_module(f"models.{args.model_name}")
     Model = getattr(models, args.model_name)
-    if target_type == "temperature":
+    if args.target_type == "temperature":
         model = Model(h_in=4*5, h_hid=4*5, high_in=1)
     else:
         model = Model()
@@ -152,7 +150,7 @@ if __name__ == '__main__':
     with open(args.input_path+args.target_file, 'rb') as f:
         target_train = pickle.load(f)
 
-    if target_type == "precipitation":
+    if args.target_type == "precipitation":
         # derive two masks:
         # - mask_not_nan, i.e. where the target is not nan
         # - mask_geq_threshold, i.e. where the target is larger than the preferred threshold (now 0.1mm)
@@ -261,7 +259,7 @@ if __name__ == '__main__':
         write_log(f"\nHigh land_use: mean={low_high_graph['high'].x[:,1:].mean()}, std={low_high_graph['high'].x[:,1:].std()}",
               args, accelerator, 'a')
     
-    if target_type == "temperature":
+    if args.target_type == "temperature":
         low_high_graph['low'].x = torch.cat((low_high_graph['low'].x[:,:,:1,:], low_high_graph['low'].x[:,:,2:,:]), dim=2)
 
     low_high_graph['low'].x = torch.flatten(low_high_graph['low'].x, start_dim=2, end_dim=-1)   # num_nodes, time, vars*levels

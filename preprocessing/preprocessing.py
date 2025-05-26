@@ -44,13 +44,12 @@ parser.add_argument('--suffix_phase_2', type=str, default='')
 parser.add_argument('--mask_path', type=str)
 parser.add_argument('--mask_file', type=str)
 parser.add_argument('--predictors_type', type=str)
+parser.add_argument('--target_type', type=str, default="precipitation")
 
 #-- era5
 parser.add_argument('--input_files_prefix_low', type=str, help='prefix for the input files (convenction: {prefix}{parameter}.nc)', default='')
 parser.add_argument('--n_levels_low', type=int, help='number of pressure levels considered', default=5)
 
-# target_type = "temperature"
-target_type = "precipitation"
 
 ######################################################
 ##------------- PRELIMINARY OPERATIONS -------------##
@@ -165,9 +164,9 @@ lon = dataset_high.lon.to_numpy()
 lat = dataset_high.lat.to_numpy()
 if lon.shape != lat.shape:
     lon, lat = np.meshgrid(lon, lat)
-if target_type == "precipitation":
+if args.target_type == "precipitation":
     target_high = dataset_high.pr.to_numpy()
-elif target_type == "temperature":
+elif args.target_type == "temperature":
     target_high = dataset_high.t2m.to_numpy()
 
 write_log(f"\nLoading mask_land.", args, accelerator=None, mode='a')
