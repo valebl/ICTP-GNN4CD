@@ -178,7 +178,7 @@ if __name__ == '__main__':
     
         target_train[mask_nan] = torch.nan
 
-    elif target_type == "temperature":
+    elif args.target_type == "temperature":
         # scale to [0,1]
         min_val = 250
         max_val = 350
