@@ -66,7 +66,7 @@ parser.add_argument('--dataset_name', type=str, default='Dataset_Graph')
 parser.add_argument('--collate_name', type=str)
 
 parser.add_argument('--stats_mode', type=str, default="var")
-parser.add_argument('--target_type', type=str, default="precipitation")
+parser.add_argument('--target_type', type=str)
 
 #-- start and end training dates
 parser.add_argument('--train_year_start', type=int)
