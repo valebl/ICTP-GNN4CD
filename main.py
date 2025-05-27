@@ -150,13 +150,14 @@ if __name__ == '__main__':
     with open(args.input_path+args.target_file, 'rb') as f:
         target_train = pickle.load(f)
 
+    mask_nan = torch.isnan(target_train)
+
     if args.target_type == "precipitation":
         # derive two masks:
         # - mask_not_nan, i.e. where the target is not nan
         # - mask_geq_threshold, i.e. where the target is larger than the preferred threshold (now 0.1mm)
         threshold = 0.1
 
-        mask_nan = torch.isnan(target_train)
         mask_threshold = target_train < threshold #mm
 
         # set to 0.0 everything below sensitivity threshold
@@ -176,6 +177,14 @@ if __name__ == '__main__':
             target_train = torch.log1p(target_train)
     
         target_train[mask_nan] = torch.nan
+
+    elif target_type == "temperature":
+        # scale to [0,1]
+        min_val = 250
+        max_val = 350
+        target_train = (target_train - min_val) / (max_val - min_val)
+        target_train[mask_nan] = torch.nan
+
 
     idxs_not_all_nan = find_not_all_nan_times(target_train)
 
@@ -261,6 +270,7 @@ if __name__ == '__main__':
     
     if args.target_type == "temperature":
         low_high_graph['low'].x = torch.cat((low_high_graph['low'].x[:,:,:1,:], low_high_graph['low'].x[:,:,2:,:]), dim=2)
+        low_high_graph['high'].x = low_high_graph['high'].x[:,:1]
 
     low_high_graph['low'].x = torch.flatten(low_high_graph['low'].x, start_dim=2, end_dim=-1)   # num_nodes, time, vars*levels
 
@@ -300,9 +310,9 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     # optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=0.1)
+    # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=0.1)
     # lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
-    # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=0.000001, last_epoch=-1)
+    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=0.000001, last_epoch=-1)
 
 #-----------------------------------------------------
 #------------------ LOAD PARAMETERS ------------------
