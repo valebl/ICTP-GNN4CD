@@ -50,6 +50,7 @@ parser.add_argument('--fine_tuning',  action='store_true')
 parser.add_argument('--no-fine_tuning', dest='fine_tuning', action='store_false')
 parser.add_argument('--load_checkpoint',  action='store_true')
 parser.add_argument('--no-load_checkpoint', dest='load_checkpoint', action='store_false')
+parser.add_argument('--lr_scheduler', type=str, default="StepLR")
 
 parser.add_argument('--checkpoint_ctd', type=str, help='checkpoint to load to continue')
 parser.add_argument('--ctd_training',  action='store_true')
@@ -310,9 +311,14 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     # optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=0.1)
-    # lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
-    # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=0.000001, last_epoch=-1)
+    if args.lr_scheduler == "StepLR":
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=0.1)
+    elif args.lr_scheduler == "ReduceLROnPlateau":
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
+    elif args.lr_scheduler == "CosineAnnealingLR":
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=0.000001, last_epoch=-1)
+    else:
+        lr_scheduler = None
 
 #-----------------------------------------------------
 #------------------ LOAD PARAMETERS ------------------
