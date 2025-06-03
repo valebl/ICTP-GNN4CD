@@ -98,7 +98,7 @@ def derive_edge_index_within(lon_radius, lat_radius, lon_senders, lat_senders, l
     if use_edge_attr:
         senders = edge_index[0]
         receivers = edge_index[1]
-        edge_attr = get_edge_features(lon_senders, lat_senders, lon_receivers, lat_receivers, senders, receivers)
+        edge_attr = get_edge_features_2d(lon_senders, lat_senders, lon_receivers, lat_receivers, senders, receivers)
         return edge_index, edge_attr
     else:
         return edge_index
@@ -144,10 +144,35 @@ def derive_edge_index_multiscale(lon_senders, lat_senders, lon_receivers, lat_re
     if use_edge_attr:
         senders = edge_index[0]
         receivers = edge_index[1]
-        edge_attr = get_edge_features(lon_senders, lat_senders, lon_receivers, lat_receivers, senders, receivers)
+        edge_attr = get_edge_features_2d(lon_senders, lat_senders, lon_receivers, lat_receivers, senders, receivers)
         return edge_index, edge_attr
     else:
         return edge_index
+
+
+def get_edge_features_2d(node_lon_senders, node_lat_senders, node_lon_receivers, node_lat_receivers,
+                      senders, receivers):
+    
+    node_pos_senders = np.stack((node_lon_senders, node_lat_senders), axis=-1)
+    node_pos_receivers = np.stack((node_lon_receivers, node_lat_receivers), axis=-1)
+
+    relative_position = node_pos_senders[senders] - node_pos_receivers[receivers]
+
+    # L2 distance in 3d space, rather than geodesic distance.
+    relative_edge_distances = np.linalg.norm(relative_position, axis=-1, keepdims=True)
+
+    # Normalize to the maximum edge distance. Note that we expect to always
+    # have an edge that goes in the opposite direction of any given edge
+    # so the distribution of relative positions should be symmetric around
+    # zero. So by scaling by the maximum length, we expect all relative
+    # positions to fall in the [-1., 1.] interval, and all relative distances
+    # to fall in the [0., 1.] interval.
+    max_edge_distance = relative_edge_distances.max()
+    relative_edge_distances = relative_edge_distances / max_edge_distance
+    relative_position = relative_position / max_edge_distance
+
+    return np.concatenate((relative_position, relative_edge_distances), axis=-1)
+
     
 def get_edge_features(node_lon_senders, node_lat_senders, node_lon_receivers, node_lat_receivers,
                       senders, receivers, rotate_latitude=True, rotate_longitude=True):

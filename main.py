@@ -171,8 +171,8 @@ if __name__ == '__main__':
         elif args.model_type == "reg":
             #-- REGRESSOR ON pr >=threshold --#    
             target_train = torch.log1p(target_train)
-            target_train[target_train < threshold] = torch.nan
-        elif args.model_type =="all":
+            target_train[mask_threshold] = torch.nan
+        elif args.model_type == "all":
             #-- REGRESSOR ON ALL --#    
             target_train = torch.log1p(target_train)
     
@@ -310,9 +310,9 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     # optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     
-    # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=0.1)
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=0.1)
     # lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
-    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=0.000001, last_epoch=-1)
+    # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=0.000001, last_epoch=-1)
 
 #-----------------------------------------------------
 #------------------ LOAD PARAMETERS ------------------

@@ -357,7 +357,13 @@ class Trainer(object):
                     accelerator.log({map_title: [wandb.Image(fig_avg)], "pdf": [wandb.Image(fig_pdf)],
                                  "average diurnal cycle": [wandb.Image(fig_avg_dc)],
                                  }, step=step)
-                plt.close()                
+
+                plt.close(fig_avg)     
+                plt.close(fig_pdf)     
+                plt.close(fig_avg_dc)
+                if args.target_type == "precipitation":
+                    plt.close(fig_freq_dc)
+                    plt.close(fig_int_dc)  
 
             if lr_scheduler is not None:
                 # lr_scheduler.step(loss_val.item())
