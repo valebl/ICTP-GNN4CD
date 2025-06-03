@@ -386,7 +386,7 @@ def plot_pdf(pr_pred, y, fontsize=18, range=[0,200,0.5], ylim=[10**(-8),5], xlab
     # ax.set_xscale('log')
     # ax.minorticks_on()
     # ax.grid(visible=True, which='both', axis='both', color='lightgrey', zorder=0)
-    ax.set_xlabel('precipitation [mm/h]', fontsize=fontsize)
+    ax.set_xlabel(xlabel, fontsize=fontsize)
     ax.set_ylabel('frequency', fontsize=fontsize)
 
     return fig
@@ -396,6 +396,14 @@ def plot_diurnal_cycles(y_pred, y, aggr=np.nanmean, fontsize=25, figsize=(16,18)
 
     plt.rcParams.update({'font.size': fontsize})
 
+    fig_1, ax_1 = plt.subplots(nrows=2, ncols=2, figsize=figsize)
+    fig_1.set_tight_layout(True)
+    if which == 'all':
+        fig_2, ax_2 = plt.subplots(nrows=2, ncols=2, figsize=figsize)
+        fig_3, ax_3 = plt.subplots(nrows=2, ncols=2, figsize=figsize)
+        fig_2.set_tight_layout(True)
+        fig_3.set_tight_layout(True)
+
     # create seasons
     jf_start = 0 # january-february
     if y_pred.shape[1] == 8760:
@@ -404,7 +412,10 @@ def plot_diurnal_cycles(y_pred, y, aggr=np.nanmean, fontsize=25, figsize=(16,18)
         jf_end = (31 + 29) * 24
     else:
         print("\nInvalid number of hours in a year: {y_pred.shape[1]}")
-        return fig
+        if which == 'all':
+            return fig_1, fig_2, fig_3
+        else:
+            return fig_1
 
     mam_start = jf_end
     mam_end = mam_start + (31 + 30 + 31) * 24
@@ -421,14 +432,6 @@ def plot_diurnal_cycles(y_pred, y, aggr=np.nanmean, fontsize=25, figsize=(16,18)
                     np.arange(son_start, son_end)]
     
     text_list = ['DJF', 'MAM', 'JJA', 'SON']
-
-    fig_1, ax_1 = plt.subplots(nrows=2, ncols=2, figsize=figsize)
-    fig_1.set_tight_layout(True)
-    if which == 'all':
-        fig_2, ax_2 = plt.subplots(nrows=2, ncols=2, figsize=figsize)
-        fig_3, ax_3 = plt.subplots(nrows=2, ncols=2, figsize=figsize)
-        fig_2.set_tight_layout(True)
-        fig_3.set_tight_layout(True)
 
     for s in range(4):
         idxs = idxs_seasons[s]
