@@ -283,58 +283,78 @@ class Trainer(object):
 
                 ###### PLOTS ######
                 # Create a few plots to compare
-                if "fvg" in args.input_path:
-                    p = {"xsize": 8, "ysize": 12, "ylim": [45.45, 46.8], "xlim": [12.70, 14.05], "s": 200}
-                else:
-                    p = {"xsize": 16, "ysize": 12, "ylim": [43.75, 47.05], "xlim": [6.70, 14.05], "s": 100}
-                pos = np.stack((graph[0]['high'].lon.cpu().numpy(), graph[0]['high'].lat.cpu().numpy()),axis=-1)
-                zones_file='./utils/Italia.txt'
-                zones = create_zones(zones_file=zones_file)
-                if args.target_type == "precipitation":
-                    y_pred_plot = torch.expm1(y_pred_val)
-                    y_plot = torch.expm1(y_val)
-                else:
-                    min_val = 250
-                    max_val= 350
-                    y_pred_plot = y_pred_val * (max_val - min_val) + min_val
-                    y_plot = y_val * (max_val - min_val) + min_val
-                y_pred_plot[~train_mask_val] = torch.nan
-                y_plot[~train_mask_val] = torch.nan
-                # convert to cpu and numpy
-                _, indices = torch.sort(t)
-                indices = indices.cpu().numpy()
-                y_pred_plot = y_pred_plot.cpu().numpy()[:,indices]
-                y_plot = y_plot.cpu().numpy()[:,indices]
-                with open(args.output_path+"indices.pkl", 'wb') as f:
-                    pickle.dump(indices, f)
-                if args.target_type == "temperature":
-                    v_min=270
-                    v_max=290
-                    range_bins=[250,350,1]
-                    ylim_pdf=None
-                    ylim_diurnal_cycles=[270,300]
-                    cmap="coolwarm"
-                    unit="[K]"
-                    map_title="average temperature"
-                    aggr=np.nanmean
-                else:
-                    v_min=0
-                    v_max=0.3
-                    range_bins=[0,150,0.5]
-                    ylim_pdf=None
-                    ylim_diurnal_cycles=[0.0,0.3,0,30,0.5,3]
-                    cmap="jet"
-                    unit="[mm/h]"
-                    map_title="average precipitation"
-                    aggr=np.nanmean
-                fig_avg = plot_maps(pos, y_pred_plot, y_plot, pr_min=v_min, aggr=aggr, pr_max=v_max,
-                    title="", legend_title=unit, cmap=cmap, zones=zones, x_size=p["xsize"], y_size=p["ysize"],
-                    font_size_title=20, font_size=20, cbar_title_size=20, s=p["s"], ylim=p["ylim"], xlim=p["xlim"], cbar_y=0.95, subtitle_x=0.55)
-                fig_pdf = plot_pdf(y_pred_plot, y_plot, range=range_bins, ylim=ylim_pdf, xlabel=unit)
-                if args.target_type == "precipitation":
-                    fig_avg_dc, fig_freq_dc, fig_int_dc = plot_diurnal_cycles(y_pred_plot, y_plot, ylim=ylim_diurnal_cycles, ylablel=unit, which='all')
-                else:
-                    fig_avg_dc = plot_diurnal_cycles(y_pred_plot, y_plot, ylim=ylim_diurnal_cycles, ylablel=unit, which='avg')
+                if epoch >= 15:
+                    if "fvg" in args.input_path:
+                        p = {"xsize": 8, "ysize": 12, "ylim": [45.45, 46.8], "xlim": [12.70, 14.05], "s": 200}
+                    else:
+                        p = {"xsize": 16, "ysize": 12, "ylim": [43.75, 47.05], "xlim": [6.70, 14.05], "s": 100}
+                    pos = np.stack((graph[0]['high'].lon.cpu().numpy(), graph[0]['high'].lat.cpu().numpy()),axis=-1)
+                    zones_file='./utils/Italia.txt'
+                    zones = create_zones(zones_file=zones_file)
+                    if args.target_type == "precipitation":
+                        y_pred_plot = torch.expm1(y_pred_val)
+                        y_plot = torch.expm1(y_val)
+                    else:
+                        min_val = 250
+                        max_val= 350
+                        y_pred_plot = y_pred_val * (max_val - min_val) + min_val
+                        y_plot = y_val * (max_val - min_val) + min_val
+                    y_pred_plot[~train_mask_val] = torch.nan
+                    y_plot[~train_mask_val] = torch.nan
+                    # convert to cpu and numpy
+                    _, indices = torch.sort(t)
+                    indices = indices.cpu().numpy()
+                    y_pred_plot = y_pred_plot.cpu().numpy()[:,indices]
+                    y_plot = y_plot.cpu().numpy()[:,indices]
+                    with open(args.output_path+"indices.pkl", 'wb') as f:
+                        pickle.dump(indices, f)
+                    if args.target_type == "temperature":
+                        v_min=270
+                        v_max=290
+                        range_bins=[250,350,1]
+                        ylim_pdf=None
+                        ylim_diurnal_cycles=[270,300]
+                        cmap="coolwarm"
+                        unit="[K]"
+                        map_title="average temperature"
+                        aggr=np.nanmean
+                    else:
+                        v_min=0
+                        v_max=0.3
+                        range_bins=[0,150,0.5]
+                        ylim_pdf=None
+                        ylim_diurnal_cycles=[0.0,0.3,0,30,0.5,3]
+                        cmap="jet"
+                        unit="[mm/h]"
+                        map_title="average precipitation"
+                        aggr=np.nanmean
+                    fig_avg = plot_maps(pos, y_pred_plot, y_plot, pr_min=v_min, aggr=aggr, pr_max=v_max,
+                        title="", legend_title=unit, cmap=cmap, zones=zones, x_size=p["xsize"], y_size=p["ysize"],
+                        font_size_title=20, font_size=20, cbar_title_size=20, s=p["s"], ylim=p["ylim"], xlim=p["xlim"], cbar_y=0.95, subtitle_x=0.55)
+                    fig_pdf = plot_pdf(y_pred_plot, y_plot, range=range_bins, ylim=ylim_pdf, xlabel=unit)
+                    if args.target_type == "precipitation":
+                        fig_avg_dc, fig_freq_dc, fig_int_dc = plot_diurnal_cycles(y_pred_plot, y_plot, ylim=ylim_diurnal_cycles, ylablel=unit, which='all')
+                    else:
+                        fig_avg_dc = plot_diurnal_cycles(y_pred_plot, y_plot, ylim=ylim_diurnal_cycles, ylablel=unit, which='avg')
+                        
+                    if args.target_type == "precipitation":
+                        accelerator.log({map_title: [wandb.Image(fig_avg)], "pdf": [wandb.Image(fig_pdf)],
+                                    "average diurnal cycle": [wandb.Image(fig_avg_dc)],
+                                    "frequency diurnal cycle": [wandb.Image(fig_freq_dc)],
+                                    "intensity diurnal cycle": [wandb.Image(fig_int_dc)]
+                                    }, step=step)
+                    else:
+                        accelerator.log({map_title: [wandb.Image(fig_avg)], "pdf": [wandb.Image(fig_pdf)],
+                                    "average diurnal cycle": [wandb.Image(fig_avg_dc)],
+                                    }, step=step)
+                    
+                    plt.close(fig_avg)     
+                    plt.close(fig_pdf)     
+                    plt.close(fig_avg_dc)
+                    if args.target_type == "precipitation":
+                        plt.close(fig_freq_dc)
+                        plt.close(fig_int_dc)  
+                
                 # Apply mask
                 y_pred_val, y_val = y_pred_val[train_mask_val], y_val[train_mask_val]
                     
@@ -347,24 +367,6 @@ class Trainer(object):
                 else:
                     loss_val = loss_fn(y_pred_val.flatten(), y_val.flatten())
 
-                if args.target_type == "precipitation":
-                    accelerator.log({map_title: [wandb.Image(fig_avg)], "pdf": [wandb.Image(fig_pdf)],
-                                 "average diurnal cycle": [wandb.Image(fig_avg_dc)],
-                                 "frequency diurnal cycle": [wandb.Image(fig_freq_dc)],
-                                 "intensity diurnal cycle": [wandb.Image(fig_int_dc)]
-                                 }, step=step)
-                else:
-                    accelerator.log({map_title: [wandb.Image(fig_avg)], "pdf": [wandb.Image(fig_pdf)],
-                                 "average diurnal cycle": [wandb.Image(fig_avg_dc)],
-                                 }, step=step)
-
-                plt.close(fig_avg)     
-                plt.close(fig_pdf)     
-                plt.close(fig_avg_dc)
-                if args.target_type == "precipitation":
-                    plt.close(fig_freq_dc)
-                    plt.close(fig_int_dc)  
-
             if lr_scheduler is not None:
                 # lr_scheduler.step(loss_val.item())
                 lr_scheduler.step()
@@ -375,6 +377,155 @@ class Trainer(object):
                                  'lr': np.mean(lr_scheduler.get_last_lr())}, step=step)
             else:
                 accelerator.log({'epoch':epoch, 'validation loss (1GPU)': loss_val_1gpu.item(), 'validation loss': loss_val.item(),
+                                 'lr': np.mean(lr_scheduler.get_last_lr())}, step=step)
+                
+
+    #--- REGRESSOR
+    def train_reg_ZIG(self, model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=0):
+        
+        write_log(f"\nStart training the regressor.", args, accelerator, 'a')
+
+        step = 0
+        
+        for epoch in range(epoch_start, epoch_start+args.epochs):
+
+            model.train()
+            write_log(f"\nEpoch {epoch+1} --- learning rate {optimizer.param_groups[0]['lr']:.8f}", args, accelerator, 'a')
+            
+            # Define objects to track meters
+            loss_meter = AverageMeter()
+
+            start = time.time()
+            
+            # TRAIN
+            for i, graph in enumerate(dataloader_train):
+
+                optimizer.zero_grad()
+                p_zero, alpha, beta = model(graph)
+                y_pred = (1 - p_zero) * (alpha / (beta + 1e-6))
+
+                train_mask = graph['high'].train_mask
+                y = graph['high'].y
+
+                # Gather from all processes for metrics
+                all_y_pred, all_y, all_train_mask = accelerator.gather((y_pred, y, train_mask))
+
+                # Apply mask
+                y_pred, y, p_zero, alpha, beta = y_pred[train_mask], y[train_mask], p_zero[train_mask], alpha[train_mask], beta[train_mask]
+                all_y_pred, all_y = all_y_pred[all_train_mask], all_y[all_train_mask]
+                
+                loss = loss_fn(y, p_zero, alpha, beta)
+                
+                accelerator.backward(loss)
+                #accelerator.clip_grad_norm_(model.parameters(), 5)
+                optimizer.step()
+                step += 1
+                
+                # Log values to wandb
+                loss_meter.update(val=loss.item(), n=y_pred.shape[0])    
+
+                accelerator.log({'epoch':epoch, 'loss iteration': loss_meter.val, 'loss avg': loss_meter.avg}, step=step)
+
+            end = time.time()
+
+            accelerator.log({'epoch':epoch, 'train loss': loss_meter.avg}, step=step)
+
+            write_log(f"\nEpoch {epoch+1} completed in {end - start:.4f} seconds." +
+                      f"Loss - total: {loss_meter.sum:.4f} - average: {loss_meter.avg:.10f}. ", args, accelerator, 'a')
+                    
+            accelerator.save_state(output_dir=args.output_path+f"checkpoint_{epoch}/", safe_serialization=False)
+            torch.save({"epoch": epoch}, args.output_path+f"checkpoint_{epoch}/epoch")
+
+            # VALIDATION
+            # Validation is performed on all the validation dataset at once
+            model.eval()
+
+            y_pred_val = []
+            y_val = []
+            train_mask_val = []
+            t = []
+
+            with torch.no_grad():    
+                for graph in dataloader_val:
+
+                    p_zero, alpha, beta = model(graph)
+                    y_pred = (1 - p_zero) * (alpha / (beta + 1e-6))
+                    
+                    graph['high'].x_high = y_pred
+                    graph._slice_dict['high']['x_high'] = graph._slice_dict['high']['y']
+                    graph._inc_dict['high']['x_high'] = graph._inc_dict['high']['y']
+                    graph = graph.to_data_list()
+                    [y_pred_val.append(graph_i['high'].x_high) for graph_i in y_pred]
+                    [train_mask_val.append(graph_i["high"].train_mask) for graph_i in graph]
+                    [y_val.append(graph_i['high'].y) for graph_i in graph]
+                    [t.append(graph_i.t) for graph_i in graph]
+
+                # Create tensors
+                train_mask_val = torch.stack(train_mask_val, dim=-1).squeeze().swapaxes(0,1) # time, nodes
+                y_pred_val = torch.stack(y_pred_val, dim=-1).squeeze().swapaxes(0,1)
+                y_val = torch.stack(y_val, dim=-1).squeeze().swapaxes(0,1)
+                t = torch.stack(t, dim=-1).squeeze()
+
+                # Log validation metrics for 1GPU
+                loss_val_1gpu = loss_fn(y_pred_val.flatten()[train_mask_val.flatten()],
+                                            y_val.flatten()[train_mask_val.flatten()])
+
+                # Gather from all processes for metrics
+                y_pred_val, y_val, train_mask_val, t = accelerator.gather((y_pred_val, y_val, train_mask_val, t))
+
+                # nodes, time
+                y_pred_val, y_val, train_mask_val = y_pred_val.swapaxes(0,1), y_val.swapaxes(0,1), train_mask_val.swapaxes(0,1) # nodes, time
+
+                ###### PLOTS ######
+                # Create a few plots to compare
+                if epoch >= 0:
+                    if "fvg" in args.input_path:
+                        p = {"xsize": 8, "ysize": 12, "ylim": [45.45, 46.8], "xlim": [12.70, 14.05], "s": 200}
+                    else:
+                        p = {"xsize": 16, "ysize": 12, "ylim": [43.75, 47.05], "xlim": [6.70, 14.05], "s": 100}
+                    pos = np.stack((graph[0]['high'].lon.cpu().numpy(), graph[0]['high'].lat.cpu().numpy()),axis=-1)
+                    zones_file='./utils/Italia.txt'
+                    zones = create_zones(zones_file=zones_file)
+                    y_pred_plot[~train_mask_val] = torch.nan
+                    y_plot[~train_mask_val] = torch.nan
+                    # convert to cpu and numpy
+                    _, indices = torch.sort(t)
+                    indices = indices.cpu().numpy()
+                    y_pred_plot = y_pred_plot.cpu().numpy()[:,indices]
+                    y_plot = y_plot.cpu().numpy()[:,indices]
+                    with open(args.output_path+"indices.pkl", 'wb') as f:
+                        pickle.dump(indices, f)
+                    v_min=0
+                    v_max=0.3
+                    range_bins=[0,150,0.5]
+                    ylim_pdf=None
+                    ylim_diurnal_cycles=[0.0,0.3,0,30,0.5,3]
+                    cmap="jet"
+                    unit="[mm/h]"
+                    map_title="average precipitation"
+                    aggr=np.nanmean
+                    fig_avg = plot_maps(pos, y_pred_plot, y_plot, pr_min=v_min, aggr=aggr, pr_max=v_max,
+                        title="", legend_title=unit, cmap=cmap, zones=zones, x_size=p["xsize"], y_size=p["ysize"],
+                        font_size_title=20, font_size=20, cbar_title_size=20, s=p["s"], ylim=p["ylim"], xlim=p["xlim"], cbar_y=0.95, subtitle_x=0.55)
+                    fig_pdf = plot_pdf(y_pred_plot, y_plot, range=range_bins, ylim=ylim_pdf, xlabel=unit)
+                    fig_avg_dc, fig_freq_dc, fig_int_dc = plot_diurnal_cycles(y_pred_plot, y_plot, ylim=ylim_diurnal_cycles, ylablel=unit, which='all')
+                    accelerator.log({map_title: [wandb.Image(fig_avg)], "pdf": [wandb.Image(fig_pdf)],
+                                "average diurnal cycle": [wandb.Image(fig_avg_dc)],
+                                "frequency diurnal cycle": [wandb.Image(fig_freq_dc)],
+                                "intensity diurnal cycle": [wandb.Image(fig_int_dc)]
+                                }, step=step)
+                    for fig in [fig_avg, fig_pdf, fig_avg_dc, fig_freq_dc, fig_int_dc]:
+                        plt.close(fig)
+                
+                # Apply mask
+                y_pred_val, y_val = y_pred_val[train_mask_val], y_val[train_mask_val]
+            
+                loss_val = loss_fn(y_pred_val.flatten(), y_val.flatten())
+
+            if lr_scheduler is not None:
+                lr_scheduler.step()
+
+            accelerator.log({'epoch':epoch, 'validation loss (1GPU)': loss_val_1gpu.item(), 'validation loss': loss_val.item(),
                                  'lr': np.mean(lr_scheduler.get_last_lr())}, step=step)
                 
 

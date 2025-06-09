@@ -140,3 +140,25 @@ class quantized_loss_asym():
         # Penalize only false positives
         penalty = ((prediction_batch - threshold)**2) * no_rain_mask * false_positive_mask
         return penalty.mean()
+
+
+def zig_loss(y, p_zero, alpha, beta, epsilon=1e-6):
+    # y: (batch,) target in mm
+    # p_zero, alpha, beta: model outputs
+
+    zero_mask = (y == 0).float()
+    nonzero_mask = (y > 0).float()
+
+    # Gamma PDF: log(Gamma(y; α, β)) = α*log(β) - log(Γ(α)) + (α-1)*log(y) - β*y
+    gamma_log_prob = (
+        alpha * torch.log(beta + epsilon)
+        - torch.lgamma(alpha + epsilon)
+        + (alpha - 1) * torch.log(y + epsilon)
+        - beta * y
+    )
+
+    # Full log-likelihood
+    log_prob = zero_mask * torch.log(p_zero + epsilon) + \
+               nonzero_mask * (torch.log(1 - p_zero + epsilon) + gamma_log_prob)
+
+    return -torch.mean(log_prob)

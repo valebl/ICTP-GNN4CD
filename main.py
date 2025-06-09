@@ -136,6 +136,8 @@ if __name__ == '__main__':
         loss_fn = getattr(utils.loss_functions, args.loss_fn)()
     elif args.loss_fn == 'weighted_mae_loss':
         loss_fn = getattr(utils.loss_functions, args.loss_fn)()
+    elif args.loss_fn == 'zig_loss':
+        loss_fn = getattr(utils.loss_functions, args.loss_fn)
     else:
         loss_fn = getattr(nn.functional, args.loss_fn) 
     
@@ -174,8 +176,9 @@ if __name__ == '__main__':
             target_train = torch.log1p(target_train)
             target_train[mask_threshold] = torch.nan
         elif args.model_type == "all":
-            #-- REGRESSOR ON ALL --#    
-            target_train = torch.log1p(target_train)
+            #-- REGRESSOR ON ALL --#
+            if args.loss_fn != 'zig_loss':
+                target_train = torch.log1p(target_train)
     
         target_train[mask_nan] = torch.nan
 
@@ -372,7 +375,10 @@ if __name__ == '__main__':
     if args.model_type == "cl":
         trainer.train_cl(model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=epoch_start)
     elif args.model_type == "reg" or args.model_type == "all":
-        trainer.train_reg(model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=epoch_start)
+        if "ZIG" in args.model_name:
+            trainer.train_reg_ZIG(model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=epoch_start)
+        else:
+            trainer.train_reg(model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=epoch_start)
     end = time.time()
 
     write_log(f"\nCompleted in {end - start} seconds.\nDONE!", args, accelerator, 'a')
