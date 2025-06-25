@@ -26,17 +26,18 @@ def create_zones(zones_file):
                 continue
             for k in range(len(zones[i][j])):
                 zones[i][j][k] = float(zones[i][j][k])
-    return zones
-
-
-def plot_italy(zones, ax, color='k', alpha_fill=0.1, linewidth=1, xlim=None, ylim=None):
-    j = 0
+    xy_zones = []
     for zone in zones:
-        x_zone = [zone[i][0] for i in range(len(zone)) if i > 0]
-        y_zone = [zone[i][1] for i in range(len(zone)) if i > 0]
-        ax.fill(x_zone, y_zone, color, alpha=alpha_fill)
+        xy_zones.append([[zone[i][0] for i in range(len(zone))], [zone[i][1] for i in range(len(zone))]])
+    return xy_zones
+
+
+def plot_italy(zones, ax, color='k', color_fill=None, alpha_fill=0.1, linewidth=1, xlim=None, ylim=None):
+    for zone in zones:
+        x_zone, y_zone = zone[0], zone[1]
+        if color_fill is not None:
+            ax.fill(x_zone, y_zone, color, alpha=alpha_fill)
         ax.plot(x_zone, y_zone, color, alpha=1, linewidth=linewidth)
-        j += 1
     if xlim is not None:
         ax.set_xlim(xlim)
     if ylim is not None:
@@ -411,7 +412,7 @@ def plot_diurnal_cycles(y_pred, y, aggr=np.nanmean, fontsize=25, figsize=(16,18)
     elif y_pred.shape[1] == 8784:
         jf_end = (31 + 29) * 24
     else:
-        print("\nInvalid number of hours in a year: {y_pred.shape[1]}")
+        print(f"\nInvalid number of hours in a year: {y_pred.shape[1]}")
         if which == 'all':
             return fig_1, fig_2, fig_3
         else:
