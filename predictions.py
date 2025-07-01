@@ -48,6 +48,7 @@ parser.add_argument('--mode', type=str, default="cl_reg")
 parser.add_argument('--test_idxs_file', type=str, default="")
 parser.add_argument('--stats_mode', type=str, default="var") 
 parser.add_argument('--target_type', type=str, default="precipitation")
+parser.add_argument('--seq_l', type=int)
 
 #-- start and end training dates
 parser.add_argument('--test_year_start', type=int)
@@ -148,7 +149,7 @@ if __name__ == '__main__':
 
     Dataset_Graph = getattr(dataset, args.dataset_name)
     
-    dataset_graph = Dataset_Graph(targets=None, graph=low_high_graph, model_name=args.model)
+    dataset_graph = Dataset_Graph(targets=None, graph=low_high_graph, model_name=args.model, seq_l=args.seq_l)
 
     custom_collate_fn = getattr(dataset, 'custom_collate_fn_graph')
         
@@ -166,7 +167,7 @@ if __name__ == '__main__':
         if args.target_type == "temperature":
             model = Model(h_in=4*5, h_hid=4*5, high_in=1)
         else:
-            model = Model()
+            model = model = Model(seq_l=args.seq_l+1)
 
     if accelerator is None:
         if args.mode == "cl_reg":

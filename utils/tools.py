@@ -148,12 +148,12 @@ def derive_train_val_idxs(train_year_start, train_month_start, train_day_start, 
     # Remove the idxs for which all graph nodes have nan target
     if idxs_not_all_nan is not None:
         train_idxs_list = [i for i in train_idxs_list if i in idxs_not_all_nan]
-        val_idxs = [i for i in val_idxs_list if i in idxs_not_all_nan]
+        val_idxs_list = [i for i in val_idxs_list if i in idxs_not_all_nan]
     
-    train_idxs = torch.tensor(train_idxs_list)
-    val_idxs = torch.tensor(val_idxs_list)
+    # train_idxs = torch.tensor(train_idxs_list)
+    # val_idxs = torch.tensor(val_idxs_list)
 
-    return train_idxs, val_idxs
+    return train_idxs_list, val_idxs_list
 
 
 def derive_train_val_test_idxs_random_months(train_year_start, train_month_start, train_day_start, train_year_end, train_month_end,
@@ -253,6 +253,34 @@ def derive_train_val_test_idxs_random_months(train_year_start, train_month_start
     return train_idxs, val_idxs
 
 
+def remove_extremes_idxs_from_training(
+    train_idxs,
+    extremes_dict={1: [22,11,2016,25,11,2016], 2:[9,10,2015,15,10,2015], 3:[31,10,2015,1,11,2015], 4:[13,9,2015,14,9,2015], 5:[9,11,2014,13,11,2014],
+                   6: [9,10,2014,13,10,2014], 7:[11,11,2012,12,11,2012], 8:[4,11,2011,4,11,2011], 9:[22,11,2011,22,11,2011], 10:[22,10,2011,22,10,2011]}):
+        
+    extremes_idxs_list = []
+
+    for _, l in extremes_dict.items():
+        day_start=l[0]
+        month_start=l[1]
+        year_start=l[2]
+        day_end=l[3]
+        month_end=l[4]
+        year_end=l[5]
+
+        start_idx, end_idx = date_to_idxs(day_start=day_start, month_start=month_start, year_start=year_start,
+                                                  day_end=day_end, month_end=month_end, year_end=year_end, first_year=2001)
+        
+        _ = [extremes_idxs_list.append(i) for i in range(start_idx, end_idx)]
+
+    print(extremes_idxs_list)
+
+    train_idxs_upd = [i for i in train_idxs if i not in extremes_idxs_list]
+
+    print(len(train_idxs), len(train_idxs_upd))
+    return train_idxs_upd
+
+                   
 def compute_input_statistics(x_low, x_high, args, accelerator=None):
 
     write_log(f'\nComputing statistics for the low-res input data.', args, accelerator, 'a')

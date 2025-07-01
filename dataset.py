@@ -25,11 +25,13 @@ class Dataset_Graph(Dataset):
         graph: Graph,
         targets: Targets,
         model_name: Model_Name,
+        seq_l: int = 24,
         **kwargs: Additional_Features
     ):
         self.graph = graph
         self.targets = targets
         self.model_name = model_name
+        self.seq_l = seq_l
         self.additional_feature_keys = []
         for key, value in kwargs.items():
             setattr(self, key, value)
@@ -70,7 +72,7 @@ class Dataset_Graph(Dataset):
         return x_low
 
     def __get_features_tminus25_to_t_every_1h(self, time_index: int):
-        x_low = self.graph['low'].x[:,time_index-24:time_index+1,:]     
+        x_low = self.graph['low'].x[:,time_index-self.seq_l:time_index+1,:]     
         x_low = x_low.flatten(start_dim=2, end_dim=-1)                  
         return x_low
 

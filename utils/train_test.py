@@ -136,7 +136,7 @@ class Trainer(object):
                              'lr': np.mean(lr_scheduler._last_lr)}, step=step)
                 
     #--- REGRESSOR
-    def train_reg(self, model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=0):
+    def train_reg(self, model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=0, make_plots=True):
         
         write_log(f"\nStart training the regressor.", args, accelerator, 'a')
 
@@ -283,7 +283,7 @@ class Trainer(object):
 
                 ###### PLOTS ######
                 # Create a few plots to compare
-                if epoch >= 15:
+                if make_plots:
                     if "fvg" in args.input_path:
                         p = {"xsize": 8, "ysize": 12, "ylim": [45.45, 46.8], "xlim": [12.70, 14.05], "s": 200}
                     else:

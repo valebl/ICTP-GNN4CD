@@ -16,7 +16,7 @@ import dataset
 import importlib
 
 import utils.loss_functions
-from utils.tools import write_log, check_freezed_layers, set_seed_everything
+from utils.tools import write_log, check_freezed_layers, set_seed_everything, remove_extremes_idxs_from_training
 from utils.tools import find_not_all_nan_times, derive_train_val_idxs, derive_train_val_test_idxs_random_months
 from utils.tools import compute_input_statistics, standardize_input
 from utils.train_test import Trainer
@@ -65,6 +65,7 @@ parser.add_argument('--model_type', type=str)
 parser.add_argument('--model_name', type=str, default='HiResPrecipNet')
 parser.add_argument('--dataset_name', type=str, default='Dataset_Graph')
 parser.add_argument('--collate_name', type=str)
+parser.add_argument('--seq_l', type=int)
 
 parser.add_argument('--stats_mode', type=str, default="var")
 parser.add_argument('--target_type', type=str)
@@ -125,7 +126,7 @@ if __name__ == '__main__':
     if args.target_type == "temperature":
         model = Model(h_in=4*5, h_hid=4*5, high_in=1)
     else:
-        model = Model()
+        model = Model(seq_l=args.seq_l+1)
 
     # Loss
     if args.loss_fn == 'sigmoid_focal_loss':
@@ -212,6 +213,11 @@ if __name__ == '__main__':
                 f"{args.train_day_end}/{args.train_month_end}/{args.train_year_end} with validation and test years" +
                 f"as 12 months chosen randomly within the {args.train_year_start}-{args.train_year_end} period..",
                 args, accelerator, 'a')
+        
+    # train_idxs = remove_extremes_idxs_from_training(train_idxs)
+
+    train_idxs = torch.tensor(train_idxs)
+    val_idxs = torch.tensor(val_idxs)
 
     train_start_idx = train_idxs.min()
     train_end_idx = train_idxs.max()
@@ -286,10 +292,10 @@ if __name__ == '__main__':
     
     if "quantized" in args.loss_fn:
         dataset_graph = Dataset_Graph(targets=target_train,
-            w=target_bins, graph=low_high_graph, model_name=args.model_name)
+            w=target_bins, graph=low_high_graph, model_name=args.model_name, seq_l=args.seq_l)
     else:
         dataset_graph = Dataset_Graph(targets=target_train,
-            graph=low_high_graph, model_name=args.model_name)
+            graph=low_high_graph, model_name=args.model_name, seq_l=args.seq_l)
 
     # Define the custom collate function
     custom_collate_fn = getattr(dataset, args.collate_name)
