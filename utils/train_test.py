@@ -88,7 +88,7 @@ class Trainer(object):
             # if lr_scheduler is not None and lr_scheduler.get_last_lr()[0] > 0.00001:
             #     lr_scheduler.step()
 
-            accelerator.save_state(output_dir=args.output_path+f"checkpoint_{epoch}/")
+            accelerator.save_state(output_dir=args.output_path+f"checkpoint_{epoch}/", safe_serialization=False)
             torch.save({"epoch": epoch}, args.output_path+f"checkpoint_{epoch}/epoch")
 
             # Perform the validation step
@@ -97,24 +97,63 @@ class Trainer(object):
             y_pred_val = []
             y_val = []
             train_mask_val = []
+            t = []
                 
-            with torch.no_grad():    
-                for i, graph in enumerate(dataloader_val):
+            with torch.no_grad():
+                for graph in dataloader_val:
                     # Append the data for the current epoch
-                    train_mask_val.append(graph["high"].train_mask)            
-                    y_pred_val.append(model(graph).squeeze())
-                    y_val.append(graph['high'].y)
+                    y_pred_val.extend(model(graph,inference=True)) # num_nodes, time
+                    graph = graph.to_data_list()
+                    [train_mask_val.append(graph_i["high"].train_mask) for graph_i in graph]
+                    [y_val.append(graph_i['high'].y) for graph_i in graph]
+                    [t.append(graph_i.t) for graph_i in graph]
 
                 # Create tensors
-                train_mask_val = torch.stack(train_mask_val)
-                y_pred_val = torch.stack(y_pred_val)
-                y_val = torch.stack(y_val)
+                train_mask_val = torch.stack(train_mask_val, dim=-1).squeeze().swapaxes(0,1) # time, nodes
+                y_pred_val = torch.stack(y_pred_val, dim=-1).squeeze().swapaxes(0,1)
+                y_val = torch.stack(y_val, dim=-1).squeeze().swapaxes(0,1)
+                t = torch.stack(t, dim=-1).squeeze()
 
                 # Validation metrics for 1GPU
                 loss_val_1gpu = loss_fn(y_pred_val[train_mask_val], y_val[train_mask_val], alpha, gamma, reduction="mean")
 
                 # Gather from all processes for metrics
                 y_pred_val, y_val, train_mask_val = accelerator.gather((y_pred_val, y_val, train_mask_val))
+
+                # ###### PLOTS ######
+                # # Create a few plots to compare
+                # if args.make_val_plots:
+                #     if "fvg" in args.input_path:
+                #         p = {"xsize": 8, "ysize": 12, "ylim": [45.45, 46.8], "xlim": [12.70, 14.05], "s": 200}
+                #     else:
+                #         p = {"xsize": 16, "ysize": 12, "ylim": [43.75, 47.05], "xlim": [6.70, 14.05], "s": 100}
+                #     pos = np.stack((graph[0]['high'].lon.cpu().numpy(), graph[0]['high'].lat.cpu().numpy()),axis=-1)
+                #     zones_file='./utils/Italia.txt'
+                #     zones = create_zones(zones_file=zones_file)
+                #     y_pred_plot = torch.where(y_pred_val < 0.1, 0.0, 1.0)
+                #     y_plot = torch.where(y_val < 0.1, 0.0, 1.0)
+                #     y_pred_plot[~train_mask_val] = torch.nan
+                #     y_plot[~train_mask_val] = torch.nan
+                #     # convert to cpu and numpy
+                #     _, indices = torch.sort(t)
+                #     indices = indices.cpu().numpy()
+                #     y_pred_plot = y_pred_plot.cpu().numpy()[:,indices]
+                #     y_plot = y_plot.cpu().numpy()[:,indices]
+                #     with open(args.output_path+"indices.pkl", 'wb') as f:
+                #         pickle.dump(indices, f)
+                #     v_min=0
+                #     v_max=1500
+                #     cmap="jet"
+                #     unit="[h]"
+                #     map_title="wet hours"
+                #     aggr=np.nansum
+                #     fig_map = plot_maps(pos, y_pred_plot, y_plot, pr_min=v_min, aggr=aggr, pr_max=v_max,
+                #         title="", legend_title=unit, cmap=cmap, zones=zones, x_size=p["xsize"], y_size=p["ysize"],
+                #         font_size_title=20, font_size=20, cbar_title_size=20, s=p["s"], ylim=p["ylim"], xlim=p["xlim"], cbar_y=0.95, subtitle_x=0.55)
+                        
+                #     accelerator.log({map_title: [wandb.Image(fig_map)]}, step=step)
+                    
+                #     plt.close(fig_map)     
 
                 # Apply mask
                 y_pred_val, y_val = y_pred_val[train_mask_val], y_val[train_mask_val]
@@ -125,18 +164,18 @@ class Trainer(object):
                 acc_class0_val, acc_class1_val = accuracy_binary_one_classes(y_pred_val, y_val)
                 acc_val = accuracy_binary_one(y_pred_val, y_val)
             
-                        
             if lr_scheduler is not None:
-                lr_scheduler.step(loss_val.item())
+                # lr_scheduler.step(loss_val.item())
+                lr_scheduler.step()
            
             accelerator.log({'epoch':epoch, 'validation loss': loss_val.item(), 'validation loss (1GPU)': loss_val_1gpu.item(),
                              'validation accuracy': acc_val.item(),
                              'validation accuracy class0': acc_class0_val.item(),
                              'validation accuracy class1': acc_class1_val.item(),
-                             'lr': np.mean(lr_scheduler._last_lr)}, step=step)
+                             'lr': np.mean(lr_scheduler.get_last_lr())}, step=step)
                 
     #--- REGRESSOR
-    def train_reg(self, model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=0, make_plots=True):
+    def train_reg(self, model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=0):
         
         write_log(f"\nStart training the regressor.", args, accelerator, 'a')
 
@@ -257,7 +296,7 @@ class Trainer(object):
                 # write_log(f"\n{y_pred_val.shape}, {train_mask_val.shape}, {y_val.shape}", args, accelerator, 'a')
 
                 # Log validation metrics for 1GPU
-                if "quantized_loss" in args.loss_fn:
+                if "quantized" in args.loss_fn:
                     loss_val_1gpu,  _, _ = loss_fn(y_pred_val.flatten()[train_mask_val.flatten()],
                                                    y_val.flatten()[train_mask_val.flatten()],
                                                    w_val.flatten()[train_mask_val.flatten()])
@@ -283,7 +322,7 @@ class Trainer(object):
 
                 ###### PLOTS ######
                 # Create a few plots to compare
-                if make_plots:
+                if args.make_val_plots:
                     if "fvg" in args.input_path:
                         p = {"xsize": 8, "ysize": 12, "ylim": [45.45, 46.8], "xlim": [12.70, 14.05], "s": 200}
                     else:
@@ -306,6 +345,8 @@ class Trainer(object):
                     indices = indices.cpu().numpy()
                     y_pred_plot = y_pred_plot.cpu().numpy()[:,indices]
                     y_plot = y_plot.cpu().numpy()[:,indices]
+                    if args.model_type=="reg":
+                        y_pred_plot[y_plot <= 0.1] = 0
                     with open(args.output_path+"indices.pkl", 'wb') as f:
                         pickle.dump(indices, f)
                     if args.target_type == "temperature":
@@ -478,7 +519,7 @@ class Trainer(object):
 
                 ###### PLOTS ######
                 # Create a few plots to compare
-                if epoch >= 0:
+                if args.make_val_plots:
                     if "fvg" in args.input_path:
                         p = {"xsize": 8, "ysize": 12, "ylim": [45.45, 46.8], "xlim": [12.70, 14.05], "s": 200}
                     else:

@@ -45,6 +45,7 @@ parser.add_argument('--mask_path', type=str)
 parser.add_argument('--mask_file', type=str)
 parser.add_argument('--predictors_type', type=str)
 parser.add_argument('--target_type', type=str, default="precipitation")
+parser.add_argument('--target_multiplier', type=float, default=None)
 
 #-- era5
 parser.add_argument('--input_files_prefix_low', type=str, help='prefix for the input files (convenction: {prefix}{parameter}.nc)', default='')
@@ -87,8 +88,12 @@ for p_idx, p in enumerate(params):
         with nc.Dataset(f'{args.input_path_phase_2}{args.input_files_prefix_low}{p}.nc') as ds:
             data = ds[p][:]
             if p_idx == 0: # first parameter being processed -> get dimensions and initialize the input dataset
-                lat_low = ds['latitude'][:]
-                lon_low = ds['longitude'][:]
+                try:
+                    lat_low = ds['latitude'][:]
+                    lon_low = ds['longitude'][:]
+                except:
+                    lat_low = ds['lat'][:]
+                    lon_low = ds['lon'][:]
                 lat_dim = len(lat_low)
                 lon_dim = len(lon_low)
                 time_dim = len(ds['time'])
@@ -105,8 +110,12 @@ for p_idx, p in enumerate(params):
                     _data *= 9.81
                     write_log(f'\nMultiplying {var_name} by 9.81 to get kg*m^2/s^2.', args, accelerator=None, mode='a')
                 if p_idx == 0 and l_idx == 0: # first parameter being processed -> get dimensions and initialize the input dataset
-                    lat_low = ds['latitude'][:]
-                    lon_low = ds['longitude'][:]
+                    try:
+                        lat_low = ds['latitude'][:]
+                        lon_low = ds['longitude'][:]
+                    except:
+                        lat_low = ds['lat'][:]
+                        lon_low = ds['lon'][:]
                     lat_dim = len(lat_low)
                     lon_dim = len(lon_low)
                     time_dim = len(ds['time'])
@@ -187,9 +196,9 @@ else:
 if lon_z.shape != lat_z.shape:
     lon_z, lat_z = np.meshgrid(lon_z, lat_z)
     
-if args.predictors_type == "regcm":
-    target_high *= 3600
-    write_log(f'\nMultiplying pr by 3600 to get mm.', args, accelerator=None, mode='a')
+if args.target_multiplier is not None:
+    target_high *= args.target_multiplier
+    write_log(f'\nMultiplying pr by {args.target_multiplier} to get the correct unit.', args, accelerator=None, mode='a')
 
 # Reading LAND USE data
 write_log(f"\nLoading land use.", args, accelerator=None, mode='a')
@@ -305,8 +314,8 @@ high_graph = Data()
 edges_low2high, edges_low2high_attr = derive_edge_index_multiscale(lon_senders=lon_low, lat_senders=lat_low,
                                 lon_receivers=lon_high, lat_receivers=lat_high, k=9, undirected=False)
 
-edges_high2low, edges_high2low_attr = derive_edge_index_multiscale(lon_senders=lon_high, lat_senders=lat_high,
-                                lon_receivers=lon_low, lat_receivers=lat_low, k=9, undirected=False)
+# edges_high2low, edges_high2low_attr = derive_edge_index_multiscale(lon_senders=lon_high, lat_senders=lat_high,
+                                # lon_receivers=lon_low, lat_receivers=lat_low, k=9, undirected=False)
 
 edges_high, edges_high_attr = derive_edge_index_within(lon_radius=args.lon_grid_radius_high, lat_radius=args.lat_grid_radius_high,
                                 lon_senders=lon_high, lat_senders=lat_high, lon_receivers=lon_high, lat_receivers=lat_high)
@@ -314,8 +323,8 @@ edges_high, edges_high_attr = derive_edge_index_within(lon_radius=args.lon_grid_
 # edges_high, edges_high_attr = derive_edge_index_multiscale(lon_senders=lon_high, lat_senders=lat_high, lon_receivers=lon_high, lat_receivers=lat_high,
 #                                                            k=4, undirected=True, lon_radius=args.lon_grid_radius_high, lat_radius=args.lat_grid_radius_high)
 
-edges_low, edges_low_attr = derive_edge_index_within(lon_radius=args.lon_grid_radius_low, lat_radius=args.lat_grid_radius_low,
-                                lon_senders=lon_low, lat_senders=lat_low, lon_receivers=lon_low, lat_receivers=lat_low)
+# edges_low, edges_low_attr = derive_edge_index_within(lon_radius=args.lon_grid_radius_low, lat_radius=args.lat_grid_radius_low,
+                                # lon_senders=lon_low, lat_senders=lat_low, lon_receivers=lon_low, lat_receivers=lat_low)
 
 # edges_low, edges_low_attr = derive_edge_index_within(lon_radius=0.251, lat_radius=0.251,
 #                                 lon_senders=lon_low, lat_senders=lat_low, lon_receivers=lon_low, lat_receivers=lat_low)
@@ -348,13 +357,13 @@ low_high_graph['high', 'within', 'high'].edge_attr = torch.tensor(edges_high_att
 low_high_graph['low', 'to', 'high'].edge_index = torch.tensor(edges_low2high)
 low_high_graph['low', 'to', 'high'].edge_attr = torch.tensor(edges_low2high_attr).float()
 
-# Low within Low
-low_high_graph['low', 'within', 'low'].edge_index = torch.tensor(edges_low)
-low_high_graph['low', 'within', 'low'].edge_attr = torch.tensor(edges_low_attr).float()
+# # Low within Low
+# low_high_graph['low', 'within', 'low'].edge_index = torch.tensor(edges_low)
+# low_high_graph['low', 'within', 'low'].edge_attr = torch.tensor(edges_low_attr).float()
 
-# Low to High
-low_high_graph['high', 'to', 'low'].edge_index = torch.tensor(edges_high2low)
-low_high_graph['high', 'to', 'low'].edge_attr = torch.tensor(edges_high2low_attr).float()
+# # Low to High
+# low_high_graph['high', 'to', 'low'].edge_index = torch.tensor(edges_high2low)
+# low_high_graph['high', 'to', 'low'].edge_attr = torch.tensor(edges_high2low_attr).float()
 
 # low_high_graph["high"].valid_nodes = valid_nodes
 

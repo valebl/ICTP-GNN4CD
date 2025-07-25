@@ -55,6 +55,8 @@ parser.add_argument('--lr_scheduler', type=str, default="StepLR")
 parser.add_argument('--checkpoint_ctd', type=str, help='checkpoint to load to continue')
 parser.add_argument('--ctd_training',  action='store_true')
 parser.add_argument('--no-ctd_training', dest='ctd_training', action='store_false')
+parser.add_argument('--make_val_plots', action='store_true')
+parser.add_argument('--no-make_val_plots', dest='make_val_plots', action='store_false')
 
 parser.add_argument('--loss_fn', type=str, default="mse_loss")
 parser.add_argument('--alpha', type=float, default=None)
@@ -214,7 +216,7 @@ if __name__ == '__main__':
                 f"as 12 months chosen randomly within the {args.train_year_start}-{args.train_year_end} period..",
                 args, accelerator, 'a')
         
-    # train_idxs = remove_extremes_idxs_from_training(train_idxs)
+    train_idxs = remove_extremes_idxs_from_training(train_idxs)
 
     train_idxs = torch.tensor(train_idxs)
     val_idxs = torch.tensor(val_idxs)

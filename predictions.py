@@ -48,7 +48,7 @@ parser.add_argument('--mode', type=str, default="cl_reg")
 parser.add_argument('--test_idxs_file', type=str, default="")
 parser.add_argument('--stats_mode', type=str, default="var") 
 parser.add_argument('--target_type', type=str, default="precipitation")
-parser.add_argument('--seq_l', type=int)
+parser.add_argument('--seq_l', type=int, default=24)
 
 #-- start and end training dates
 parser.add_argument('--test_year_start', type=int)
@@ -161,8 +161,8 @@ if __name__ == '__main__':
     model_file = importlib.import_module(f"models.{args.model}")
     Model = getattr(model_file, args.model)
     if args.mode == "cl_reg":
-        model_cl = Model()
-        model_reg = Model()
+        model_cl = Model(seq_l=args.seq_l+1)
+        model_reg = Model(seq_l=args.seq_l+1)
     else:
         if args.target_type == "temperature":
             model = Model(h_in=4*5, h_hid=4*5, high_in=1)
@@ -180,11 +180,13 @@ if __name__ == '__main__':
         if args.mode == "cl_reg":
             try:
                 checkpoint_cl = torch.load(args.train_path_cl+args.checkpoint_cl+"/pytorch_model.bin", weights_only=True)
-                checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg+"/pytorch_model.bin", weights_only=True)
             except:
                 checkpoint_cl = safetensors.torch.load_file(args.train_path_cl+args.checkpoint_cl+"/model.safetensors")
-                checkpoint_reg = safetensors.torch.load_file(args.train_path_reg+args.checkpoint_reg+"/model.safetensors")
                 torch.save(checkpoint_cl, args.train_path_cl+args.checkpoint_cl+"pytorch_model.bin")
+            try:
+                checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg+"/pytorch_model.bin", weights_only=True)
+            except:
+                checkpoint_reg = safetensors.torch.load_file(args.train_path_reg+args.checkpoint_reg+"/model.safetensors")
                 torch.save(checkpoint_reg, args.train_path_reg+args.checkpoint_reg+"pytorch_model.bin")
         else:
             try:
