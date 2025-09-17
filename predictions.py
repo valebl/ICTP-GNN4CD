@@ -109,6 +109,11 @@ if __name__ == '__main__':
     with open(args.input_path+args.graph_file, 'rb') as f:
         low_high_graph = pickle.load(f)
 
+    if "3h" in args.model:
+        pr_target = torch.stack([torch.mean(pr_target[:,t-2:t+1], dim=1) for t in range(pr_target.shape[1])]).swapaxes(0,1)
+        test_idxs = test_idxs[::3]
+        write_log(f"A 3h time resolution is considered.", args, accelerator, 'a')
+
     # Load the input data statistics used during training
     # (At the moment we assume that the same statistics has been used for
     # the regressor and classifier in the RC model case)
