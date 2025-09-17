@@ -45,7 +45,7 @@ parser.add_argument('--mask_path', type=str)
 parser.add_argument('--mask_file', type=str)
 parser.add_argument('--predictors_type', type=str)
 parser.add_argument('--target_type', type=str, default="precipitation")
-parser.add_argument('--target_multiplier', type=float, default=None)
+parser.add_argument('--target_multiplier', type=float, default=1)
 
 #-- era5
 parser.add_argument('--input_files_prefix_low', type=str, help='prefix for the input files (convenction: {prefix}{parameter}.nc)', default='')
@@ -174,7 +174,10 @@ lat = dataset_high.lat.to_numpy()
 if lon.shape != lat.shape:
     lon, lat = np.meshgrid(lon, lat)
 if args.target_type == "precipitation":
-    target_high = dataset_high.pr.to_numpy()
+    try:
+        target_high = dataset_high.pr.to_numpy()
+    except:
+        target_high = dataset_high.tp.to_numpy()
 elif args.target_type == "temperature":
     target_high = dataset_high.t2m.to_numpy()
 
@@ -190,7 +193,10 @@ else:
     z = topo.z.to_numpy()
     # mask_land = None
     mask_land = xr.open_dataset(args.mask_path + args.mask_file)
-    mask_land = mask_land.pr.to_numpy().squeeze()
+    try:
+        mask_land = mask_land.pr.to_numpy().squeeze()
+    except:
+        mask_land = mask_land.tp.to_numpy().squeeze()
     lon_z = topo.lon.to_numpy()
     lat_z = topo.lat.to_numpy()
 if lon_z.shape != lat_z.shape:
@@ -201,19 +207,22 @@ if args.target_multiplier is not None:
     write_log(f'\nMultiplying pr by {args.target_multiplier} to get the correct unit.', args, accelerator=None, mode='a')
 
 # Reading LAND USE data
-write_log(f"\nLoading land use.", args, accelerator=None, mode='a')
+if args.land_use_path == "" or args.land_use_file == "":
+    write_log(f"\nLand use file not provided, ignoring.", args, accelerator=None, mode='a')
+else:
+    write_log(f"\nLoading land use.", args, accelerator=None, mode='a')
 
-landU  = xr.open_dataset(args.land_use_path+args.land_use_file,  engine='netcdf4') #open nc file by default with netcdf4, if avail
-water = landU.water.to_numpy()
-coast = landU.coast.to_numpy()
-urban_MD = landU.urban_MD.to_numpy()
-urban_HD = landU.urban_HD.to_numpy()
-forest = landU.forest.to_numpy()
-ucrop = landU.ucrop.to_numpy()
-lon_landU = landU.lon.to_numpy()
-lat_landU = landU.lat.to_numpy()
-if lon_landU.shape != lat_landU.shape:
-    lon_landU, lat_landU = np.meshgrid(lon_landU, lat_landU)
+    landU  = xr.open_dataset(args.land_use_path+args.land_use_file,  engine='netcdf4') #open nc file by default with netcdf4, if avail
+    water = landU.water.to_numpy()
+    coast = landU.coast.to_numpy()
+    urban_MD = landU.urban_MD.to_numpy()
+    urban_HD = landU.urban_HD.to_numpy()
+    forest = landU.forest.to_numpy()
+    ucrop = landU.ucrop.to_numpy()
+    lon_landU = landU.lon.to_numpy()
+    lat_landU = landU.lat.to_numpy()
+    if lon_landU.shape != lat_landU.shape:
+        lon_landU, lat_landU = np.meshgrid(lon_landU, lat_landU)
 
 write_log("\nCutting the window...", args, accelerator=None, mode='a')
 
@@ -234,21 +243,23 @@ else:
             args.lon_min, args.lon_max, args.lat_min, args.lat_max, lon_z, lat_z, z)
     mask_land_high = None
 
+assert (np.allclose(lon_high, lon_high_z, atol=0.01) and lon_high.shape == lon_high_z.shape)
+
 print("z done!")
 
-lon_high_landU, lat_high_landU, water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high = cut_window(
-        args.lon_min, args.lon_max, args.lat_min, args.lat_max, lon_landU, lat_landU, water, coast, urban_MD, urban_HD, forest, ucrop)
+if args.land_use_path != "" and args.land_use_file != "":
+    lon_high_landU, lat_high_landU, water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high = cut_window(
+            args.lon_min, args.lon_max, args.lat_min, args.lat_max, lon_landU, lat_landU, water, coast, urban_MD, urban_HD, forest, ucrop)
 
-print("land use done!")
+    assert (np.allclose(lon_high, lon_high_landU, atol=0.01) and lon_high.shape == lon_high_landU.shape)
+    assert (np.allclose(lat_high, lat_high_z, atol=0.01) and lon_high.shape == lat_high_z.shape)
+    assert (np.allclose(lat_high, lat_high_landU, atol=0.01) and lon_high.shape == lat_high_landU.shape)
 
-assert (np.allclose(lon_high, lon_high_z, atol=0.01) and lon_high.shape == lon_high_z.shape)
-assert (np.allclose(lon_high, lon_high_landU, atol=0.01) and lon_high.shape == lon_high_landU.shape)
-assert (np.allclose(lat_high, lat_high_z, atol=0.01) and lon_high.shape == lat_high_z.shape)
-assert (np.allclose(lat_high, lat_high_landU, atol=0.01) and lon_high.shape == lat_high_landU.shape)
+    print("land use done!")
 
 write_log(f"\nDone! Window is [{lon_high.min()}, {lon_high.max()}] x [{lat_high.min()}, {lat_high.max()}] with {target_high.shape[1]} nodes.", args, accelerator=None, mode='a')
 
-write_log(f"\nlon shape {lon_high.shape}, lat shape {lat_high.shape}, pr shape {target_high.shape}, z shape {z_high.shape}, land vars shape {water_high.shape}", args, accelerator=None, mode='a')
+write_log(f"\nlon shape {lon_high.shape}, lat shape {lat_high.shape}, pr shape {target_high.shape}, z shape {z_high.shape}", args, accelerator=None, mode='a')
 
 #------------------------------------#
 # REMOVE NODES NOT IN LAND TERRITORY #
@@ -261,19 +272,11 @@ target_high = target_high[:,valid_nodes]
 lon_high = lon_high[valid_nodes]
 lat_high = lat_high[valid_nodes]
 z_high = z_high[valid_nodes]
-water_high = water_high[valid_nodes]
-coast_high = coast_high[valid_nodes]
-urban_MD_high = urban_MD_high[valid_nodes]
-urban_HD_high = urban_HD_high[valid_nodes]
-forest_high = forest_high[valid_nodes]
-ucrop_high = ucrop_high[valid_nodes]
-
-# lon_high, lat_high, target_high, z_high, water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high = retain_valid_nodes(
-#         lon_high, lat_high, target_high, z_high, mask_land_high, water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high)
 
 target_high = target_high.swapaxes(0,1) # (num_nodes, time)
 
-land_vars_high = np.stack([water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high], axis=-1)
+# lon_high, lat_high, target_high, z_high, water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high = retain_valid_nodes(
+#         lon_high, lat_high, target_high, z_high, mask_land_high, water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high)
 
 # print(lon_high.shape, lat_high.shape, pr_high.shape, z_high.shape, land_vars_high.shape)
 
@@ -281,16 +284,19 @@ num_nodes_high = target_high.shape[0]
 
 write_log(f"\nAfter removing the non land territory nodes, the high resolution graph has {num_nodes_high} nodes.", args, accelerator=None, mode='a')
 
+if args.land_use_path != "" and args.land_use_file != "":
+    water_high = water_high[valid_nodes]
+    coast_high = coast_high[valid_nodes]
+    urban_MD_high = urban_MD_high[valid_nodes]
+    urban_HD_high = urban_HD_high[valid_nodes]
+    forest_high = forest_high[valid_nodes]
+    ucrop_high = ucrop_high[valid_nodes]
+
+    land_vars_high = np.stack([water_high, coast_high, urban_MD_high, urban_HD_high, forest_high, ucrop_high], axis=-1)
 
 #---------------------------------------#
 # CLASSIFICATION AND REGRESSION TARGETS #
 #---------------------------------------#
-
-#-- ROUND THE TARGET --#   
-threshold = 0.1 # mm
-target_high[target_high < 0.1] = 0.0
-if args.predictors_type == "era5":
-    target_high = np.round(target_high, decimals=1)
 
 target_high = torch.tensor(target_high)
 
@@ -345,9 +351,12 @@ low_high_graph['low'].lon = torch.tensor(lon_low)
 low_high_graph['high'].lat = torch.tensor(lat_high)
 low_high_graph['high'].lon = torch.tensor(lon_high)
 low_high_graph['high'].z_std = torch.tensor(z_high).unsqueeze(-1)
-low_high_graph['high'].land_std = torch.tensor(land_vars_high).float()
+if args.land_use_path != "" and args.land_use_file != "":
+    low_high_graph['high'].land_std = torch.tensor(land_vars_high).float()
 # low_high_graph['high'].node_type = torch.where(degree(low_high_graph['high','within','high'].edge_index[0], low_high_graph['high'].num_nodes) == 8, 1, 0)
-low_high_graph['high'].x = torch.cat((low_high_graph['high'].z_std, low_high_graph['high'].land_std),dim=-1)
+    low_high_graph['high'].x = torch.cat((low_high_graph['high'].z_std, low_high_graph['high'].land_std),dim=-1)
+else:
+    low_high_graph['high'].x = low_high_graph['high'].z_std
 
 # High within High
 low_high_graph['high', 'within', 'high'].edge_index = torch.tensor(edges_high)
