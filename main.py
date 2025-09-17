@@ -171,6 +171,13 @@ if __name__ == '__main__':
         # round to comply with instrument sensitivity
         target_train = torch.round(target_train, decimals=1)
 
+        if "3hourly" in args.model_name:
+            target_train = torch.stack([torch.mean(target_train[:,t-2:t+1], dim=1) for t in range(target_train.shape[1])]).swapaxes(0,1)
+        elif "6hourly" in args.model_name:
+            target_train = torch.stack([torch.mean(target_train[:,t-5:t+1], dim=1) for t in range(target_train.shape[1])]).swapaxes(0,1)
+        elif "daily" in args.model_name:
+            target_train = torch.stack([torch.mean(target_train[:,t-23:t+1], dim=1) for t in range(target_train.shape[1])]).swapaxes(0,1)
+
         if args.model_type == "cl":
             #-- CLASSIFIER --#        
             target_train = torch.where(target_train >= threshold, 1, 0).float()
@@ -201,7 +208,8 @@ if __name__ == '__main__':
 
     if args.validation_year is not None:
         train_idxs, val_idxs = derive_train_val_idxs(args.train_year_start, args.train_month_start, args.train_day_start, args.train_year_end,
-                                                     args.train_month_end, args.train_day_end, args.first_year, idxs_not_all_nan, args.validation_year)
+                                                     args.train_month_end, args.train_day_end, args.first_year, args.model_name, idxs_not_all_nan, args.validation_year,
+                                                     args=args, accelerator=accelerator)
         write_log(f"\nTrain from {args.train_day_start}/{args.train_month_start}/{args.train_year_start} to " +
                   f"{args.train_day_end}/{args.train_month_end}/{args.train_year_end} with validation year {args.validation_year}",
                   args, accelerator, 'a')
@@ -216,7 +224,7 @@ if __name__ == '__main__':
                 f"as 12 months chosen randomly within the {args.train_year_start}-{args.train_year_end} period..",
                 args, accelerator, 'a')
         
-    train_idxs = remove_extremes_idxs_from_training(train_idxs)
+    # train_idxs = remove_extremes_idxs_from_training(train_idxs)
 
     train_idxs = torch.tensor(train_idxs)
     val_idxs = torch.tensor(val_idxs)
@@ -235,14 +243,15 @@ if __name__ == '__main__':
         train_idxs = train_idxs[:-tail_train_idxs]
     if tail_val_idxs != 0:
         val_idxs = val_idxs[:-tail_val_idxs]
-
+        
     # Compute the weights for the regressor
     if args.model_type == "reg" or args.model_type == "all" and "quantized" in args.loss_fn:
         # This should be put in a function
         bins = np.arange(np.log1p(threshold), np.log1p(200), np.log1p(0.5))
         if args.model_type == "all":
             bins = np.insert(bins, 0, np.log1p(0))
-        values_unif_log, edges_unif_log = np.histogram(target_train.numpy(), bins=bins, density=False)
+        # consider only the time indices that are part of the training set
+        values_unif_log, edges_unif_log = np.histogram(target_train[:,train_idxs].numpy(), bins=bins, density=False)
         # Assign bins to targets
         target_bins = np.digitize(target_train.numpy(), edges_unif_log, right=False).astype(float) - 1
 
@@ -262,23 +271,23 @@ if __name__ == '__main__':
     low_high_graph['low'].x, low_high_graph['high'].x = standardize_input(
         low_high_graph['low'].x, low_high_graph['high'].x, means_low, stds_low, means_high, stds_high, args, accelerator) # num_nodes, time, vars, levels
     
-    vars_names = ['q', 't', 'u', 'v', 'z']
-    levels = ['200', '500', '700', '850', '1000']
-    if args.stats_mode == "var":
-        for var in range(5):
-            write_log(f"\nLow var {vars_names[var]}: mean={low_high_graph['low'].x[:,:,var,:].mean()}, std={low_high_graph['low'].x[:,:,var,:].std()}",
-                      args, accelerator, 'a')
-    elif args.stats_mode == "field":
-        for var in range(5):
-            for lev in range(5):
-                write_log(f"\nLow var {vars_names[var]} lev {levels[lev]}: mean={low_high_graph[:,:,var,lev].mean()}, std={low_high_graph[:,:,var,lev].std()}",
-                          args, accelerator, 'a')
+    # vars_names = ['q', 't', 'u', 'v', 'z']
+    # levels = ['200', '500', '700', '850', '1000']
+    # if args.stats_mode == "var":
+    #     for var in range(5):
+    #         write_log(f"\nLow var {vars_names[var]}: mean={low_high_graph['low'].x[:,:,var,:].mean()}, std={low_high_graph['low'].x[:,:,var,:].std()}",
+    #                   args, accelerator, 'a')
+    # elif args.stats_mode == "field":
+    #     for var in range(5):
+    #         for lev in range(5):
+    #             write_log(f"\nLow var {vars_names[var]} lev {levels[lev]}: mean={low_high_graph[:,:,var,lev].mean()}, std={low_high_graph[:,:,var,lev].std()}",
+    #                       args, accelerator, 'a')
     
-    write_log(f"\nHigh z: mean={low_high_graph['high'].x[:,0].mean()}, std={low_high_graph['high'].x[:,0].std()}",
-              args, accelerator, 'a')
-    if low_high_graph['high'].x.size()[1] > 1:
-        write_log(f"\nHigh land_use: mean={low_high_graph['high'].x[:,1:].mean()}, std={low_high_graph['high'].x[:,1:].std()}",
-              args, accelerator, 'a')
+    # write_log(f"\nHigh z: mean={low_high_graph['high'].x[:,0].mean()}, std={low_high_graph['high'].x[:,0].std()}",
+    #           args, accelerator, 'a')
+    # if low_high_graph['high'].x.size()[1] > 1:
+    #     write_log(f"\nHigh land_use: mean={low_high_graph['high'].x[:,1:].mean()}, std={low_high_graph['high'].x[:,1:].std()}",
+    #           args, accelerator, 'a')
     
     if args.target_type == "temperature":
         low_high_graph['low'].x = torch.cat((low_high_graph['low'].x[:,:,:1,:], low_high_graph['low'].x[:,:,2:,:]), dim=2)
