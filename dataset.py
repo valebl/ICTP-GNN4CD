@@ -40,10 +40,15 @@ class Dataset_Graph(Dataset):
         #self._add_node_degree()
         if "1h" in self.model_name:# or "MS_MGN" in self.model_name:
             self._get_features = self.__get_features_t
-        elif "3h" in self.model_name:
-            self._get_features = self.__get_features_tminus25_to_t_every_3h
-        elif "6h" in self.model_name:
-            self._get_features = self.__get_features_tminus25_to_t_every_6h
+        elif "3hourly" in self.model_name:
+            print("Considering input every 3h t-24:t:3 (slicing) and target over t-2:t (mean)")
+            self._get_features = self.__get_features_3hourly
+        elif "6hourly" in self.model_name:
+            print("Considering input every 6h t-24:t:6 (slicing) and target over t-5:t (mean)")
+            self._get_features = self.__get_features_6hourly
+        elif "daily" in self.model_name:
+            print("Considering input every 24h t-24:t:24 (slicing) and target over t-23:t (mean)")
+            self._get_features = self.__get_features_daily
         else:
             self._get_features = self.__get_features_tminus25_to_t_every_1h
 
@@ -61,13 +66,18 @@ class Dataset_Graph(Dataset):
         node_degree = (degree(snapshot['high','within','high'].edge_index[0], snapshot['high'].num_nodes) / 8).unsqueeze(-1)
         return node_degree
 
-    def __get_features_tminus25_to_t_every_3h(self, time_index: int):
-        x_low = self.graph['low'].x[:,time_index-24:time_index+1:3,:]   
+    def __get_features_3hourly(self, time_index: int):
+        x_low = self.graph['low'].x[:,time_index-24:time_index+1:3,:]
         x_low = x_low.flatten(start_dim=2, end_dim=-1)                  
         return x_low
 
-    def __get_features_tminus25_to_t_every_6h(self, time_index: int):
+    def __get_features_6hourly(self, time_index: int):
         x_low = self.graph['low'].x[:,time_index-24:time_index+1:6,:]   
+        x_low = x_low.flatten(start_dim=2, end_dim=-1)                  
+        return x_low
+    
+    def __get_features_daily(self, time_index: int):
+        x_low = self.graph['low'].x[:,[time_index-24,time_index],:]   
         x_low = x_low.flatten(start_dim=2, end_dim=-1)                  
         return x_low
 
