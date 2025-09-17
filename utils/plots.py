@@ -393,7 +393,8 @@ def plot_pdf(pr_pred, y, fontsize=18, range=[0,200,0.5], ylim=[10**(-8),5], xlab
     return fig
 
 def plot_diurnal_cycles(y_pred, y, aggr=np.nanmean, fontsize=25, figsize=(16,18),
-                        xlim=[0,24], ylim=[0.5, 3.0], ylablel="[mm/h]", which='all'):
+                        xlim=[0,24], ylim=[0.5, 3.0], ylablel="[mm/h]", which='all',
+                        labels=["GNN4CD", "GRIPHO"]):
 
     plt.rcParams.update({'font.size': fontsize})
 
@@ -411,6 +412,8 @@ def plot_diurnal_cycles(y_pred, y, aggr=np.nanmean, fontsize=25, figsize=(16,18)
         jf_end = (31 + 28) * 24
     elif y_pred.shape[1] == 8784:
         jf_end = (31 + 29) * 24
+    elif y_pred.shape[1] == 2920:
+        jf_end = (31 + 28) * 8 # 472
     else:
         print(f"\nInvalid number of hours in a year: {y_pred.shape[1]}")
         if which == 'all':
@@ -418,14 +421,24 @@ def plot_diurnal_cycles(y_pred, y, aggr=np.nanmean, fontsize=25, figsize=(16,18)
         else:
             return fig_1
 
-    mam_start = jf_end
-    mam_end = mam_start + (31 + 30 + 31) * 24
-    jja_start = mam_end
-    jja_end = jja_start + (31 + 31 + 30) * 24
-    son_start = jja_end
-    son_end = son_start + (30 + 31 + 30) * 24
-    d_start = son_end
-    d_end = son_end + 31 * 24 # december
+    if y_pred.shape[1] == 2920:
+        mam_start = jf_end
+        mam_end = mam_start + (31 + 30 + 31) * 8 # 1208
+        jja_start = mam_end
+        jja_end = jja_start + (31 + 31 + 30) * 8 # 1944
+        son_start = jja_end
+        son_end = son_start + (30 + 31 + 30) * 8 # 2672
+        d_start = son_end
+        d_end = son_end + 31 * 8 # december # 2920
+    else:
+        mam_start = jf_end
+        mam_end = mam_start + (31 + 30 + 31) * 24
+        jja_start = mam_end
+        jja_end = jja_start + (31 + 31 + 30) * 24
+        son_start = jja_end
+        son_end = son_start + (30 + 31 + 30) * 24
+        d_start = son_end
+        d_end = son_end + 31 * 24 # december
 
     idxs_seasons = [np.concatenate((np.arange(d_start, d_end), np.arange(jf_start, jf_end)), axis=0),
                     np.arange(mam_start, mam_end),
@@ -434,62 +447,120 @@ def plot_diurnal_cycles(y_pred, y, aggr=np.nanmean, fontsize=25, figsize=(16,18)
     
     text_list = ['DJF', 'MAM', 'JJA', 'SON']
 
-    for s in range(4):
-        idxs = idxs_seasons[s]
-        y_pred_s = y_pred[:,idxs]
-        y_s = y[:,idxs]
-        y_pred_daily_cycles = np.zeros(24)
-        y_daily_cycles = np.zeros(24)
-        n = 25
-        # average precipitation
-        axi = ax_1[s//2, s%2]
-        for i in range(0,24):
-            y_pred_daily_cycles[i] = aggr(y_pred_s[:,i::24])
-            y_daily_cycles[i] = aggr(y_s[:,i::24])
-        axi.plot(range(1,n), y_pred_daily_cycles, label='GNN4CD', linestyle='-', linewidth=2, color='red')
-        axi.plot(range(1,n), y_daily_cycles, label='GRIPHO', linestyle=':', linewidth=2, color='black')
-        axi.set_ylabel(ylablel, fontsize=40)
-        axi.set_xlabel("time [h]", fontsize=40)
-        axi.set_xlim(xlim)
-        axi.set_ylim(ylim[0],ylim[1])
-        axi.set_xticks(ticks=range(0,n,6))
-        axi.set_title(text_list[s], fontsize=45)
-        axi.grid(which='major', color='lightgrey')
-        if s == 0:
-            axi.legend(loc='upper left', prop={'size': 30})
-        if which == 'all':
-            # frequency of precipitation
-            axi = ax_2[s//2, s%2]
-            for i in range(0,24):
-                y_pred_daily_cycles[i] = (y_pred_s[:,i::24]>=0.1).sum() / y_pred_s[:,i::24].flatten().shape[0] * 100
-                y_daily_cycles[i] = (y_s[:,i::24]>=0.1).sum() / y_s[:,i::24].flatten().shape[0] * 100
-            axi.plot(range(1,n), y_pred_daily_cycles, label='GNN4CD', linestyle='-', linewidth=2, color='red')
-            axi.plot(range(1,n), y_daily_cycles, label='GRIPHO', linestyle=':', linewidth=2, color='black')
+    if y_pred.shape[1] == 2920:
+        for s in range(4):
+            idxs = idxs_seasons[s]
+            y_pred_s = y_pred[:,idxs]
+            y_s = y[:,idxs]
+            y_pred_daily_cycles = np.zeros(8)
+            y_daily_cycles = np.zeros(8)
+            n = 24
+            # average precipitation
+            axi = ax_1[s//2, s%2]
+            for i in range(0,8):
+                y_pred_daily_cycles[i] = aggr(y_pred_s[:,i::8])
+                y_daily_cycles[i] = aggr(y_s[:,i::8])
+            axi.plot(range(0,n,3), y_pred_daily_cycles, label=labels[0], linestyle='-', linewidth=2, color='red')
+            axi.plot(range(0,n,3), y_daily_cycles, label=labels[1], linestyle=':', linewidth=2, color='black')
             axi.set_ylabel(ylablel, fontsize=40)
             axi.set_xlabel("time [h]", fontsize=40)
             axi.set_xlim(xlim)
-            axi.set_ylim(ylim[2],ylim[3])
+            axi.set_ylim(ylim[0],ylim[1])
+            axi.set_xticks(ticks=range(0,n,3))
+            axi.set_title(text_list[s], fontsize=45)
+            axi.grid(which='major', color='lightgrey')
+            if s == 0:
+                axi.legend(loc='upper left', prop={'size': 30})
+            if which == 'all':
+                # frequency of precipitation
+                axi = ax_2[s//2, s%2]
+                for i in range(0,8):
+                    y_pred_daily_cycles[i] = (y_pred_s[:,i::8]>=0.1).sum() / y_pred_s[:,i::8].flatten().shape[0] * 100
+                    y_daily_cycles[i] = (y_s[:,i::8]>=0.1).sum() / y_s[:,i::8].flatten().shape[0] * 100
+                axi.plot(range(0,n,3), y_pred_daily_cycles, label=labels[0], linestyle='-', linewidth=2, color='red')
+                axi.plot(range(0,n,3), y_daily_cycles, label=label[1], linestyle=':', linewidth=2, color='black')
+                axi.set_ylabel(ylablel, fontsize=40)
+                axi.set_xlabel("time [h]", fontsize=40)
+                axi.set_xlim(xlim)
+                axi.set_ylim(ylim[2],ylim[3])
+                axi.set_xticks(ticks=range(0,n,3))
+                axi.set_title(text_list[s], fontsize=45)
+                axi.grid(which='major', color='lightgrey')
+                if s == 0:
+                    axi.legend(loc='upper left', prop={'size': 30})
+                # intensity of precipitation
+                axi = ax_3[s//2, s%2]
+                for i in range(0,8):
+                    y_pred_daily_cycles[i] = aggr(y_pred_s[:,i::8][y_pred_s[:,i::8]>=0.1])
+                    y_daily_cycles[i] = aggr(y_s[:,i::8][y_s[:,i::8]>=0.1])
+                axi.plot(range(0,n,3), y_pred_daily_cycles, label=labels[0], linestyle='-', linewidth=2, color='red')
+                axi.plot(range(0,n,3), y_daily_cycles, label=labels[1], linestyle=':', linewidth=2, color='black')
+                axi.set_ylabel(ylablel, fontsize=40)
+                axi.set_xlabel("time [h]", fontsize=40)
+                axi.set_xlim(xlim)
+                axi.set_ylim(ylim[4],ylim[5])
+                axi.set_xticks(ticks=range(0,n,3))
+                axi.set_title(text_list[s], fontsize=45)
+                axi.grid(which='major', color='lightgrey')
+                if s == 0:
+                    axi.legend(loc='upper left', prop={'size': 30})
+    else:
+        for s in range(4):
+            idxs = idxs_seasons[s]
+            y_pred_s = y_pred[:,idxs]
+            y_s = y[:,idxs]
+            y_pred_daily_cycles = np.zeros(24)
+            y_daily_cycles = np.zeros(24)
+            n = 25
+            # average precipitation
+            axi = ax_1[s//2, s%2]
+            for i in range(0,24):
+                y_pred_daily_cycles[i] = aggr(y_pred_s[:,i::24])
+                y_daily_cycles[i] = aggr(y_s[:,i::24])
+            axi.plot(range(1,n), y_pred_daily_cycles, label=labels[0], linestyle='-', linewidth=2, color='red')
+            axi.plot(range(1,n), y_daily_cycles, label=labels[1], linestyle=':', linewidth=2, color='black')
+            axi.set_ylabel(ylablel, fontsize=40)
+            axi.set_xlabel("time [h]", fontsize=40)
+            axi.set_xlim(xlim)
+            axi.set_ylim(ylim[0],ylim[1])
             axi.set_xticks(ticks=range(0,n,6))
             axi.set_title(text_list[s], fontsize=45)
             axi.grid(which='major', color='lightgrey')
             if s == 0:
                 axi.legend(loc='upper left', prop={'size': 30})
-            # intensity of precipitation
-            axi = ax_3[s//2, s%2]
-            for i in range(0,24):
-                y_pred_daily_cycles[i] = aggr(y_pred_s[:,i::24][y_pred_s[:,i::24]>=0.1])
-                y_daily_cycles[i] = aggr(y_s[:,i::24][y_s[:,i::24]>=0.1])
-            axi.plot(range(1,n), y_pred_daily_cycles, label='GNN4CD', linestyle='-', linewidth=2, color='red')
-            axi.plot(range(1,n), y_daily_cycles, label='GRIPHO', linestyle=':', linewidth=2, color='black')
-            axi.set_ylabel(ylablel, fontsize=40)
-            axi.set_xlabel("time [h]", fontsize=40)
-            axi.set_xlim(xlim)
-            axi.set_ylim(ylim[4],ylim[5])
-            axi.set_xticks(ticks=range(0,n,6))
-            axi.set_title(text_list[s], fontsize=45)
-            axi.grid(which='major', color='lightgrey')
-            if s == 0:
-                axi.legend(loc='upper left', prop={'size': 30})
+            if which == 'all':
+                # frequency of precipitation
+                axi = ax_2[s//2, s%2]
+                for i in range(0,24):
+                    y_pred_daily_cycles[i] = (y_pred_s[:,i::24]>=0.1).sum() / y_pred_s[:,i::24].flatten().shape[0] * 100
+                    y_daily_cycles[i] = (y_s[:,i::24]>=0.1).sum() / y_s[:,i::24].flatten().shape[0] * 100
+                axi.plot(range(1,n), y_pred_daily_cycles, label=labels[0], linestyle='-', linewidth=2, color='red')
+                axi.plot(range(1,n), y_daily_cycles, label=labels[1], linestyle=':', linewidth=2, color='black')
+                axi.set_ylabel(ylablel, fontsize=40)
+                axi.set_xlabel("time [h]", fontsize=40)
+                axi.set_xlim(xlim)
+                axi.set_ylim(ylim[2],ylim[3])
+                axi.set_xticks(ticks=range(0,n,6))
+                axi.set_title(text_list[s], fontsize=45)
+                axi.grid(which='major', color='lightgrey')
+                if s == 0:
+                    axi.legend(loc='upper left', prop={'size': 30})
+                # intensity of precipitation
+                axi = ax_3[s//2, s%2]
+                for i in range(0,24):
+                    y_pred_daily_cycles[i] = aggr(y_pred_s[:,i::24][y_pred_s[:,i::24]>=0.1])
+                    y_daily_cycles[i] = aggr(y_s[:,i::24][y_s[:,i::24]>=0.1])
+                axi.plot(range(1,n), y_pred_daily_cycles, label=labels[0], linestyle='-', linewidth=2, color='red')
+                axi.plot(range(1,n), y_daily_cycles, label=labels[1], linestyle=':', linewidth=2, color='black')
+                axi.set_ylabel(ylablel, fontsize=40)
+                axi.set_xlabel("time [h]", fontsize=40)
+                axi.set_xlim(xlim)
+                axi.set_ylim(ylim[4],ylim[5])
+                axi.set_xticks(ticks=range(0,n,6))
+                axi.set_title(text_list[s], fontsize=45)
+                axi.grid(which='major', color='lightgrey')
+                if s == 0:
+                    axi.legend(loc='upper left', prop={'size': 30})
 
     if which == 'all':
         return fig_1, fig_2, fig_3

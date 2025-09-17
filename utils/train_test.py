@@ -322,7 +322,7 @@ class Trainer(object):
 
                 ###### PLOTS ######
                 # Create a few plots to compare
-                if args.make_val_plots:
+                if args.make_val_plots and epoch%5==0:
                     if "fvg" in args.input_path:
                         p = {"xsize": 8, "ysize": 12, "ylim": [45.45, 46.8], "xlim": [12.70, 14.05], "s": 200}
                     else:
@@ -347,8 +347,6 @@ class Trainer(object):
                     y_plot = y_plot.cpu().numpy()[:,indices]
                     if args.model_type=="reg":
                         y_pred_plot[y_plot <= 0.1] = 0
-                    with open(args.output_path+"indices.pkl", 'wb') as f:
-                        pickle.dump(indices, f)
                     if args.target_type == "temperature":
                         v_min=270
                         v_max=290
@@ -374,15 +372,16 @@ class Trainer(object):
                         font_size_title=20, font_size=20, cbar_title_size=20, s=p["s"], ylim=p["ylim"], xlim=p["xlim"], cbar_y=0.95, subtitle_x=0.55)
                     fig_pdf = plot_pdf(y_pred_plot, y_plot, range=range_bins, ylim=ylim_pdf, xlabel=unit)
                     if args.target_type == "precipitation":
-                        fig_avg_dc, fig_freq_dc, fig_int_dc = plot_diurnal_cycles(y_pred_plot, y_plot, ylim=ylim_diurnal_cycles, ylablel=unit, which='all')
+                        # fig_avg_dc, fig_freq_dc, fig_int_dc = plot_diurnal_cycles(y_pred_plot, y_plot, ylim=ylim_diurnal_cycles, ylablel=unit, which='all')
+                        fig_avg_dc = plot_diurnal_cycles(y_pred_plot, y_plot, ylim=ylim_diurnal_cycles, ylablel=unit, which='avg')
                     else:
                         fig_avg_dc = plot_diurnal_cycles(y_pred_plot, y_plot, ylim=ylim_diurnal_cycles, ylablel=unit, which='avg')
                         
                     if args.target_type == "precipitation":
                         accelerator.log({map_title: [wandb.Image(fig_avg)], "pdf": [wandb.Image(fig_pdf)],
                                     "average diurnal cycle": [wandb.Image(fig_avg_dc)],
-                                    "frequency diurnal cycle": [wandb.Image(fig_freq_dc)],
-                                    "intensity diurnal cycle": [wandb.Image(fig_int_dc)]
+                                    # "frequency diurnal cycle": [wandb.Image(fig_freq_dc)],
+                                    # "intensity diurnal cycle": [wandb.Image(fig_int_dc)]
                                     }, step=step)
                     else:
                         accelerator.log({map_title: [wandb.Image(fig_avg)], "pdf": [wandb.Image(fig_pdf)],
@@ -392,9 +391,9 @@ class Trainer(object):
                     plt.close(fig_avg)     
                     plt.close(fig_pdf)     
                     plt.close(fig_avg_dc)
-                    if args.target_type == "precipitation":
-                        plt.close(fig_freq_dc)
-                        plt.close(fig_int_dc)  
+                    # if args.target_type == "precipitation":
+                    #     plt.close(fig_freq_dc)
+                    #     plt.close(fig_int_dc)  
                 
                 # Apply mask
                 y_pred_val, y_val = y_pred_val[train_mask_val], y_val[train_mask_val]

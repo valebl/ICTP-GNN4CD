@@ -94,7 +94,7 @@ def find_not_all_nan_times(target_train):
     
 
 def derive_train_val_idxs(train_year_start, train_month_start, train_day_start, train_year_end, train_month_end,
-                         train_day_end, first_year, idxs_not_all_nan=None, validation_year=None):
+                         train_day_end, first_year, model_name, idxs_not_all_nan=None, validation_year=None, args=None, accelerator=None):
     r'''
     Computes the train and validation indexes
     Args:
@@ -118,8 +118,7 @@ def derive_train_val_idxs(train_year_start, train_month_start, train_day_start, 
     if validation_year is None:
         pass
     else:
-        # To make the seasonal plots we consider from 01/12/YYYY-1 to 30/11/YYYY
-        val_start_idx, val_end_idx = date_to_idxs(validation_year-1, 12, 1, validation_year, 11, 30, first_year)
+        val_start_idx, val_end_idx = date_to_idxs(validation_year, 1, 1, validation_year, 12, 31, first_year)
 
     # We need the previous 24h to make the prediction at time t
     if train_start_idx < 24:
@@ -147,12 +146,23 @@ def derive_train_val_idxs(train_year_start, train_month_start, train_day_start, 
 
     # Remove the idxs for which all graph nodes have nan target
     if idxs_not_all_nan is not None:
-        train_idxs_list = [i for i in train_idxs_list if i in idxs_not_all_nan]
-        val_idxs_list = [i for i in val_idxs_list if i in idxs_not_all_nan]
+        if "3h" in model_name:
+            train_idxs_list = [i for i in train_idxs_list if i in idxs_not_all_nan and i % 3 == 0]
+            val_idxs_list = [i for i in val_idxs_list if i in idxs_not_all_nan and i % 3 == 0]
+        else:    
+            train_idxs_list = [i for i in train_idxs_list if i in idxs_not_all_nan]
+            val_idxs_list = [i for i in val_idxs_list if i in idxs_not_all_nan]
     
     # train_idxs = torch.tensor(train_idxs_list)
     # val_idxs = torch.tensor(val_idxs_list)
 
+    if args is not None:
+        if accelerator is None or accelerator.is_main_process:
+            with open(args.output_path + "train_idxs.pkl", 'wb') as f:
+                pickle.dump(torch.tensor(train_idxs_list), f)
+            with open(args.output_path + "val_idxs.pkl", 'wb') as f:
+                pickle.dump(torch.tensor(val_idxs_list), f)
+                
     return train_idxs_list, val_idxs_list
 
 
@@ -313,8 +323,8 @@ def compute_input_statistics(x_low, x_high, args, accelerator=None):
         means_high = torch.tensor([x_high[:,0].mean(), x_high[:,1:].mean()])
         stds_high = torch.tensor([x_high[:,0].std(), x_high[:,1:].std()])
     else:
-        means_high = torch.tensor(x_high.mean())
-        stds_high = torch.tensor(x_high.std())        
+        means_high = x_high.mean()
+        stds_high = x_high.std()     
 
     # Write the standardized data to disk
     with open(args.output_path + "means_low.pkl", 'wb') as f:
