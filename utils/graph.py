@@ -95,7 +95,6 @@ def derive_edge_index_within(lon_radius, lat_radius, lon_senders, lat_senders, l
                 edge_index.append(np.array([ii, jj]))
     
     edge_index = np.array(edge_index).T
-    print(edge_index.shape)
 
     return edge_index
 
