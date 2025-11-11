@@ -297,10 +297,10 @@ class Tester(object):
                 
                 # Regressor
                 y_pred = model(graph)
-                if args.model_type == "R" or args.model_type == "Rall":
-                    y_pred = torch.where(torch.isfinite(torch.expm1(y_pred)), torch.expm1(y_pred), np.nan)
-                elif args.model_type == "C":
-                    y_pred = torch.where(y_pred < 0, 1, 0)
+                # if args.model_type == "R" or args.model_type == "Rall":
+                #     y_pred = torch.where(torch.isfinite(torch.expm1(y_pred)), torch.expm1(y_pred), np.nan)
+                # elif args.model_type == "C":
+                #     y_pred = torch.where(y_pred < 0, 1, 0)
                 pr.append(y_pred)
                 
                 if step % 100 == 0:
@@ -330,11 +330,11 @@ class Tester(object):
                 
                 # Regressor
                 y_pred_R = model_R(graph)
-                y_pred_R = torch.where(torch.isfinite(torch.expm1(y_pred_R)), torch.expm1(y_pred_R), np.nan)
+                # y_pred_R = torch.where(torch.isfinite(torch.expm1(y_pred_R)), torch.expm1(y_pred_R), np.nan)
                 pr_R.append(y_pred_R)
                 
                 y_pred_C = model_C(graph)
-                y_pred_C = torch.where(y_pred_C < 0, 1, 0)
+                # y_pred_C = torch.where(y_pred_C < 0, 1, 0)
                 pr_C.append(y_pred_C)
                 
                 if step % 100 == 0:

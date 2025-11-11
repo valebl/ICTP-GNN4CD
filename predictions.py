@@ -105,11 +105,6 @@ if __name__ == '__main__':
     with open(args.input_path+args.graph_file, 'rb') as f:
         low_high_graph = pickle.load(f)
 
-    if "3h" in args.model_typel:
-        pr_target = torch.stack([torch.mean(pr_target[:,t-2:t+1], dim=1) for t in range(pr_target.shape[1])]).swapaxes(0,1)
-        test_idxs = test_idxs[::3]
-        write_log(f"A 3h time resolution is considered.", args, accelerator, 'a')
-
     # Load the input data statistics used during training
     # (At the moment we assume that the same statistics has been used for
     # the regressor and classifier in the RC model case)
@@ -128,15 +123,10 @@ if __name__ == '__main__':
     
     vars_names = ['q', 't', 'u', 'v', 'z']
     levels = ['200', '500', '700', '850', '1000']
-    if args.stats_mode == "var":
-        for var in range(5):
-            write_log(f"\nLow var {vars_names[var]}: mean={low_high_graph['low'].x[:,:,var,:].mean()}, std={low_high_graph['low'].x[:,:,var,:].std()}",
-                      args, accelerator, 'a')
-    elif args.stats_mode == "field":
-        for var in range(5):
-            for lev in range(5):
-                write_log(f"\nLow var {vars_names[var]} lev {levels[lev]}: mean={low_high_graph[:,:,var,lev].mean()}, std={low_high_graph[:,:,var,lev].std()}",
-                          args, accelerator, 'a')
+
+    for var in range(5):
+        write_log(f"\nLow var {vars_names[var]}: mean={low_high_graph['low'].x[:,:,var,:].mean()}, std={low_high_graph['low'].x[:,:,var,:].std()}",
+                    args, accelerator, 'a')
     
     write_log(f"\nHigh z: mean={low_high_graph['high'].x[:,0].mean()}, std={low_high_graph['high'].x[:,0].std()}",
               args, accelerator, 'a')
@@ -150,7 +140,7 @@ if __name__ == '__main__':
 
     Dataset_Graph = getattr(dataset, args.dataset_name)
     
-    dataset_graph = Dataset_Graph(targets=None, graph=low_high_graph, model_name=args.model_typel, seq_l=args.seq_l)
+    dataset_graph = Dataset_Graph(targets=None, graph=low_high_graph, model_name=args.model_type, seq_l=args.seq_l)
 
     custom_collate_fn = getattr(dataset, 'custom_collate_fn_graph')
         
@@ -159,8 +149,8 @@ if __name__ == '__main__':
     dataloader = torch.utils.data.DataLoader(dataset_graph, batch_size=args.batch_size, num_workers=0,
                     sampler=sampler_graph, collate_fn=custom_collate_fn)
 
-    model_file = importlib.import_module(f"models.{args.model_typel}")
-    Model = getattr(model_file, args.model_typel)
+    model_file = importlib.import_module(f"models.{args.model}")
+    Model = getattr(model_file, args.model)
     if args.model_type == "RC":
         model_C = Model(seq_l=args.seq_l+1)
         model_R = Model(seq_l=args.seq_l+1)
@@ -225,7 +215,7 @@ if __name__ == '__main__':
     elif args.model_type == "C":
         pr_C, times = tester.test(model, dataloader, args=args, accelerator=accelerator)
     else:
-        raise Exception("mode should be: 'RC', 'R', 'C' or 'Rall'")
+        raise Exception("'model_type' should be: 'RC', 'R', 'C' or 'Rall'")
 
     end = time.time()
 
@@ -237,6 +227,7 @@ if __name__ == '__main__':
     pr_target[pr_target < threshold] = 0
     pr_target = np.round(pr_target, decimals=1)
 
+    degree = degree(low_high_graph["high", "within", "high"].edge_index[0], low_high_graph["high"].num_nodes).cpu().numpy()
     mask =  degree > 2 * np.array([~np.isnan(pr_target[i,:]).all() for i in range(pr_target.shape[0])])
     mask_nan = mask_nan[mask,:]
 
@@ -263,7 +254,7 @@ if __name__ == '__main__':
         elif args.model_type == "R":
             pr_R = accelerator.gather(pr_R)
         elif args.model_type == "Rall":
-            pr_Rall = accelerator.gather(pr_R)
+            pr_Rall = accelerator.gather(pr_Rall)
         elif args.model_type == "C":
             pr_C = accelerator.gather(pr_C)
 
@@ -278,7 +269,7 @@ if __name__ == '__main__':
         pr_C = pr_C.squeeze().swapaxes(0,1).cpu().numpy()[:,indices]
         # processed estimates, ready to use
         pr = np.where(np.isfinite(np.expm1(pr_R)), np.expm1(pr_R), np.nan) * np.where(pr_C < threshold, 0.0, 1.0)
-        pr = pr[mask,:]; [pr<threshold] = 0; pr[mask_nan] = np.nan
+        pr = pr[mask,:]; pr[pr<threshold] = 0; pr[mask_nan] = np.nan
         # no Rall estimates in this case
         pr_Rall = None
     elif args.model_type == "R":
@@ -295,8 +286,8 @@ if __name__ == '__main__':
         pr_R = None
         pr_C = None
         # processed estimates, ready to use
-        pr = np.where(np.isfinite(np.expm1(pr_R)), np.expm1(pr_R), np.nan)
-        pr = pr[mask,:]; [pr<threshold] = 0; pr[mask_nan] = np.nan
+        pr = np.where(np.isfinite(np.expm1(pr_Rall)), np.expm1(pr_Rall), np.nan)
+        pr = pr[mask,:]; pr[pr<threshold] = 0; pr[mask_nan] = np.nan
     elif args.model_type == "C":
         # not processed C output
         pr_C = pr_C.squeeze().swapaxes(0,1).cpu().numpy()[:,indices]
@@ -314,7 +305,7 @@ if __name__ == '__main__':
     data["low"].lon = lon_low
     data["high"].lat = lat_high
     data["high"].lon = lon_high
-    data["high"].degree = degree.cpu().numpy()
+    data["high"].degree = degree
 
     data.pr_R_raw = pr_R
     data.pr_C_raw = pr_C
@@ -328,123 +319,123 @@ if __name__ == '__main__':
             pickle.dump(data, f)
 
 
-    ## OPTIONAL: create a dictionary with some ready-to-use results
-    # results = {}
-    # results["lon"] = lon_high
-    # results["lat"] = lat_high
-    # results["times"] = times
-    # results["pr_gripho"] = pr_target
-    # results["pr_gnn4cd"] = pr
+    # OPTIONAL: create a dictionary with some ready-to-use results
+    results = {}
+    results["lon"] = lon_high
+    results["lat"] = lat_high
+    results["times"] = times
+    results["pr_gripho"] = pr_target
+    results["pr_gnn4cd"] = pr
 
-    # # sesasons
+    # sesasons
 
-    # pr_pred_seasons = []
-    # pr_target_seasons = []
+    pr_pred_seasons = []
+    pr_target_seasons = []
 
-    # jf_start, jf_end = date_to_idxs(year_start=2007, month_start=1,day_start=1,year_end=2007,month_end=2,day_end=28,first_year=2007,first_month=1,first_day=1)
-    # mam_start, mam_end = date_to_idxs(year_start=2007, month_start=3,day_start=1,year_end=2007,month_end=5,day_end=31,first_year=2007,first_month=1,first_day=1)
-    # jja_start, jja_end = date_to_idxs(year_start=2007, month_start=6,day_start=1,year_end=2007,month_end=8,day_end=31,first_year=2007,first_month=1,first_day=1)
-    # son_start, son_end = date_to_idxs(year_start=2007, month_start=9,day_start=1,year_end=2007,month_end=11,day_end=30,first_year=2007,first_month=1,first_day=1)
+    jf_start, jf_end = date_to_idxs(year_start=2007, month_start=1,day_start=1,year_end=2007,month_end=2,day_end=28,first_year=2007,first_month=1,first_day=1)
+    mam_start, mam_end = date_to_idxs(year_start=2007, month_start=3,day_start=1,year_end=2007,month_end=5,day_end=31,first_year=2007,first_month=1,first_day=1)
+    jja_start, jja_end = date_to_idxs(year_start=2007, month_start=6,day_start=1,year_end=2007,month_end=8,day_end=31,first_year=2007,first_month=1,first_day=1)
+    son_start, son_end = date_to_idxs(year_start=2007, month_start=9,day_start=1,year_end=2007,month_end=11,day_end=30,first_year=2007,first_month=1,first_day=1)
 
-    # d_start, d_end = date_to_idxs(year_start=2007, month_start=12,day_start=1,year_end=2007,month_end=12,day_end=31,first_year=2007,first_month=1,first_day=1)
+    d_start, d_end = date_to_idxs(year_start=2007, month_start=12,day_start=1,year_end=2007,month_end=12,day_end=31,first_year=2007,first_month=1,first_day=1)
 
-    # djf_idxs = np.arange(jf_start, jf_end).tolist()
-    # djf_idxs.extend(np.arange(d_start, d_end).tolist())
+    djf_idxs = np.arange(jf_start, jf_end).tolist()
+    djf_idxs.extend(np.arange(d_start, d_end).tolist())
 
-    # pr_pred_seasons.append(pr[:,djf_idxs])
-    # pr_pred_seasons.append(pr[:,mam_start: mam_end])
-    # pr_pred_seasons.append(pr[:,jja_start: jja_end])
-    # pr_pred_seasons.append(pr[:,son_start: son_end])
+    pr_pred_seasons.append(pr[:,djf_idxs])
+    pr_pred_seasons.append(pr[:,mam_start: mam_end])
+    pr_pred_seasons.append(pr[:,jja_start: jja_end])
+    pr_pred_seasons.append(pr[:,son_start: son_end])
 
-    # pr_target_seasons.append(pr_target[:,djf_idxs])
-    # pr_target_seasons.append(pr_target[:,mam_start: mam_end])
-    # pr_target_seasons.append(pr_target[:,jja_start: jja_end])
-    # pr_target_seasons.append(pr_target[:,son_start: son_end])
+    pr_target_seasons.append(pr_target[:,djf_idxs])
+    pr_target_seasons.append(pr_target[:,mam_start: mam_end])
+    pr_target_seasons.append(pr_target[:,jja_start: jja_end])
+    pr_target_seasons.append(pr_target[:,son_start: son_end])
 
-    # results["pr_gnn4cd_seasons"] = pr_pred_seasons
-    # results["pr_gripho_seasons"] = pr_target_seasons
+    results["pr_gnn4cd_seasons"] = pr_pred_seasons
+    results["pr_gripho_seasons"] = pr_target_seasons
 
-    # # Mean percentage bias
+    # Mean percentage bias
 
-    # pr_bias_avg = np.nanmean(pr, axis=1) - np.nanmean(pr_target, axis=1)
-    # pr_bias_percentage_avg = pr_bias_avg / np.nanmean(pr_target, axis=1) * 100
+    pr_bias_avg = np.nanmean(pr, axis=1) - np.nanmean(pr_target, axis=1)
+    pr_bias_percentage_avg = pr_bias_avg / np.nanmean(pr_target, axis=1) * 100
 
-    # results["pr_bias_percentage_avg"] = pr_bias_percentage_avg
+    results["pr_bias_percentage_avg"] = pr_bias_percentage_avg
 
-    # # Diurnal cycles
+    # Diurnal cycles
 
-    # pr_pred_seasons_daily_cycle = np.zeros((4,24))
-    # for s in range(4):
-    #     pr_season = pr_pred_seasons[s]
-    #     for i in range(0,24):
-    #         pr_pred_seasons_daily_cycle[s,i] = np.nanmean(pr_season[:,i::24])
+    pr_pred_seasons_daily_cycle = np.zeros((4,24))
+    for s in range(4):
+        pr_season = pr_pred_seasons[s]
+        for i in range(0,24):
+            pr_pred_seasons_daily_cycle[s,i] = np.nanmean(pr_season[:,i::24])
 
-    # pr_gripho_seasons_daily_cycle = np.zeros((4,24))
-    # for s in range(4):
-    #     pr_season = pr_target_seasons[s]
-    #     for i in range(0,24):
-    #         pr_gripho_seasons_daily_cycle[s,i] = np.nanmean(pr_season[:,i::24])
+    pr_gripho_seasons_daily_cycle = np.zeros((4,24))
+    for s in range(4):
+        pr_season = pr_target_seasons[s]
+        for i in range(0,24):
+            pr_gripho_seasons_daily_cycle[s,i] = np.nanmean(pr_season[:,i::24])
 
-    # t_gripho = 0.1
-    # t = 0.1
-    # pr_pred_seasons_daily_cycle_intensity = np.zeros((4,24))
-    # pr_pred_seasons_daily_cycle_frequency = np.zeros((4,24))
-    # for s in range(4):
-    #     pr_season = pr_pred_seasons[s]
-    #     for i in range(0,24):
-    #         pr_pred_seasons_daily_cycle_intensity[s,i] = np.nanmean(pr_season[:,i::24][pr_season[:,i::24]>=t])
-    #         pr_pred_seasons_daily_cycle_frequency[s,i] = (pr_season[:,i::24]>=t).sum() / pr_season[:,i::24].flatten().shape[0] * 100
+    t_gripho = 0.1
+    t = 0.1
+    pr_pred_seasons_daily_cycle_intensity = np.zeros((4,24))
+    pr_pred_seasons_daily_cycle_frequency = np.zeros((4,24))
+    for s in range(4):
+        pr_season = pr_pred_seasons[s]
+        for i in range(0,24):
+            pr_pred_seasons_daily_cycle_intensity[s,i] = np.nanmean(pr_season[:,i::24][pr_season[:,i::24]>=t])
+            pr_pred_seasons_daily_cycle_frequency[s,i] = (pr_season[:,i::24]>=t).sum() / pr_season[:,i::24].flatten().shape[0] * 100
 
-    # pr_gripho_seasons_daily_cycle_intensity = np.zeros((4,24))
-    # pr_gripho_seasons_daily_cycle_frequency = np.zeros((4,24))
-    # for s in range(4):
-    #     pr_season = pr_target_seasons[s]
-    #     for i in range(0,24):
-    #         pr_gripho_seasons_daily_cycle_intensity[s,i] = np.nanmean(pr_season[:,i::24][pr_season[:,i::24]>=t_gripho])
-    #         pr_gripho_seasons_daily_cycle_frequency[s,i] = (pr_season[:,i::24]>=t_gripho).sum() / pr_season[:,i::24].flatten().shape[0] * 100
+    pr_gripho_seasons_daily_cycle_intensity = np.zeros((4,24))
+    pr_gripho_seasons_daily_cycle_frequency = np.zeros((4,24))
+    for s in range(4):
+        pr_season = pr_target_seasons[s]
+        for i in range(0,24):
+            pr_gripho_seasons_daily_cycle_intensity[s,i] = np.nanmean(pr_season[:,i::24][pr_season[:,i::24]>=t_gripho])
+            pr_gripho_seasons_daily_cycle_frequency[s,i] = (pr_season[:,i::24]>=t_gripho).sum() / pr_season[:,i::24].flatten().shape[0] * 100
 
-    # results["pr_gnn4cd_seasons_daily_cycle"] = pr_pred_seasons_daily_cycle
-    # results["pr_gripho_seasons_daily_cycle"] = pr_gripho_seasons_daily_cycle
-    # results["pr_gnn4cd_seasons_daily_cycle_intensity"] = pr_pred_seasons_daily_cycle_intensity
-    # results["pr_gnn4cd_seasons_daily_cycle_frequency"] = pr_pred_seasons_daily_cycle_frequency
-    # results["pr_gripho_seasons_daily_cycle_intensity"] = pr_gripho_seasons_daily_cycle_intensity
-    # results["pr_gripho_seasons_daily_cycle_frequency"] = pr_gripho_seasons_daily_cycle_frequency
+    results["pr_gnn4cd_seasons_daily_cycle"] = pr_pred_seasons_daily_cycle
+    results["pr_gripho_seasons_daily_cycle"] = pr_gripho_seasons_daily_cycle
+    results["pr_gnn4cd_seasons_daily_cycle_intensity"] = pr_pred_seasons_daily_cycle_intensity
+    results["pr_gnn4cd_seasons_daily_cycle_frequency"] = pr_pred_seasons_daily_cycle_frequency
+    results["pr_gripho_seasons_daily_cycle_intensity"] = pr_gripho_seasons_daily_cycle_intensity
+    results["pr_gripho_seasons_daily_cycle_frequency"] = pr_gripho_seasons_daily_cycle_frequency
 
-    # # PDF
+    # PDF
 
-    # hist_y, bin_edges_y = np.histogram(pr_target.flatten(), bins=np.arange(0,200,0.5).astype(np.float32), density=False)
-    # hist_pr, bin_edges_pr = np.histogram(pr.flatten(), bins=np.arange(0,200,0.5).astype(np.float32), density=False)
+    hist_y, bin_edges_y = np.histogram(pr_target.flatten(), bins=np.arange(0,200,0.5).astype(np.float32), density=False)
+    hist_pr, bin_edges_pr = np.histogram(pr.flatten(), bins=np.arange(0,200,0.5).astype(np.float32), density=False)
 
-    # Ntot_y = hist_y.sum()
-    # Ntot_pr = hist_pr.sum()
+    Ntot_y = hist_y.sum()
+    Ntot_pr = hist_pr.sum()
 
-    # bin_edges_y_centre = (bin_edges_y[:-1] + bin_edges_y[1:]) / 2
-    # bin_edges_pr_centre = (bin_edges_pr[:-1] + bin_edges_pr[1:]) / 2
+    bin_edges_y_centre = (bin_edges_y[:-1] + bin_edges_y[1:]) / 2
+    bin_edges_pr_centre = (bin_edges_pr[:-1] + bin_edges_pr[1:]) / 2
 
-    # results["bin_edges_centre_gripho"] = bin_edges_y_centre
-    # results["bin_edges_centre_gnn4cd"] = bin_edges_pr_centre
-    # results["hist/Ntot_gripho"] = hist_y/Ntot_y
-    # results["hist/Ntot_gnn4cd"] = hist_pr/Ntot_pr
+    results["bin_edges_centre_gripho"] = bin_edges_y_centre
+    results["bin_edges_centre_gnn4cd"] = bin_edges_pr_centre
+    results["hist/Ntot_gripho"] = hist_y/Ntot_y
+    results["hist/Ntot_gnn4cd"] = hist_pr/Ntot_pr
 
-    # # EXTREME PERCENTILES
+    # EXTREME PERCENTILES
 
-    # p99_y = np.nanpercentile(pr_target, q=99, axis=1)
-    # p99_pred = np.nanpercentile(pr, q=99, axis=1)
-    # p99_bias = p99_pred - p99_y
-    # p99_bias_percentile = p99_bias / p99_y * 100
+    p99_y = np.nanpercentile(pr_target, q=99, axis=1)
+    p99_pred = np.nanpercentile(pr, q=99, axis=1)
+    p99_bias = p99_pred - p99_y
+    p99_bias_percentile = p99_bias / p99_y * 100
 
-    # p999_y = np.nanpercentile(pr_target, q=99.9, axis=1)
-    # p999_pred = np.nanpercentile(pr, q=99.9, axis=1)
-    # p999_bias = p999_pred - p999_y
-    # p999_bias_percentile = p999_bias / p999_y * 100
+    p999_y = np.nanpercentile(pr_target, q=99.9, axis=1)
+    p999_pred = np.nanpercentile(pr, q=99.9, axis=1)
+    p999_bias = p999_pred - p999_y
+    p999_bias_percentile = p999_bias / p999_y * 100
 
-    # results["pr_gripho_p99"] = p99_y
-    # results["pr_gnn4cd_p99"] = p99_pred
-    # results["p99_bias_percentile"] = p99_bias_percentile
-    # results["pr_gripho_p999"] = p999_y
-    # results["pr_gnn4cd_p999"] = p999_pred
-    # results["p999_bias_percentile"] = p999_bias_percentile
+    results["pr_gripho_p99"] = p99_y
+    results["pr_gnn4cd_p99"] = p99_pred
+    results["p99_bias_percentile"] = p99_bias_percentile
+    results["pr_gripho_p999"] = p999_y
+    results["pr_gnn4cd_p999"] = p999_pred
+    results["p999_bias_percentile"] = p999_bias_percentile
 
-    # if accelerator is None or accelerator.is_main_process:
-    #     with open(args.output_path + "results_dict.pkl", 'wb') as f:
-    #         pickle.dump(results, f)
+    if accelerator is None or accelerator.is_main_process:
+        with open(args.output_path + "results_dict.pkl", 'wb') as f:
+            pickle.dump(results, f)
