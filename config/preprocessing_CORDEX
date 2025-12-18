@@ -37,7 +37,7 @@ PREFIX_PHASE_1="sliced_"
 OUTPUT_PATH_PHASE_2=${LOG_PATH}
 OUTPUT_FILE_PHASE_2="low_high_graph_${DOMAIN}.pkl"
 #-- 2A (w resolution data)
-INPUT_PATH_PHASE_2="/leonardo_work/ICT25_ESP/SHARED/CORDEXML-GRAPHS/${DOMAIN}_domain/train/${EXPERIMENT}/"	# where the output of phase 1 is stored
+INPUT_PATH_PHASE_2="/leonardo_work/ICT25_ESP/SHARED/CORDEXML-GRAPHS/${DOMAIN}_domain/train/${EXPERIMENT}/predictors/"	# where the output of phase 1 is stored
 #-- 2B (high resolution data)
 INPUT_PATH_TARGET="/leonardo_work/ICT25_ESP/SHARED/CORDEXML-BENCHMARK/${DOMAIN}_domain/train/${EXPERIMENT}/target/"
 TARGET_FILE="pr_tasmax_CNRM-CM5_1961-1980_2080-2099.nc"
@@ -46,7 +46,8 @@ TARGET_MULTIPLIER=1.0
 INPUT_PATH_TOPO="/leonardo_work/ICT25_ESP/SHARED/CORDEXML-BENCHMARK/${DOMAIN}_domain/train/${EXPERIMENT}/predictors/"
 TOPO_FILE="Static_fields.nc" #orography
 
-
+DOMAIN="ALPS"
+EXPERIMENT="Emulator_hist_future"
 
 
 SUFFIX_PHASE_2=""
@@ -65,5 +66,4 @@ INTERVAL=0.25
 
 #--------------do not change here below------------------
 
-PHASE_1_PATH="${MAIN_PATH}/slice_and_merge_"${PREDICTORS_TYPE}".sh"
 PHASE_2_PYTHON_FILE="preprocessing"

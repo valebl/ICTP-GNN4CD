@@ -5,13 +5,13 @@ import time
 import argparse
 import sys
 import torch
-import netCDF4 as nc
+#import netCDF4 as nc
 from torch_geometric.utils import degree
 from torch_geometric.data import Data, HeteroData
 
 
 from utils.tools import write_log
-from utils.graph import cut_window, retain_valid_nodes, derive_edge_index_within, derive_edge_index_multiscale
+from utils.graph import cut_window, derive_edge_index_within, derive_edge_index_multiscale
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
@@ -23,6 +23,8 @@ parser.add_argument('--input_path_target', type=str)
 parser.add_argument('--input_path_topo', type=str)
 parser.add_argument('--target_file', type=str)
 parser.add_argument('--topo_file', type=str)
+parser.add_argument('--domain', type=str)
+parser.add_argument('--experiment', type=str)
 
 #-- lat lon grid values
 parser.add_argument('--lon_min', type=float)
@@ -76,14 +78,14 @@ n_params = len(params)
 
 write_log('\nStarting the preprocessing of the low resolution data.', args, accelerator=None, mode='a')
 
-training_experiment='Emulator_hist_future'
+training_experiment= args.experiment
 if training_experiment == 'ESD_pseudo_reality':
     period_training = '1961-1980'
 elif training_experiment == 'Emulator_hist_future':
     period_training = '1961-1980_2080-2099'
 
 
-domain ='ALPS'
+domain = args.domain
 if domain == 'ALPS':
     gcm_name = 'CNRM-CM5'
 
