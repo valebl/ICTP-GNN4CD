@@ -205,7 +205,11 @@ def compute_input_statistics(x_low, x_high, args, accelerator=None):
 
     return means_low, stds_low, means_high, stds_high
 
+#new function to standardize orography
 
+
+
+#this function standardize together orography, in col 0 , and land use vars from col 1
 def standardize_input(x_low, x_high, means_low, stds_low, means_high, stds_high, args=None, accelerator=None):
 
     write_log(f'\nStandardizing the low-res input data.', args, accelerator, 'a')
@@ -254,6 +258,27 @@ def prepare_target(target_train, model_type, threshold = 0.1):
     elif model_type == "Rall":
         #-- REGRESSOR ON ALL --#
         target_train = torch.log1p(target_train)
+
+    target_train[mask_nan] = torch.nan
+
+    return target_train
+
+def prepare_target_Rall(target_train, threshold = 0.1):
+    
+    # derive two masks:
+    # - mask_nan, i.e. where the target is nan
+    # - mask_geq_threshold, i.e. where the target is larger than the preferred threshold (now 0.1mm)
+    mask_threshold = target_train < threshold #mm
+    mask_nan = torch.isnan(target_train)
+
+    # set to 0.0 everything below sensitivity threshold
+    target_train[mask_threshold] = 0.0
+    # round to comply with instrument sensitivity
+    target_train = torch.round(target_train, decimals=1)
+
+   
+    #-- target for REGRESSOR ON ALL --#
+    target_train = torch.log1p(target_train)
 
     target_train[mask_nan] = torch.nan
 
