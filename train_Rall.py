@@ -46,7 +46,7 @@ parser.add_argument('--seed', type=int)
 parser.add_argument('--n_gpu', type=int, default=4)
 
 parser.add_argument('--model_type', type=str)
-parser.add_argument('--model_name', type=str, default='GNN4CD_model')
+parser.add_argument('--model_name', type=str, default='P_GNN4CD_CORDEX_model')
 parser.add_argument('--dataset_name', type=str, default='Dataset_Graph')
 parser.add_argument('--collate_name', type=str)
 parser.add_argument('--seq_l', type=int)
