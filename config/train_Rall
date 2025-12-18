@@ -13,7 +13,7 @@ N_GPU=4
 # TRAIN PARAMETERS #
 #------------------#
 SEED=100
-MODEL_NAME="GNN4CD_model"
+MODEL_NAME="P_GNN4CD_CORDEX_model"
 MODEL_TYPE="Rall" # either R, C or Rall
 LR_SCHEDULER="StepLR"
 SEQ_L=24
