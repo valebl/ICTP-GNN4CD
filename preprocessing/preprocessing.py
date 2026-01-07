@@ -176,8 +176,7 @@ if args.target_multiplier is not None:
 write_log("\nCutting the window...", args, accelerator=None, mode='a')
 
 #-- Cut gripho and topo to the desired window --#
-lon_high, lat_high, target_high = cut_window(
-        args.lon_min, args.lon_max, args.lat_min, args.lat_max, lon, lat, target_high)
+lon_high, lat_high, target_high = cut_window(args.lon_min, args.lon_max, args.lat_min, args.lat_max, lon, lat, target_high)
 
 print("target done!")
 

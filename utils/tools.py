@@ -74,7 +74,31 @@ def date_to_idxs(year_start, month_start, day_start, year_end, month_end, day_en
     end_idx = (date(int(year_end), int(month_end), int(day_end)) - date(int(first_year), int(first_month), int(first_day))).days * 24 + 24
 
     return start_idx, end_idx
-    
+
+
+def date_to_idxs_new(year_start, month_start, day_start, year_end, month_end, day_end,
+                 first_year, first_month=1, first_day=2):
+    r'''
+    Computes the start and end idxs crrespnding to the specified period, with respect to a
+    reference date.
+    Args:
+        year_start (int): year at which period starts
+        month_start (int): month at which period starts
+        day_start (int): day at which period starts
+        year_end (int): year at which period ends
+        month_end (int): month at which period ends
+        day_end (int): day at which period ends
+        first_year (int): reference year to compute the idxs
+    Returns:
+        The start and end idxs for the period
+    '''
+
+    start_idx = (date(int(year_start), int(month_start), int(day_start)) - date(int(first_year), int(first_month), int(first_day))).days 
+    end_idx = (date(int(year_end), int(month_end), int(day_end)) - date(int(first_year), int(first_month), int(first_day))).days 
+
+    return start_idx, end_idx
+
+
 
 def find_not_all_nan_times(target_train):
     r'''
@@ -167,6 +191,215 @@ def derive_train_val_idxs(train_year_start, train_month_start, train_day_start, 
             with open(args.output_path + "val_idxs.pkl", 'wb') as f:
                 pickle.dump(torch.tensor(val_idxs), f)
                 
+    return train_idxs, val_idxs
+
+
+def derive_train_val_idxs_new(train_year_start, train_month_start, train_day_start, train_year_end, train_month_end,
+                         train_day_end, first_year, model_name, idxs_not_all_nan=None, validation_year=None, args=None, accelerator=None):
+    r'''
+    Computes the train and validation indexes
+    Args:
+        train_year_start (int): year at which period starts
+        train_month_start (int): month at which period starts
+        train_day_start (int): day at which period starts
+        train_year_end (int): year at which period ends
+        train_month_end (int): month at which period ends
+        train_day_end (int): day at which period ends
+        first_year (int): reference year to compute the idxs
+        validation_year (int): year considered for validation
+    Returns:
+        train_idxs (tensor)
+        val_idxs (tensor)
+    '''
+    # Derive the idxs corresponding to the training period
+    train_start_idx, train_end_idx = date_to_idxs_new(train_year_start, train_month_start, train_day_start,
+                                                  train_year_end, train_month_end, train_day_end, first_year)
+
+    # Derive the idxs corresponding to the training period
+    if validation_year is None:
+        pass
+    else:
+        val_start_idx, val_end_idx = date_to_idxs_new(validation_year, 1, 1, validation_year, 12, 31, first_year)
+
+    # We need the previous 2 days to make the prediction at time t
+    if train_start_idx < 2:
+        train_start_idx = 2
+        
+
+    if train_start_idx >= train_end_idx:
+        raise Exception("Train start idxs is not larger than train end idx.")
+    if val_start_idx >= val_end_idx:
+        raise Exception("Val start idxs is not larger than val end idx.")
+            
+    # Val year before or after train years
+    if train_start_idx >= val_end_idx or train_end_idx <= val_start_idx:
+        train_idxs_list = [*range(train_start_idx, train_end_idx)]
+        val_idxs_list = [*range(val_start_idx, val_end_idx)]
+    # Val year inside train years
+    elif val_start_idx > train_start_idx and val_end_idx < train_end_idx:
+        train_idxs_list = [*range(train_start_idx, val_start_idx)] + [*range(val_end_idx,  train_end_idx)]
+        val_idxs_list = [*range(val_start_idx, val_end_idx)]
+    else:
+        raise Exception("Partially overlapping train and validation periods are not supported." +
+                        "Val must be before, after or completely inside train years.")
+
+    # Remove the idxs for which all graph nodes have nan target
+    if idxs_not_all_nan is not None:
+            train_idxs_list = [i for i in train_idxs_list if i in idxs_not_all_nan]
+            val_idxs_list = [i for i in val_idxs_list if i in idxs_not_all_nan]
+    
+    train_idxs = torch.tensor(train_idxs_list)
+    val_idxs = torch.tensor(val_idxs_list)
+
+    if args is not None:
+        if accelerator is None or accelerator.is_main_process:
+            with open(args.output_path + "train_idxs.pkl", 'wb') as f:
+                pickle.dump(torch.tensor(train_idxs), f)
+            with open(args.output_path + "val_idxs.pkl", 'wb') as f:
+                pickle.dump(torch.tensor(val_idxs), f)
+                
+    return train_idxs, val_idxs
+
+
+
+def _merge_intervals(intervals):
+    """Merge overlapping/contiguous [start, end) intervals."""
+    if not intervals:
+        return []
+    intervals = sorted(intervals, key=lambda x: x[0])
+    merged = [list(intervals[0])]
+    for s, e in intervals[1:]:
+        last_s, last_e = merged[-1]
+        if s <= last_e:  # overlap or touch
+            merged[-1][1] = max(last_e, e)
+        else:
+            merged.append([s, e])
+    return [(s, e) for s, e in merged]
+
+
+def _subtract_intervals(base_interval, cut_intervals):
+    """
+    Subtract a set of [start, end) cut_intervals from base_interval [bs, be).
+    Returns list of remaining intervals.
+    """
+    bs, be = base_interval
+    if bs >= be:
+        return []
+
+    cut_intervals = _merge_intervals([(max(bs, s), min(be, e)) for s, e in cut_intervals if e > bs and s < be])
+    if not cut_intervals:
+        return [(bs, be)]
+
+    remaining = []
+    cur = bs
+    for s, e in cut_intervals:
+        if s > cur:
+            remaining.append((cur, s))
+        cur = max(cur, e)
+    if cur < be:
+        remaining.append((cur, be))
+    return remaining
+
+def derive_train_val_idxs_CORDEX(
+    train_year_start, train_month_start, train_day_start,
+    train_year_end, train_month_end, train_day_end,
+    first_year,
+    model_name,
+    idxs_not_all_nan=None,
+    validation_years=None,          # NEW: list[int]
+    validation_year_start=None,     # NEW: int (optional)
+    K=None,                         # NEW: int (optional)
+    args=None,
+    accelerator=None
+):
+    r'''
+    Computes the train and validation indexes.
+
+    Validation can be provided as:
+      - validation_years: list of years, OR
+      - validation_year_start + K: consecutive years [start, start+K-1]
+
+    STRICT RULE (old behavior): validation must be fully outside training.
+    That is, every validation interval must be entirely before or entirely after
+    the training interval (no overlap allowed).
+    Returns:
+        train_idxs (tensor)
+        val_idxs (tensor)
+    '''
+    # ---- Train interval ----
+    train_start_idx, train_end_idx = date_to_idxs(
+        train_year_start, train_month_start, train_day_start,
+        train_year_end, train_month_end, train_day_end,
+        first_year
+    )
+
+    # Need previous 24h
+    train_start_idx = max(train_start_idx, 2)
+
+    if train_start_idx >= train_end_idx:
+        raise Exception("Train start idx is not smaller than train end idx.")
+
+    # ---- Resolve validation years ----
+    if validation_years is not None:
+        years = list(validation_years)
+    elif validation_year_start is not None and K is not None:
+        years = list(range(validation_year_start, validation_year_start + K))
+    else:
+        years = None
+
+    if not years:
+        raise ValueError("Provide validation_years OR (validation_year_start and K).")
+
+    # ---- Build validation intervals (one per year) as [start, end) ----
+    val_intervals = []
+    for y in years:
+        vs, ve = date_to_idxs(y, 1, 1, y, 12, 31, first_year)
+
+        # Need previous 24h
+        vs = max(vs, 2)
+
+        if vs >= ve:
+            raise Exception(f"Val start idx is not smaller than val end idx for year {y}.")
+
+        val_intervals.append((vs, ve))
+
+    # Merge contiguous/overlapping validation years into larger blocks
+    val_intervals = _merge_intervals(val_intervals)
+
+    # Sanity check train interval
+    if train_start_idx >= train_end_idx:
+        raise Exception("Train start idx is not smaller than train end idx.")
+
+    # Compute train = train_interval minus val_intervals
+    train_intervals = _subtract_intervals((train_start_idx, train_end_idx), val_intervals)
+
+        # Expand intervals into index lists
+    train_idxs_list = []
+    for s, e in train_intervals:
+        train_idxs_list.extend(range(s, e))
+
+
+    val_idxs_list = []
+    for s, e in val_intervals:
+        val_idxs_list.extend(range(s, e))
+
+    # ---- Remove idxs for which all graph nodes have nan target ----
+    if idxs_not_all_nan is not None:
+        idxs_set = set(idxs_not_all_nan)
+        train_idxs_list = [i for i in train_idxs_list if i in idxs_set]
+        val_idxs_list   = [i for i in val_idxs_list   if i in idxs_set]
+
+    train_idxs = torch.tensor(train_idxs_list, dtype=torch.long)
+    val_idxs   = torch.tensor(val_idxs_list, dtype=torch.long)
+
+    # ---- Save if requested ----
+    if args is not None:
+        if accelerator is None or accelerator.is_main_process:
+            with open(args.output_path + "train_idxs.pkl", "wb") as f:
+                pickle.dump(train_idxs, f)
+            with open(args.output_path + "val_idxs.pkl", "wb") as f:
+                pickle.dump(val_idxs, f)
+
     return train_idxs, val_idxs
 
                    

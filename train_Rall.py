@@ -12,7 +12,7 @@ import importlib
 
 import utils.loss_functions
 from utils.tools import write_log, set_seed_everything
-from utils.tools import prepare_target_Rall, find_not_all_nan_times, derive_train_val_idxs
+from utils.tools import prepare_target_Rall, find_not_all_nan_times, derive_train_val_idxs_new
 from utils.tools import derive_qmse_bins, compute_input_statistics, standardize_input
 from utils.train_test import Trainer
 from accelerate import Accelerator
@@ -46,7 +46,7 @@ parser.add_argument('--seed', type=int)
 parser.add_argument('--n_gpu', type=int, default=4)
 
 parser.add_argument('--model_type', type=str)
-parser.add_argument('--model_name', type=str, default='GNN4CD_model')
+parser.add_argument('--model_name', type=str, default='P_GNN4CD_model_CORDEX')
 parser.add_argument('--dataset_name', type=str, default='Dataset_Graph')
 parser.add_argument('--collate_name', type=str)
 parser.add_argument('--seq_l', type=int)
@@ -142,7 +142,7 @@ if __name__ == '__main__':
     
 
     # Derive the train and validation indexes
-    train_idxs, val_idxs = derive_train_val_idxs(
+    train_idxs, val_idxs = derive_train_val_idxs_new(
         args.train_year_start, args.train_month_start, args.train_day_start, args.train_year_end,
         args.train_month_end, args.train_day_end, args.first_year, args.model_name, idxs_not_all_nan,
         args.validation_year, args=args, accelerator=accelerator)
@@ -200,7 +200,7 @@ if __name__ == '__main__':
     sampler_graph_train = Iterable_Graph(dataset_graph=dataset_graph, shuffle=True, idxs_vector=train_idxs)
     sampler_graph_val = Iterable_Graph(dataset_graph=dataset_graph, shuffle=False, idxs_vector=val_idxs, t_offset=val_idxs.min())
 
-    write_log(f'\nTrainset size = {train_idxs.shape[0]}, validationset size = {val_idxs.shape[0]}.', args, accelerator, 'a')
+    write_log(f'\nTrainset size = {train_idxs.shape[0]}, validation set size = {val_idxs.shape[0]}.', args, accelerator, 'a')
 
     # Define the dataloaders
     dataloader_train = torch.utils.data.DataLoader(dataset_graph, batch_size=args.batch_size, num_workers=0,

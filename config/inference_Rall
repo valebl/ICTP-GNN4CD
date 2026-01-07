@@ -14,7 +14,7 @@ N_GPU=4
 #------------------#
 SEED=100
 #change to P_GNN4CD_CORDEX_model or T_GNN4CD_CORDEX_model
-MODEL_NAME="GNN4CD_model"
+MODEL_NAME="GNN4CD_model"  #
 MODEL_TYPE="Rall" # either R, C or Rall
 LR_SCHEDULER="StepLR"
 SEQ_L=3
@@ -45,8 +45,6 @@ ACCELERATE_CONFIG_PATH="/leonardo/home/userexternal/$USER/.cache/huggingface/acc
 #-------------------------------#
 # INPUT/OUTPUT FILES PARAMETERS #
 #-------------------------------#
-
-#TODO: change data path
 INPUT_PATH="/leonardo_work/ICT25_ESP/SHARED/example_data/preprocessed/"
 OUTPUT_PATH=${LOG_PATH}
 LOG_FILE="log.txt"
@@ -58,10 +56,10 @@ COLLATE_NAME="custom_collate_fn_graph"
 
 
 #----------------------------------------#
-#             TRAINING PERIOD            #
+#             INFERENCE PERIOD            #
 #----------------------------------------#
 
-#change training period to CORDEX
+#change inference period to CORDEX
 TRAIN_YEAR_START=2001
 TRAIN_MONTH_START=1
 TRAIN_DAY_START=1
