@@ -19,6 +19,8 @@ MODEL_TYPE="Rall" # either R, C or Rall
 LR_SCHEDULER="StepLR"
 SEQ_L=3
 
+EXPERIMENT="ESD_pseudo_reality"
+
 EPOCHS=50
 BATCH_SIZE=32
 LR_STEP_SIZE=25

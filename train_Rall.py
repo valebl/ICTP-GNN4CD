@@ -12,7 +12,7 @@ import importlib
 
 import utils.loss_functions
 from utils.tools import write_log, set_seed_everything
-from utils.tools import prepare_target_Rall, find_not_all_nan_times, derive_train_val_idxs_new
+from utils.tools import prepare_target_Rall, find_not_all_nan_times, derive_train_val_idxs_CORDEX
 from utils.tools import derive_qmse_bins, compute_input_statistics, standardize_input
 from utils.train_test import Trainer
 from accelerate import Accelerator
@@ -33,6 +33,7 @@ parser.add_argument('--use_accelerate',  action='store_true')
 parser.add_argument('--no-use_accelerate', dest='use_accelerate', action='store_false')
 
 #-- training hyperparameters
+parser.add_argument('--experiment', type=str, default='ESD_pseudo_reality')
 parser.add_argument('--epochs', type=int, default=15, help='number of total training epochs')
 parser.add_argument('--batch_size', type=int, default=64, help='batch size (global)')
 parser.add_argument('--step_size', type=int, default=10, help='scheduler step size (global)')
@@ -87,6 +88,16 @@ if __name__ == '__main__':
         accelerator = Accelerator(log_with="wandb", step_scheduler_with_optimizer=False)
     else:
         accelerator = None
+
+    training_experiment= args.experiment
+    if training_experiment == 'ESD_pseudo_reality':
+        period_training = '1961-1980'
+    elif training_experiment == 'Emulator_hist_future':
+        period_training = '1961-1980_2080-2099'
+
+    validation_years=[1965,1970,1975]#change with CORDEX validation years
+    number_valyears=len(validation_years)
+
     
     os.environ['WANDB_API_KEY'] = args.wandb_api_key
     os.environ['WANDB_USERNAME'] = args.wandb_username
@@ -140,12 +151,13 @@ if __name__ == '__main__':
             f" time indexes are considered ({(len(idxs_not_all_nan) / target_train.shape[1] * 100):.1f} " +
             "% of initial ones).", args, accelerator, 'a')
     
-
+    
     # Derive the train and validation indexes
-    train_idxs, val_idxs = derive_train_val_idxs_new(
+
+    train_idxs, val_idxs = derive_train_val_idxs_CORDEX(
         args.train_year_start, args.train_month_start, args.train_day_start, args.train_year_end,
         args.train_month_end, args.train_day_end, args.first_year, args.model_name, idxs_not_all_nan,
-        args.validation_year, args=args, accelerator=accelerator)
+        validation_years, number_valyears, args=args, accelerator=accelerator)
     
     
     write_log(f"\nTrain from {args.train_day_start}/{args.train_month_start}/{args.train_year_start} to " +
