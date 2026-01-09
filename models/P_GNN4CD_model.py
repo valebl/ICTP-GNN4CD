@@ -3,13 +3,17 @@ import torch_geometric.nn as geometric_nn
 from torch_geometric.nn import GATv2Conv, GraphConv
 
 ###########################################################
-### The GNN4CD_model architecture is used for both the  ###
-### Classifier and Regressor components of the Emulator ###
+### This GNN4CD_model architecture is used to downscale the precipitation in the CORDEX-ML experiment  ###
+### The CORDEX-ML experiment is described at:  ###
 ###########################################################
 
-class GNN4CD_model(nn.Module):
-    
-    def __init__(self, encoding_dim=128, seq_l=25, h_in=5*5, h_hid=5*5, n_layers=2, high_in=6+1, low2high_out=64, high_out=64):
+
+class P_GNN4CD_model(nn.Module):
+    """
+    GNN4CD model to emulate high-resol precipitation maps
+    """
+
+    def __init__(self, encoding_dim=64, seq_l=3, h_in=5*3, h_hid=5*3, n_layers=2, high_in=1, low2high_out=64, high_out=64):
         super(GNN4CD_model, self).__init__()
 
         # input shape (N,L,Hin)
@@ -29,7 +33,7 @@ class GNN4CD_model(nn.Module):
         self.processor = geometric_nn.Sequential('x, edge_index', [
             (geometric_nn.BatchNorm(low2high_out), 'x -> x'),
             (GATv2Conv(in_channels=low2high_out, out_channels=high_out, heads=2, dropout=0.2, aggr='mean', add_self_loops=True, bias=True), 'x, edge_index -> x'),
-            (geometric_nn.BatchNorm(high_out*2), 'x -> x'), 
+            (geometric_nn.BatchNorm(high_out*2), 'x -> x'),
             nn.ReLU(),
             (GATv2Conv(in_channels=high_out*2, out_channels=high_out, heads=2, dropout=0.2, aggr='mean', add_self_loops=True, bias=True),'x, edge_index -> x'),
             (geometric_nn.BatchNorm(high_out*2), 'x -> x'),
@@ -43,7 +47,7 @@ class GNN4CD_model(nn.Module):
             (GATv2Conv(in_channels=high_out*2, out_channels=high_out, heads=1, dropout=0.0, aggr='mean', add_self_loops=True, bias=True), 'x, edge_index -> x'),
             nn.ReLU(),
             ])
-    
+
         self.predictor = nn.Sequential(
             nn.Linear(high_out, high_out),
             nn.ReLU(),
@@ -51,6 +55,7 @@ class GNN4CD_model(nn.Module):
             nn.ReLU(),
             nn.Linear(32, 1)
             )
+
 
     def forward(self, data):
         encod_rnn, _ = self.rnn(data.x_dict['low']) # out, h
@@ -61,8 +66,5 @@ class GNN4CD_model(nn.Module):
         x_high = self.predictor(encod_high)
 
         return x_high
-    
-
-
 
 
