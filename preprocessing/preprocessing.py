@@ -22,6 +22,7 @@ parser.add_argument('--log_file', type=str)
 parser.add_argument('--input_path_target', type=str)
 parser.add_argument('--input_path_topo', type=str)
 parser.add_argument('--target_file', type=str)
+parser.add_argument('--target_var', type=str, default='precipitation') #alternative var: surface temperature, called temperature
 parser.add_argument('--topo_file', type=str)
 parser.add_argument('--domain', type=str)
 parser.add_argument('--experiment', type=str)
@@ -144,22 +145,22 @@ write_log(f"\n\nStarting the preprocessing of high resolution data.", args, acce
 # CUT LON, LAT, PR, Z TO WINDOW #
 #-------------------------------#
 
-write_log(f"\nLoading target and topography.", args, accelerator=None, mode='a')
+write_log(f"\nLoading target (precipitation or temperature) and topography.", args, accelerator=None, mode='a')
 dataset_high = xr.open_dataset(args.input_path_target + args.target_file, engine="netcdf4")
-topo = xr.open_dataset(args.input_path_topo + args.topo_file, engine="netcdf4")
 
+#Reading the target map
 lon = dataset_high.lon.to_numpy()
 lat = dataset_high.lat.to_numpy()
 if lon.shape != lat.shape:
     lon, lat = np.meshgrid(lon, lat)
-try:
+if target_var=='precipitation': 
     target_high = dataset_high.pr.to_numpy()
-except:
+else:
     target_high = dataset_high.tp.to_numpy()
 
 
-
-
+#Loading the orography map
+topo = xr.open_dataset(args.input_path_topo + args.topo_file, engine="netcdf4")
 z = topo.orog.to_numpy()
 lon_z = topo.lon.to_numpy()
 lat_z = topo.lat.to_numpy()
@@ -181,8 +182,7 @@ lon_high, lat_high, target_high = cut_window(args.lon_min, args.lon_max, args.la
 print("target done!")
 
 
-lon_high_z, lat_high_z, z_high = cut_window(
-            args.lon_min, args.lon_max, args.lat_min, args.lat_max, lon_z, lat_z, z)
+lon_high_z, lat_high_z, z_high = cut_window(args.lon_min, args.lon_max, args.lat_min, args.lat_max, lon_z, lat_z, z)
     
 
 assert (np.allclose(lon_high, lon_high_z, atol=0.01) and lon_high.shape == lon_high_z.shape)
@@ -209,7 +209,7 @@ write_log("\nWriting some files...", args, accelerator=None, mode='a')
 with open(args.output_path + 'target.pkl', 'wb') as f:
     pickle.dump(target_high, f)
 
-#### IMPORTANT CHANGE - NORMALIZATION NOW IN MAIN AND PREDICTION #### 
+#### IMPORTANT CHANGE - NORMALIZATION NOW IN TRAIN AND PREDICTION #### 
 
 #-----------------#
 # BUILD THE GRAPH #
