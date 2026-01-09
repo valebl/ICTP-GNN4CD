@@ -95,7 +95,7 @@ if __name__ == '__main__':
     elif training_experiment == 'Emulator_hist_future':
         period_training = '1961-1980_2080-2099'
 
-    validation_years=[1965,1970,1975]#change with CORDEX validation years
+    validation_years=[1965,1975]#change with CORDEX validation years
     number_valyears=len(validation_years)
 
     
@@ -121,6 +121,8 @@ if __name__ == '__main__':
 
     with open(args.input_path+args.target_file, 'rb') as f:
         target_train = pickle.load(f)
+        
+    target_train = target_train.T
 
     #-----------------------------------------------------
     #--------------- MODEL, LOSS, OPTIMIZER --------------
@@ -138,25 +140,25 @@ if __name__ == '__main__':
     #--------------- TARGET AND INDEXES ------------------
     #-----------------------------------------------------
 
-    # Prepapre the target based on the model type (C/R/Rall)
-    #TODO : movo to prepocessing 
+    # Prepapre the target for the Rall model
+     
     target_train = prepare_target_Rall(target_train, threshold = 0.1)
 
     #CHECKING NAN values 
 
     # Identify the indexes for which at least one node value is not nan
-    idxs_not_all_nan = find_not_all_nan_times(target_train)
+    #idxs_not_all_nan = find_not_all_nan_times_new(target_train)
 
-    write_log(f"\nAfter removing all nan time indexes, {len(idxs_not_all_nan)}" +
-            f" time indexes are considered ({(len(idxs_not_all_nan) / target_train.shape[1] * 100):.1f} " +
-            "% of initial ones).", args, accelerator, 'a')
+    #write_log(f"\nAfter removing all nan time indexes, {len(idxs_not_all_nan)}" +
+    #        f" time indexes are considered ({(len(idxs_not_all_nan) / target_train.shape[1] * 100):.1f} " +
+    #        "% of initial ones).", args, accelerator, 'a')
     
     
     # Derive the train and validation indexes
 
     train_idxs, val_idxs = derive_train_val_idxs_CORDEX(
         args.train_year_start, args.train_month_start, args.train_day_start, args.train_year_end,
-        args.train_month_end, args.train_day_end, args.first_year, args.model_name, idxs_not_all_nan,
+        args.train_month_end, args.train_day_end, args.first_year, args.model_name, None,
         validation_years, number_valyears, args=args, accelerator=accelerator)
     
     
@@ -164,7 +166,7 @@ if __name__ == '__main__':
                 f"{args.train_day_end}/{args.train_month_end}/{args.train_year_end} with validation year " +
                 f"{args.validation_year}", args, accelerator, 'a')
     
-    # TODO: check if i can remove this ( because gayher for metrics is not included)
+    
     # Check that the size of the train and val idxs is multiple of n_gpu
     # to avoid issues with accelerator.gather_for_metrics; if not, simply
     # discard the last idxs to obtain a multiple of n_gpu
