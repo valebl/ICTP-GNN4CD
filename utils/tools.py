@@ -1,7 +1,7 @@
 import pickle
 import numpy as np
 import random
-
+import sys
 import torch
 from datetime import date
 
@@ -10,18 +10,20 @@ from datetime import date
 #------------------ GENERAL UTILITIES ----------------
 #-----------------------------------------------------
 
+def printf(format, *args):
+    sys.stdout.write(format % args)
 
 def write_log(s, args=None, accelerator=None, mode='a'):
     r'''
     Writes the given string to the log file
     Args:
-        s (str): the sring
+        s (str): the string
     Returns:
         None
     '''
     if accelerator is None or accelerator.is_main_process:
         if args is not None:
-            with open(args.output_path + args.log_file, mode) as f:
+            with open(args.log_path + args.log_file, mode) as f:
                 f.write(s)
         else:
             print(s)
@@ -107,7 +109,26 @@ def find_not_all_nan_times(target_train):
         target_train (tensor)
     Returns:
         train_idxs (tensor)
-        val_idxs (tensor)
+    '''
+    mask_not_all_nan = []
+    initial_time_dim = target_train.shape[1]
+    for t in range(initial_time_dim):
+        nan_sum = target_train[:,t].isnan().sum()
+        mask_not_all_nan.append(nan_sum < target_train.shape[0])
+    mask_not_all_nan = torch.stack(mask_not_all_nan)
+    mask_not_all_nan[:24] = True
+    idxs_not_all_nan = torch.argwhere(mask_not_all_nan)
+
+    return idxs_not_all_nan
+    
+
+def find_not_all_nan_times_new(target_train):
+    r'''
+    Define a mask to ignore time indexes with all nan values
+    Args:
+        target_train (tensor)
+    Returns:
+        train_idxs (tensor)
     '''
     mask_not_all_nan = []
     initial_time_dim = target_train.shape[1]
@@ -507,7 +528,7 @@ def prepare_target_Rall(target_train, threshold = 0.1):
     # set to 0.0 everything below sensitivity threshold
     target_train[mask_threshold] = 0.0
     # round to comply with instrument sensitivity
-    target_train = torch.round(target_train, decimals=1)
+    target_train = torch.round(target_train, decimals=2)
 
    
     #-- target for REGRESSOR ON ALL --#
@@ -519,9 +540,22 @@ def prepare_target_Rall(target_train, threshold = 0.1):
 
 
 def derive_qmse_bins(target_train, train_idxs, args, accelerator, threshold=0.1):
+    r'''
+    
+    This function generated the a tensor containing the bin index, associated with a logarithmic binned histogram of the target variable,
+    with the same shape of the target train tensor. The bin indices are used for the quantized Loss function.
+    
+    It takes in input:
+      - target_train (torch.Tensor): Target values, typically shaped as (samples, time).
+      - train_idxs (array-like): Indices of time steps used for training.
+      - args: Configuration object containing model settings (e.g. model_type).
+      - accelerator: Accelerator object used for wandb and accelerate.
+    it outputs:
+      - target_bins (torch.Tensor): Tensor of the same shape as target_train, containing the bin index assigned to each target value. NaNs are preserved.
+    '''
 
-    bins = np.arange(np.log1p(threshold), np.log1p(200), np.log1p(0.5))
-    if args.model_type == "all":
+    bins = np.arange(np.log1p(threshold), np.log1p(350), np.log1p(0.25))
+    if args.model_type == "Rall":
         bins = np.insert(bins, 0, np.log1p(0))
     # consider only the time indices that are part of the training set
     values_unif_log, edges_unif_log = np.histogram(target_train[:,train_idxs].numpy(), bins=bins, density=False)
@@ -541,6 +575,9 @@ def derive_qmse_bins(target_train, train_idxs, args, accelerator, threshold=0.1)
     return target_bins
     
 
+
+    
+
 #-----------------------------------------------------
 #------------------- TRAIN UTILITIES -----------------
 #-----------------------------------------------------
@@ -551,6 +588,7 @@ def check_freezed_layers(model, log_path, log_file, accelerator):
         if accelerator is None or accelerator.is_main_process:
             with open(log_path+log_file, 'a') as f:
                 f.write(f"\nLayer {name} requires_grad = {param.requires_grad} and has {n_param} parameters") 
+
 
 
 
