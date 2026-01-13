@@ -2,17 +2,16 @@ import torch
 
 import torchvision.ops
 import pickle
-from dataset import Iterable_Graph
-import dataset
 import time
 import argparse
 import os
-import dataset
 import importlib
+from dataset import Iterable_Graph
+import dataset
 
 import utils.loss_functions
 from utils.tools import write_log, set_seed_everything
-from utils.tools import prepare_target_Rall, find_not_all_nan_times, derive_train_val_idxs_CORDEX
+from utils.tools import prepare_target_Rall, find_not_all_nan_times_new, derive_train_val_idxs_new, derive_train_val_idxs_CORDEX
 from utils.tools import derive_qmse_bins, compute_input_statistics, standardize_input
 from utils.train_test import Trainer
 from accelerate import Accelerator
@@ -22,6 +21,7 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
 #-- paths
 parser.add_argument('--input_path', type=str, help='path to input directory')
 parser.add_argument('--output_path', type=str, help='path to output directory')
+parser.add_argument('--log_path', type=str, help='path to output directory')
 parser.add_argument('--log_file', type=str, default='log.txt', help='log file')
 
 parser.add_argument('--target_file', type=str, default=None)
@@ -31,11 +31,13 @@ parser.add_argument('--out_checkpoint_file', type=str, default="checkpoint.pth")
 
 parser.add_argument('--use_accelerate',  action='store_true')
 parser.add_argument('--no-use_accelerate', dest='use_accelerate', action='store_false')
+parser.add_argument('--make_val_plots', action='store_true')
+parser.add_argument('--no-make_val_plots', dest='make_val_plots', action='store_false')
 
 #-- training hyperparameters
 parser.add_argument('--experiment', type=str, default='ESD_pseudo_reality')
 parser.add_argument('--epochs', type=int, default=15, help='number of total training epochs')
-parser.add_argument('--batch_size', type=int, default=64, help='batch size (global)')
+parser.add_argument('--batch_size', type=int, default=32, help='batch size (global)')
 parser.add_argument('--step_size', type=int, default=10, help='scheduler step size (global)')
 parser.add_argument('--lr', type=float, default=0.0001, help='initial learning rate')
 parser.add_argument('--weight_decay', type=float, default=0.0, help='weight decay (wd)')
@@ -53,19 +55,17 @@ parser.add_argument('--collate_name', type=str)
 parser.add_argument('--seq_l', type=int)
 
 #-- start and end training dates
-parser.add_argument('--train_year_start', type=int)
 parser.add_argument('--train_month_start', type=int)
 parser.add_argument('--train_day_start', type=int)
-parser.add_argument('--train_year_end', type=int)
 parser.add_argument('--train_month_end', type=int)
 parser.add_argument('--train_day_end', type=int)
-parser.add_argument('--first_year', type=int)
-parser.add_argument('--validation_year', type=int, default=None)
+
 
 #-- wandb configuration
 parser.add_argument('--wandb_api_key', type=str)
 parser.add_argument('--wandb_project_name', type=str)
 parser.add_argument('--wandb_username', type=str)
+parser.add_argument('--wandb_team', type=str)
 
 
 if __name__ == '__main__':
@@ -92,15 +92,20 @@ if __name__ == '__main__':
     training_experiment= args.experiment
     if training_experiment == 'ESD_pseudo_reality':
         period_training = '1961-1980'
+        train_year_start=1961
+        train_year_end=1980
+        first_year=1961
+        validation_years=1975#change with CORDEX validation years [1965,1975]
     elif training_experiment == 'Emulator_hist_future':
         period_training = '1961-1980_2080-2099'
 
-    validation_years=[1965,1975]#change with CORDEX validation years
-    number_valyears=len(validation_years)
+    
+    number_valyears=1 #len(validation_years)
 
     
     os.environ['WANDB_API_KEY'] = args.wandb_api_key
-    os.environ['WANDB_USERNAME'] = args.wandb_username
+    #os.environ['WANDB_USERNAME'] = args.wandb_username
+    os.environ['WANDB_ENTITY'] = args.wandb_team
     os.environ['WANDB_MODE'] = 'offline'
     os.environ['WANDB_CONFIG_DIR']='./wandb/'
     os.environ['WANDB_SERVICE_WAIT'] = '300'
@@ -147,7 +152,7 @@ if __name__ == '__main__':
     #CHECKING NAN values 
 
     # Identify the indexes for which at least one node value is not nan
-    #idxs_not_all_nan = find_not_all_nan_times_new(target_train)
+    idxs_not_all_nan = find_not_all_nan_times_new(target_train)
 
     #write_log(f"\nAfter removing all nan time indexes, {len(idxs_not_all_nan)}" +
     #        f" time indexes are considered ({(len(idxs_not_all_nan) / target_train.shape[1] * 100):.1f} " +
@@ -156,15 +161,18 @@ if __name__ == '__main__':
     
     # Derive the train and validation indexes
 
-    train_idxs, val_idxs = derive_train_val_idxs_CORDEX(
-        args.train_year_start, args.train_month_start, args.train_day_start, args.train_year_end,
-        args.train_month_end, args.train_day_end, args.first_year, args.model_name, None,
-        validation_years, number_valyears, args=args, accelerator=accelerator)
+    train_idxs, val_idxs = derive_train_val_idxs_new(train_year_start, args.train_month_start, args.train_day_start, train_year_end, args.train_month_end,
+                         args.train_day_end, first_year, args.model_name, None, validation_years, args=args, accelerator=accelerator)
+                         
+    #train_idxs, val_idxs = derive_train_val_idxs_CORDEX(
+    #    train_year_start, args.train_month_start, args.train_day_start, train_year_end,
+    #    args.train_month_end, args.train_day_end, first_year, args.model_name, None,
+    #    validation_years, number_valyears, args=args, accelerator=accelerator)
     
     
-    write_log(f"\nTrain from {args.train_day_start}/{args.train_month_start}/{args.train_year_start} to " +
-                f"{args.train_day_end}/{args.train_month_end}/{args.train_year_end} with validation year " +
-                f"{args.validation_year}", args, accelerator, 'a')
+    write_log(f"\nTrain from {args.train_day_start}/{args.train_month_start}/{train_year_start} to " +
+                f"{args.train_day_end}/{args.train_month_end}/{train_year_end} with validation years " +
+                f"{validation_years}", args, accelerator, 'a')
     
     
     # Check that the size of the train and val idxs is multiple of n_gpu
@@ -180,6 +188,8 @@ if __name__ == '__main__':
     # Compute the weights for the regressor
     
     target_bins = derive_qmse_bins(target_train, train_idxs, args, accelerator, threshold=0.1)
+    write_log(f'\nPrecipitation bins = {target_bins}', args, accelerator, 'a')
+
 
     # Compute the training statistics and standardize the training data
     means_low, stds_low, means_high, stds_high = compute_input_statistics(
@@ -227,7 +237,11 @@ if __name__ == '__main__':
         total_memory, used_memory, free_memory = map(int, os.popen('free -t -m').readlines()[-1].split()[1:])
         write_log(f"\nRAM memory {round((used_memory/total_memory) * 100, 2)} %", args, accelerator, 'a')
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    #optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+
+    
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, eps=1e-08, weight_decay=args.weight_decay)
+
     
     if args.lr_scheduler == "StepLR":
         lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=0.1)
@@ -276,4 +290,5 @@ if __name__ == '__main__':
 
     write_log(f"\nCompleted in {end - start} seconds.\nDONE!", args, accelerator, 'a')
     
+
 
