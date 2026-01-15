@@ -6,7 +6,7 @@ import time
 import os
 import importlib
 
-import safetensors
+#import safetensors
 
 from accelerate import Accelerator
 
@@ -16,7 +16,7 @@ from torch_geometric.utils import degree
 import dataset
 from dataset import Dataset_Graph, Iterable_Graph
 
-from utils.tools import date_to_idxs, set_seed_everything
+from utils.tools import date_to_idxs_new, set_seed_everything, derive_train_val_idxs_new
 from utils.train_test import Tester
 
 from utils.tools import date_to_idxs, write_log, standardize_input
@@ -27,16 +27,18 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
 #-- paths
 parser.add_argument('--input_path', type=str, help='path to input directory')
 parser.add_argument('--output_path', type=str, help='path to output directory')
+parser.add_argument('--log_path', type=str, help='path to logfile directory')
 parser.add_argument('--log_file', type=str, default='log.txt', help='log file')
 
 parser.add_argument('--train_path_reg', type=str)
 parser.add_argument('--train_path_cl', type=str)
 parser.add_argument('--checkpoint_reg', type=str, default=None)
-parser.add_argument('--checkpoint_cl', type=str, default=None)
-parser.add_argument('--output_file', type=str, default="G_predictions.pkl")
+parser.add_argument('--output_file', type=str, default="full_validation_predictions.pkl")
+parser.add_argument('--output_file_season', type=str, default="seasonal_predictions.pkl")
 
 parser.add_argument('--graph_file', type=str, default=None) 
 parser.add_argument('--target_file', type=str, default="pr_target.pkl") 
+parser.add_argument('--model_name', type=str, default=None)
 parser.add_argument('--model_type', type=str, default=None)
 parser.add_argument('--model', type=str, default=None) 
 parser.add_argument('--dataset_name', type=str, default=None) 
@@ -47,6 +49,7 @@ parser.add_argument('--target_type', type=str, default="precipitation")
 parser.add_argument('--seq_l', type=int, default=24)
 
 #-- start and end training dates
+parser.add_argument('--validation_year', type=int)
 parser.add_argument('--test_month_start', type=int)
 parser.add_argument('--test_day_start', type=int)
 parser.add_argument('--test_month_end', type=int)
@@ -80,14 +83,20 @@ if __name__ == '__main__':
     write_log("Starting the testing...", args, accelerator, 'w')
     write_log(f"Cuda is available: {torch.cuda.is_available()}. There are {torch.cuda.device_count()} available GPUs.", args, accelerator, 'a')
 
+    validation_year=args.validation_year
     if args.test_idxs_file == "":
-        test_start_idx, test_end_idx = date_to_idxs_new(test_year_start, args.test_month_start,
-            args.test_day_start, test_year_end, args.test_month_end,
-            args.test_day_end, first_year)        
-        if test_start_idx < 2:
-            test_start_idx = 2
-        test_idxs = torch.tensor([*range(test_start_idx, test_end_idx)])
-        write_log(f"\nUsing the provided start and end test times to derive the test idxs.", args, accelerator, 'a')
+        #test_start_idx, test_end_idx = date_to_idxs_new(validation_year, args.test_month_start,
+        #    args.test_day_start, validation_year+1, 1,
+        #    1, validation_year) 
+
+        train_idxs, val_idxs = derive_train_val_idxs_new(1960, 1, 1, 1980, 11,
+                         30, 1960, args.model_name, idxs_not_all_nan=None, validation_year=1975, args=None, accelerator=accelerator)
+        
+        write_log(f"\n the provided val start idx is {val_idxs[0]}", args, accelerator, 'a')
+        write_log(f"\n the provided test end idx is {val_idxs[-1]}", args, accelerator, 'a')
+        write_log(f"\nUsing the provided start and end test times to derive the test idxs.", args, accelerator, 'a')       
+        test_val_idxs = torch.tensor([*range(val_idxs[0], val_idxs[-1])])
+        
     else:
         with open(args.train_path_reg+args.test_idxs_file, 'rb') as f:
             test_idxs = pickle.load(f)
@@ -133,41 +142,38 @@ if __name__ == '__main__':
     
     write_log(f"\nHigh z: mean={low_high_graph['high'].x[:,0].mean()}, std={low_high_graph['high'].x[:,0].std()}",
               args, accelerator, 'a')
-    write_log(f"\nHigh land_use: mean={low_high_graph['high'].x[:,1:].mean()}, std={low_high_graph['high'].x[:,1:].std()}",
-              args, accelerator, 'a')
+    #write_log(f"\nHigh land_use: mean={low_high_graph['high'].x[:,1:].mean()}, std={low_high_graph['high'].x[:,1:].std()}",
+    #          args, accelerator, 'a')
     
     if args.target_type == "temperature":
         low_high_graph['low'].x = torch.cat((low_high_graph['low'].x[:,:,:1,:], low_high_graph['low'].x[:,:,2:,:]), dim=2)
+
+    #now we flatten the vars +levels dimension into one
 
     low_high_graph['low'].x = torch.flatten(low_high_graph['low'].x, start_dim=2, end_dim=-1)   # num_nodes, time, vars*levels
 
     Dataset_Graph = getattr(dataset, args.dataset_name)
     
-    dataset_graph = Dataset_Graph(targets=None, graph=low_high_graph, model_name=args.model_typel, seq_l=args.seq_l)
+    dataset_graph = Dataset_Graph(targets=None, graph=low_high_graph, model_name=args.model_name, seq_l=args.seq_l)
 
     custom_collate_fn = getattr(dataset, 'custom_collate_fn_graph')
         
-    sampler_graph = Iterable_Graph(dataset_graph=dataset_graph, shuffle=False, idxs_vector=test_idxs)
+    sampler_graph = Iterable_Graph(dataset_graph=dataset_graph, shuffle=False, idxs_vector=val_idxs)
         
     dataloader = torch.utils.data.DataLoader(dataset_graph, batch_size=args.batch_size, num_workers=0,
                     sampler=sampler_graph, collate_fn=custom_collate_fn)
 
-    model_file = importlib.import_module(f"models.{args.model_typel}")
-    Model = getattr(model_file, args.model_typel)
+    model_file = importlib.import_module(f"models.{args.model_name}")
+    Model = getattr(model_file, args.model_name)
     
     model = Model(seq_l=args.seq_l+1)
 
     if accelerator is None:
         
-        checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg, map_location=torch.device('cpu'), weights_only=True)
+        checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg+"/pytorch_model.bin", map_location=torch.device('cpu'), weights_only=True)
         device = 'cpu'
     else:
-        
-        try:
-                checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg+"/pytorch_model.bin", weights_only=True)
-        except:
-                checkpoint_reg = safetensors.torch.load_file(args.train_path_reg+args.checkpoint_reg+"/model.safetensors")
-                torch.save(checkpoint_reg, args.train_path_reg+args.checkpoint_reg+"pytorch_model.bin")
+        checkpoint_reg = torch.load(args.train_path_reg+args.checkpoint_reg+"/pytorch_model.bin", weights_only=True)
         device = accelerator.device
     
     write_log("\nLoading state dict.", args, accelerator, 'a')
@@ -190,19 +196,26 @@ if __name__ == '__main__':
     end = time.time()
 
     ### POST-PROCESS
-    pr_target = pr_target[:,test_idxs].numpy()
+    pr_target = pr_target.swapaxes(0,1)[:,val_idxs].numpy()
 
     threshold = 0.1
     mask_nan = np.isnan(pr_target)
-    pr_target[pr_target < threshold] = 0
+    pr_target[pr_target < threshold] = 0.0
     pr_target = np.round(pr_target, decimals=1)
-
+    write_log(f"\n shape of pr_target: {pr_target.shape[0]}, {pr_target.shape[1]}", args, accelerator, 'a')
+    graph_high_nodes=low_high_graph["high"].num_nodes
+    write_log(f"\n Number high nodes in low_high_graph: {graph_high_nodes} ", args, accelerator, 'a')
+    degree = degree(low_high_graph["high", "within", "high"].edge_index, low_high_graph["high"].num_nodes).cpu().numpy()
+    write_log(f"\n shape of degree: {degree.shape}", args, accelerator, 'a')
+   
     mask =  degree > 2 * np.array([~np.isnan(pr_target[i,:]).all() for i in range(pr_target.shape[0])])
     mask_nan = mask_nan[mask,:]
 
     pr_target = pr_target[mask,:]
     pr_target[mask_nan] = np.nan
     degree = degree[mask]
+    
+
   
     # LON LAT
     lat_low = low_high_graph["low"].lat.cpu().numpy()
@@ -216,7 +229,7 @@ if __name__ == '__main__':
         accelerator.wait_for_everyone()
 
         times = accelerator.gather(times).squeeze()
-        pr_Rall = accelerator.gather(pr_R)
+        pr_Rall = accelerator.gather(pr_Rall)
         
 
 
@@ -224,15 +237,20 @@ if __name__ == '__main__':
     times = times.cpu().numpy()
     indices = indices.cpu().numpy()
 
-    
+    write_log(f"\n first ten time steps: {times[0:10]}", args, accelerator, 'a')
+
     
     # not processed Rall output
-    pr_Rall = pr_Rall.squeeze().swapaxes(0,1).cpu().numpy()[:,indices]
+    #pr_Rall = pr_Rall.squeeze().cpu().numpy()[:,indices]
+    pr_Rall =pr_Rall.squeeze().swapaxes(0,1).cpu().numpy()[:,indices]
     
     # processed estimates, ready to use
     pr = np.where(np.isfinite(np.expm1(pr_Rall)), np.expm1(pr_Rall), np.nan)
-    pr = pr[mask,:]; [pr<threshold] = 0; pr[mask_nan] = np.nan
+    pr[pr_Rall<threshold] = 0.0 
+    pr = pr[mask,:]
     
+    write_log(f"\n shape of pr_target: {pr_target.shape[0]}, {pr_target.shape[1]}", args, accelerator, 'a')
+    write_log(f"\n shape of pr_emulated: {pr.shape[0]}, {pr.shape[1]}", args, accelerator, 'a')
 
     # Create the pyg object
     data = HeteroData()
@@ -243,7 +261,7 @@ if __name__ == '__main__':
     data["low"].lon = lon_low
     data["high"].lat = lat_high
     data["high"].lon = lon_high
-    data["high"].degree = degree.cpu().numpy()
+    data["high"].degree = degree
 
     
     data.pr_Rall_raw = pr_Rall
@@ -264,7 +282,7 @@ if __name__ == '__main__':
     jf_start, jf_end = date_to_idxs_new(year_start=validation_year, month_start=1,day_start=1,year_end=validation_year,month_end=2,day_end=28,first_year=validation_year,first_month=1,first_day=1)
     mam_start, mam_end = date_to_idxs_new(year_start=validation_year, month_start=3,day_start=1,year_end=validation_year,month_end=5,day_end=31,first_year=validation_year,first_month=1,first_day=1)
     jja_start, jja_end = date_to_idxs_new(year_start=validation_year, month_start=6,day_start=1,year_end=validation_year,month_end=8,day_end=31,first_year=validation_year,first_month=1,first_day=1)
-    son_start, son_end = date_to_idxs_new(year_start=validation_year, month_start=9,day_start=1,year_end=validation_year,month_end=11,day_end=31,first_year=validation_year,first_month=1,first_day=1)
+    son_start, son_end = date_to_idxs_new(year_start=validation_year, month_start=9,day_start=1,year_end=validation_year,month_end=11,day_end=30,first_year=validation_year,first_month=1,first_day=1)
     d_start, d_end =date_to_idxs_new(year_start=validation_year, month_start=12,day_start=1,year_end=validation_year,month_end=12,day_end=31,first_year=validation_year,first_month=1,first_day=1)
  
     djf_idxs = np.arange(jf_start, jf_end).tolist()
