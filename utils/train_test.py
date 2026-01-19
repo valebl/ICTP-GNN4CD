@@ -185,30 +185,45 @@ class Trainer(object):
                 # Apply mask
                 y_pred, y = y_pred[train_mask], y[train_mask]
 
-                w = graph['high'].w
-                w = w[train_mask]
+                
 
                 loss_mse = MSELoss(y_pred, y)
-                loss_qmse = loss_fn(y_pred, y, w)
-                loss = loss_mse + args.alpha * loss_qmse
                 
+                
+                if "quantized_loss" in args.loss_fn:
+                    w = graph['high'].w
+                    w = w[train_mask]
+                    loss_qmse = loss_fn(y_pred, y, w)
+                    loss = loss_mse + args.alpha * loss_qmse
+                else:
+                    loss = loss_mse
                 accelerator.backward(loss)
                 optimizer.step()
                 step += 1
                 
-                loss_meter.update(val=loss.item(), n=y_pred.shape[0])
                 loss_term1_meter.update(val=loss_mse.item(), n=y_pred.shape[0])
-                loss_term2_meter.update(val=loss_qmse.item(), n=y_pred.shape[0])
+                loss_meter.update(val=loss.item(), n=y_pred.shape[0])
+                if "quantized_loss" in args.loss_fn:
+                    loss_term2_meter.update(val=loss_qmse.item(), n=y_pred.shape[0])
                 
-                accelerator.log({'epoch':epoch, 'train loss iteration': loss_meter.val, 'train loss avg': loss_meter.avg,
+                    accelerator.log({'epoch':epoch, 'train loss iteration': loss_meter.val, 'train loss avg': loss_meter.avg,
                                 'train mse loss avg': loss_term1_meter.avg, 'train quantized loss avg': loss_term2_meter.avg
                                 }, step=step)
+                else:
+                    accelerator.log({'epoch':epoch, 'train loss iteration': loss_meter.val, 'train loss avg': loss_meter.avg,
+                                'train mse loss avg': loss_term1_meter.avg}, step=step)
             end = time.time()
-
-            accelerator.log({'epoch':epoch, 'train loss avg': loss_meter.avg,
+            if "quantized_loss" in args.loss_fn:
+                accelerator.log({'epoch':epoch, 'train loss avg': loss_meter.avg,
                                 'train mse loss avg': loss_term1_meter.avg, 'train quantized loss avg': loss_term2_meter.avg,
                                 'lr': np.mean(lr_scheduler.get_last_lr())
                                 }, step=step)
+            else:
+                accelerator.log({'epoch':epoch, 'train loss avg': loss_meter.avg,
+                                'train mse loss avg': loss_term1_meter.avg,
+                                'lr': np.mean(lr_scheduler.get_last_lr())
+                                }, step=step)
+
             
             write_log(f"\nEpoch {epoch+1} completed in {end - start:.4f} seconds." +
                       f"Loss - total: {loss_meter.sum:.4f} - average: {loss_meter.avg:.10f}. ", args, accelerator, 'a')
@@ -232,14 +247,18 @@ class Trainer(object):
                     y_pred = model(graph).squeeze()
                     train_mask = graph['high'].train_mask
                     y = graph['high'].y
-                    w = graph['high'].w
                     loss_mse = MSELoss(y_pred[train_mask].squeeze(), y[train_mask])
-                    loss_qmse = loss_fn(y_pred[train_mask].squeeze(), y[train_mask], w[train_mask])
-                    loss = loss_mse + args.alpha * loss_qmse
+                    if "quantized_loss" in args.loss_fn:
+                       w = graph['high'].w
+                       loss_qmse = loss_fn(y_pred[train_mask].squeeze(), y[train_mask], w[train_mask])
+                       loss = loss_mse + args.alpha * loss_qmse
+                    else:
+                       loss = loss_mse
                     
                     val_loss_meter.update(val=loss.item(), n=y_pred.shape[0])
                     val_loss_term1_meter.update(val=loss_mse.item(), n=y_pred.shape[0])
-                    val_loss_term2_meter.update(val=loss_qmse.item(), n=y_pred.shape[0])
+                    if "quantized_loss" in args.loss_fn:
+                        val_loss_term2_meter.update(val=loss_qmse.item(), n=y_pred.shape[0])
 
                     accelerator.log({'epoch':epoch, 'val loss iteration': val_loss_meter.val, 'val loss avg': val_loss_meter.avg
                         }, step=step)
@@ -306,7 +325,7 @@ class Tester(object):
                 if step % 100 == 0:
                     if accelerator is None or accelerator.is_main_process:
                         with open(args.output_path+args.log_file, 'a') as f:
-                            f.write(f"\nStep {step} done.")
+                            f.write(f"\nStep {step} done for time {t}.")
                 step += 1 
 
         pr = torch.stack(pr)
