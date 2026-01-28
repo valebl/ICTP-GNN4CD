@@ -220,10 +220,10 @@ high_graph = Data()
 
 #-- EDGES --#
 
-edges_low2high, _ = derive_edge_index_multiscale(lon_senders=lon_low, lat_senders=lat_low,
+edges_low2high = derive_edge_index_multiscale(lon_senders=lon_low, lat_senders=lat_low,
                                 lon_receivers=lon_high, lat_receivers=lat_high, k=9, undirected=False)
 
-edges_high, _ = derive_edge_index_within(lon_radius=args.lon_grid_radius_high, lat_radius=args.lat_grid_radius_high,
+edges_high = derive_edge_index_within(lon_radius=args.lon_grid_radius_high, lat_radius=args.lat_grid_radius_high,
                                 lon_senders=lon_high, lat_senders=lat_high, lon_receivers=lon_high, lat_receivers=lat_high)
 
 #-- TO GRAPH ATTRIBUTES --#
