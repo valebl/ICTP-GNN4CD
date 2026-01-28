@@ -87,7 +87,7 @@ def derive_edge_index_within(lon_radius, lat_radius, lon_senders, lat_senders, l
             bool_lat = np.abs(lat_receivers - xi[1]) < lat_radius
             bool_both = np.logical_and(bool_lon, bool_lat)
 
-        jj_list = np.nonzero(bool_both)[0] # to get indices
+        jj_list = np.where(bool_both)[0] # to get indices
         xj_list = lonlat_receivers[bool_both]
 
         for jj, xj in zip(jj_list, xj_list):
@@ -99,7 +99,7 @@ def derive_edge_index_within(lon_radius, lat_radius, lon_senders, lat_senders, l
 
     return edge_index
 
-def derive_edge_index_multiscale(lon_senders, lat_senders, lon_receivers, lat_receivers, k, undirected=False, use_edge_attr=True):
+def derive_edge_index_multiscale(lon_senders, lat_senders, lon_receivers, lat_receivers, k, undirected=False):
     '''
     Derives edge_indexes between two sets of nodes based on specified number of neighbours k
     Args:
