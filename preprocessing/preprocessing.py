@@ -89,8 +89,11 @@ elif training_experiment == 'Emulator_hist_future':
 domain = args.domain
 if domain == 'ALPS':
     gcm_name = 'CNRM-CM5'
+elif domain == 'SA':
+    gcm_name = 'ACCESS-CM2'
 
-predictor_filename = f'/content/{gcm_name}_{period_training}.nc'
+#predictor_filename = f'/content/{gcm_name}_{period_training}.nc'
+predictor_filename = f'/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-BENCHMARK/{domain}_domain/train/{training_experiment}/predictors/{gcm_name}_{period_training}.nc'
 predictor = xr.open_dataset(predictor_filename)
 
 
@@ -153,7 +156,7 @@ lon = dataset_high.lon.to_numpy()
 lat = dataset_high.lat.to_numpy()
 if lon.shape != lat.shape:
     lon, lat = np.meshgrid(lon, lat)
-if target_var=='precipitation': 
+if args.target_var=='precipitation': 
     target_high = dataset_high.pr.to_numpy()
 else:
     target_high = dataset_high.tp.to_numpy()

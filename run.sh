@@ -14,7 +14,7 @@ sbatch << EOT
 #SBATCH --gres=gpu:${N_GPU}     # 1 gpus per node out of 4
 #SBATCH --job-name=${JOB_NAME}
 #SBATCH --mail-type=FAIL,END
-# SBATCH --mail-user=${MAIL}
+#SBATCH --mail-user=wtang@ictp.it
 #SBATCH -o ${LOG_PATH}run.out
 #SBATCH -e ${LOG_PATH}run.err
 

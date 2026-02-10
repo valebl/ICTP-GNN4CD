@@ -3,10 +3,10 @@
 #------------------#
 # SLURM PARAMETERS #
 #------------------#
-TIME="00:50:00" # format HH:MM:SS
+TIME="01:05:00" # format HH:MM:SS
 MEM="150G"
 JOB_NAME="train_Rall"
-LOG_PATH="examples/train/Rall/"
+#LOG_PATH="/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-BENCHMARK/train/"
 N_GPU=4
 
 
@@ -20,40 +20,44 @@ MODEL_TYPE="Rall" # either R, C or Rall
 SEQ_L=2
 
 EXPERIMENT="ESD_pseudo_reality"
+#EXPERIMENT="Emulator_hist_future"
 
 EPOCHS=50
 BATCH_SIZE=32
-LR_STEP_SIZE=25
+LR_STEP_SIZE=10
 LR=0.001
 WEIGHT_DECAY=0.01
-LR_SCHEDULER="CosineAnnealingLR"
+LR_SCHEDULER="StepLR"
 LOSS_FN="quantized_loss"
-ALPHA=0.005
-
+#LOSS_FN="mse_loss"
+ALPHA=0.02
+TARGET_VAR="precipitation"
 #------------------#
 # WANDB PARAMETERS #
 #------------------#
-WANDB_API_KEY="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"
-WANDB_USERNAME="eirene1991"
-WANDB_TEAM="climate-dl"
-WANDB_PROJECT_NAME="CORDEX-ML"
-
+WANDB_API_KEY="d2f9b711020f881fdb31595fe60225e8835b104e"
+WANDB_USERNAME="tangwenchang0210"
+WANDB_PROJECT_NAME="GNN4CD-${EXPERIMENT}-pr"
 #--------------------------------------------#
 # PATHS (conda env, main, accelerate config) #
 #--------------------------------------------#
-SOURCE_PATH="/leonardo/home/userexternal/$USER/.bashrc"
+# SOURCE_PATH="/leonardo/home/userexternal/$USER/.bashrc"
 
-ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv" # conda env
-SOURCE_PATH="/leonardo/home/userexternal/$USER/.bashrc"
+# ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv" # conda env
+# SOURCE_PATH="/leonardo/home/userexternal/$USER/.bashrc"
+# ACCELERATE_CONFIG_PATH="/leonardo/home/userexternal/$USER/.cache/huggingface/accelerate/default_config.yaml"
+# MAIN_PATH="/leonardo_work/ICT25_ESP/$USER/CORDEX-ML/GNN4CD-CORDEXML/" # path to the folder
+
+MAIN_PATH="$HOME/benchmarks/GNN4CD-CORDEXML-Benchmark-new/"
+SOURCE_PATH="/leonardo/home/userexternal/$USER/Conda_init.txt"
+ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv"
 ACCELERATE_CONFIG_PATH="/leonardo/home/userexternal/$USER/.cache/huggingface/accelerate/default_config.yaml"
-MAIN_PATH="/leonardo_work/ICT25_ESP/$USER/CORDEX-ML/GNN4CD-CORDEXML/" # path to the folder
-
 #-------------------------------#
 # INPUT/OUTPUT FILES PARAMETERS #
 #-------------------------------#
 
 #TODO: change data path
-DOMAIN="ALPS"
+DOMAIN="SA"
 
 EXPERIMENT="ESD_pseudo_reality"
 #EXPERIMENT="Emulator_hist_future"
@@ -62,12 +66,19 @@ EXPERIMENT="ESD_pseudo_reality"
 N_LEVELS=3
 
 # PREPROCESSING PHASE 
-INPUT_PATH="/leonardo_work/ICT25_ESP/$USER/CORDEX-ML/CORDEX-graphs/${DOMAIN}_domain/${EXPERIMENT}/"
-OUTPUT_PATH="/leonardo_work/ICT25_ESP/$USER/CORDEX-ML/Emulator_output/${DOMAIN}_domain/${EXPERIMENT}/wdecay3/"
+# INPUT_PATH="/leonardo_work/ICT25_ESP/$USER/CORDEX-ML/CORDEX-graphs/${DOMAIN}_domain/${EXPERIMENT}/"
+#OUTPUT_PATH=${LOG_PATH}
+#LOG_FILE="log.txt"
+OUTPUT_PATH="/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-BENCHMARK/train/${DOMAIN}_domain/${EXPERIMENT}/0204try_pr_wdecay4_1961-1980_quantized_loss_LR001_stepsize10_SEQ2/"
 LOG_PATH=${OUTPUT_PATH}
-LOG_FILE="log_$DOMAIN_$EXPERIMENT.txt"
-TARGET_FILE="target.pkl"
-GRAPH_FILE="low_high_graph.pkl"
+# INPUT_PATH="/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-BENCHMARK/logs/"
+# LOG_FILE="log_$DOMAIN_$EXPERIMENT.txt"
+# INPUT_PATH="/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-BENCHMARK/logs/hist_future_tas_preprocessed/"
+# LOG_FILE="log_tasmax_$DOMAIN_$EXPERIMENT.txt"
+INPUT_PATH="/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain/${EXPERIMENT}/"
+LOG_FILE="log_pr_${EXPERIMENT}.txt"
+TARGET_FILE="ESD_pseudo_reality_new_target_pr.pkl"
+GRAPH_FILE="low_high_graph_new.pkl"
 OUT_CHECKPOINT_FILE="checkpoint.pth"
 DATASET_NAME="Dataset_Graph"
 COLLATE_NAME="custom_collate_fn_graph"

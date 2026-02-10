@@ -9,7 +9,16 @@ from torch_geometric.utils import degree
 
 import torch_geometric.transforms as T
 transform = T.AddLaplacianEigenvectorPE(k=2)
-
+#FOR DEBUGGING PURPOSES
+def nan_inf_stats(x):
+    """
+    return (nan_cnt, inf_cnt, total_cnt)
+    """
+    nan_cnt = torch.isnan(x).sum().item()
+    inf_cnt = torch.isinf(x).sum().item()
+    total_cnt = x.numel()
+    return nan_cnt, inf_cnt, total_cnt
+#-----------------------------------------------------
 class Dataset_Graph(Dataset):
 
     def __init__(self, graph, targets, model_name, seq_l, **kwargs):
@@ -98,7 +107,22 @@ class Dataset_Graph(Dataset):
         snapshot['high'].lat = self.graph['high'].lat
         snapshot['low'].lon = self.graph['low'].lon
         snapshot['low'].lat = self.graph['low'].lat
+        
+        snapshot['low'].x = snapshot['low'].x.float()
 
+        if 'x' in snapshot['high']:
+            snapshot['high'].x = snapshot['high'].x.float()
+
+        if hasattr(snapshot['high'], 'y') and snapshot['high'].y is not None:
+            snapshot['high'].y = snapshot['high'].y.float()
+
+        # additional features
+        for key in self.additional_feature_keys:
+            if hasattr(snapshot['high'], key):
+                val = getattr(snapshot['high'], key)
+                if torch.is_tensor(val) and val.dtype == torch.float64:
+                    setattr(snapshot['high'], key, val.float())
+       
         return snapshot
         
 
@@ -142,5 +166,3 @@ class Iterable_Graph(object):
 
 def custom_collate_fn_graph(batch_list):
     return Batch.from_data_list(batch_list)
-
-

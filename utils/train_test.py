@@ -149,12 +149,159 @@ class Trainer(object):
                              }, step=step)
                 
     #--- REGRESSOR (either R or Rall)
-    def train_R_Rall(self, model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=0, log_freq=5):
+    # def train_R_Rall(self, model, dataloader_train, dataloader_val, optimizer, loss_fn, lr_scheduler, accelerator, args, epoch_start=0, log_freq=5):
+        
+    #     write_log(f"\nStart training the regressor.", args, accelerator, 'a')
+
+    #     step = 0
+
+    #     MSELoss = nn.MSELoss()
+        
+    #     for epoch in range(epoch_start, epoch_start+args.epochs):
+
+    #         model.train()
+    #         write_log(f"\nEpoch {epoch+1} --- learning rate {optimizer.param_groups[0]['lr']:.8f}", args, accelerator, 'a')
+            
+    #         # Define objects to track meters
+    #         loss_meter = AverageMeter()            
+    #         loss_term1_meter = AverageMeter()
+    #         loss_term2_meter = AverageMeter()
+
+    #         val_loss_meter = AverageMeter()
+    #         val_loss_term1_meter = AverageMeter()
+    #         val_loss_term2_meter = AverageMeter()
+
+    #         start = time.time()
+            
+    #         # TRAIN
+    #         for graph in dataloader_train:
+
+    #             optimizer.zero_grad()
+    #             y_pred = model(graph).squeeze()
+
+    #             train_mask = graph['high'].train_mask
+    #             y = graph['high'].y
+
+    #             # Apply mask
+    #             y_pred, y = y_pred[train_mask], y[train_mask]
+
+                
+
+    #             loss_mse = MSELoss(y_pred, y)
+                
+                
+    #             if "quantized_loss" in args.loss_fn:
+    #                 w = graph['high'].w
+    #                 w = w[train_mask]
+    #                 loss_qmse = loss_fn(y_pred, y, w)
+    #                 loss = loss_mse + args.alpha * loss_qmse
+    #             else:
+    #                 loss = loss_mse
+    #             accelerator.backward(loss)
+    #             optimizer.step()
+    #             step += 1
+                
+    #             loss_term1_meter.update(val=loss_mse.item(), n=y_pred.shape[0])
+    #             loss_meter.update(val=loss.item(), n=y_pred.shape[0])
+    #             if "quantized_loss" in args.loss_fn:
+    #                 loss_term2_meter.update(val=loss_qmse.item(), n=y_pred.shape[0])
+                
+    #                 accelerator.log({'epoch':epoch, 'train loss iteration': loss_meter.val, 'train loss avg': loss_meter.avg,
+    #                             'train mse loss avg': loss_term1_meter.avg, 'train quantized loss avg': loss_term2_meter.avg
+    #                             }, step=step)
+    #             else:
+    #                 accelerator.log({'epoch':epoch, 'train loss iteration': loss_meter.val, 'train loss avg': loss_meter.avg,
+    #                             'train mse loss avg': loss_term1_meter.avg}, step=step)
+    #         end = time.time()
+    #         if "quantized_loss" in args.loss_fn:
+    #             accelerator.log({'epoch':epoch, 'train loss avg': loss_meter.avg,
+    #                             'train mse loss avg': loss_term1_meter.avg, 'train quantized loss avg': loss_term2_meter.avg,
+    #                             'lr': np.mean(lr_scheduler.get_last_lr())
+    #                             }, step=step)
+    #         else:
+    #             accelerator.log({'epoch':epoch, 'train loss avg': loss_meter.avg,
+    #                             'train mse loss avg': loss_term1_meter.avg,
+    #                             'lr': np.mean(lr_scheduler.get_last_lr())
+    #                             }, step=step)
+
+            
+    #         write_log(f"\nEpoch {epoch+1} completed in {end - start:.4f} seconds." +
+    #                   f"Loss - total: {loss_meter.sum:.4f} - average: {loss_meter.avg:.10f}. ", args, accelerator, 'a')
+                    
+    #         accelerator.save_state(output_dir=args.output_path+f"checkpoint_{epoch}/", safe_serialization=False)
+    #         torch.save({"epoch": epoch}, args.output_path+f"checkpoint_{epoch}/epoch")
+
+    #         # VALIDATION
+    #         # Validation is performed on all the validation dataset at once
+    #         model.eval()
+
+    #         if epoch%log_freq==0:
+    #             y_pred_list = []
+    #             y_list = []
+    #             train_mask_list = []
+    #             t_list = []
+
+    #         with torch.no_grad():    
+    #             for graph in dataloader_val:
+                    
+    #                 y_pred = model(graph).squeeze()
+    #                 train_mask = graph['high'].train_mask
+    #                 y = graph['high'].y
+    #                 loss_mse = MSELoss(y_pred[train_mask].squeeze(), y[train_mask])
+    #                 if "quantized_loss" in args.loss_fn:
+    #                    w = graph['high'].w
+    #                    loss_qmse = loss_fn(y_pred[train_mask].squeeze(), y[train_mask], w[train_mask])
+    #                    loss = loss_mse + args.alpha * loss_qmse
+    #                 else:
+    #                    loss = loss_mse
+                    
+    #                 val_loss_meter.update(val=loss.item(), n=y_pred.shape[0])
+    #                 val_loss_term1_meter.update(val=loss_mse.item(), n=y_pred.shape[0])
+    #                 if "quantized_loss" in args.loss_fn:
+    #                     val_loss_term2_meter.update(val=loss_qmse.item(), n=y_pred.shape[0])
+
+    #                 accelerator.log({'epoch':epoch, 'val loss iteration': val_loss_meter.val, 'val loss avg': val_loss_meter.avg
+    #                     }, step=step)
+                    
+    #                 if epoch%5==0:
+    #                     # Gather from all processes for metrics
+    #                     t = graph.t
+    #                     y_pred, y, train_mask, t = accelerator.gather((
+    #                         y_pred.unsqueeze(0), y.unsqueeze(0), train_mask.unsqueeze(0), t))
+
+    #                     # nodes, time
+    #                     y_pred_list.append(torch.atleast_2d(y_pred)) # time, nodes
+    #                     y_list.append(torch.atleast_2d(y))
+    #                     train_mask_list.append(torch.atleast_2d(train_mask))
+    #                     t_list.append(torch.atleast_2d(t))
+
+    #             ###### PLOTS ######
+    #             # TODO -> Implement function to plot
+    #             if epoch%5==0:
+    #                 t = torch.cat(t_list, dim=1).squeeze()
+    #                 y_pred = torch.cat(y_pred_list, dim=0).swapaxes(0,1)
+    #                 y = torch.cat(y_list, dim=0).swapaxes(0,1)
+    #                 train_mask = torch.cat(train_mask_list, dim=0).swapaxes(0,1)
+    #                 self._create_plots_R_Rall(y_pred, y, t, train_mask, graph, accelerator, step, args)
+
+    #         if "quantized_loss" in args.loss_fn:
+    #             accelerator.log({'epoch':epoch, 'val loss avg': val_loss_meter.avg,
+    #                              'val mse loss avg': val_loss_term1_meter.avg, 'val qmse loss avg': val_loss_term2_meter.avg
+    #                             }, step=step)
+    #         else:
+    #             accelerator.log({'epoch':epoch, 'val loss avg': val_loss_meter.avg,
+    #                             }, step=step)
+                    
+    #         if lr_scheduler is not None:
+    #             lr_scheduler.step()
+
+
+    def train_R_Rall(self, model, dataloader_train, dataloader_val, optimizer, loss_fn, 
+                    lr_scheduler, accelerator, args, epoch_start=0, log_freq=5):
         
         write_log(f"\nStart training the regressor.", args, accelerator, 'a')
 
         step = 0
-
         MSELoss = nn.MSELoss()
         
         for epoch in range(epoch_start, epoch_start+args.epochs):
@@ -175,20 +322,13 @@ class Trainer(object):
             
             # TRAIN
             for graph in dataloader_train:
-
                 optimizer.zero_grad()
                 y_pred = model(graph).squeeze()
-
                 train_mask = graph['high'].train_mask
                 y = graph['high'].y
-
-                # Apply mask
                 y_pred, y = y_pred[train_mask], y[train_mask]
 
-                
-
                 loss_mse = MSELoss(y_pred, y)
-                
                 
                 if "quantized_loss" in args.loss_fn:
                     w = graph['high'].w
@@ -197,6 +337,7 @@ class Trainer(object):
                     loss = loss_mse + args.alpha * loss_qmse
                 else:
                     loss = loss_mse
+                    
                 accelerator.backward(loss)
                 optimizer.step()
                 step += 1
@@ -206,33 +347,50 @@ class Trainer(object):
                 if "quantized_loss" in args.loss_fn:
                     loss_term2_meter.update(val=loss_qmse.item(), n=y_pred.shape[0])
                 
-                    accelerator.log({'epoch':epoch, 'train loss iteration': loss_meter.val, 'train loss avg': loss_meter.avg,
-                                'train mse loss avg': loss_term1_meter.avg, 'train quantized loss avg': loss_term2_meter.avg
-                                }, step=step)
+                    accelerator.log({'epoch':epoch, 'train loss iteration': loss_meter.val, 
+                                    'train loss avg': loss_meter.avg,
+                                    'train mse loss avg': loss_term1_meter.avg, 
+                                    'train quantized loss avg': loss_term2_meter.avg
+                                    }, step=step)
                 else:
-                    accelerator.log({'epoch':epoch, 'train loss iteration': loss_meter.val, 'train loss avg': loss_meter.avg,
-                                'train mse loss avg': loss_term1_meter.avg}, step=step)
+                    accelerator.log({'epoch':epoch, 'train loss iteration': loss_meter.val, 
+                                    'train loss avg': loss_meter.avg,
+                                    'train mse loss avg': loss_term1_meter.avg}, step=step)
+            
             end = time.time()
+            
+            # ===== 修改：获取当前学习率的方法 =====
+            # 兼容不同的学习率调度器
+            if lr_scheduler is not None:
+                if hasattr(lr_scheduler, 'get_last_lr'):
+                    current_lr = np.mean(lr_scheduler.get_last_lr())
+                else:
+                    # ReduceLROnPlateau 等调度器没有 get_last_lr()
+                    current_lr = optimizer.param_groups[0]['lr']
+            else:
+                current_lr = optimizer.param_groups[0]['lr']
+            
             if "quantized_loss" in args.loss_fn:
                 accelerator.log({'epoch':epoch, 'train loss avg': loss_meter.avg,
-                                'train mse loss avg': loss_term1_meter.avg, 'train quantized loss avg': loss_term2_meter.avg,
-                                'lr': np.mean(lr_scheduler.get_last_lr())
+                                'train mse loss avg': loss_term1_meter.avg, 
+                                'train quantized loss avg': loss_term2_meter.avg,
+                                'lr': current_lr
                                 }, step=step)
             else:
                 accelerator.log({'epoch':epoch, 'train loss avg': loss_meter.avg,
                                 'train mse loss avg': loss_term1_meter.avg,
-                                'lr': np.mean(lr_scheduler.get_last_lr())
+                                'lr': current_lr
                                 }, step=step)
 
-            
             write_log(f"\nEpoch {epoch+1} completed in {end - start:.4f} seconds." +
-                      f"Loss - total: {loss_meter.sum:.4f} - average: {loss_meter.avg:.10f}. ", args, accelerator, 'a')
+                    f"Loss - total: {loss_meter.sum:.4f} - average: {loss_meter.avg:.10f}. ", 
+                    args, accelerator, 'a')
                     
-            accelerator.save_state(output_dir=args.output_path+f"checkpoint_{epoch}/", safe_serialization=False)
+            accelerator.save_state(output_dir=args.output_path+f"checkpoint_{epoch}/", 
+                                safe_serialization=False)
             torch.save({"epoch": epoch}, args.output_path+f"checkpoint_{epoch}/epoch")
 
             # VALIDATION
-            # Validation is performed on all the validation dataset at once
             model.eval()
 
             if epoch%log_freq==0:
@@ -243,40 +401,35 @@ class Trainer(object):
 
             with torch.no_grad():    
                 for graph in dataloader_val:
-                    
                     y_pred = model(graph).squeeze()
                     train_mask = graph['high'].train_mask
                     y = graph['high'].y
                     loss_mse = MSELoss(y_pred[train_mask].squeeze(), y[train_mask])
+                    
                     if "quantized_loss" in args.loss_fn:
-                       w = graph['high'].w
-                       loss_qmse = loss_fn(y_pred[train_mask].squeeze(), y[train_mask], w[train_mask])
-                       loss = loss_mse + args.alpha * loss_qmse
+                        w = graph['high'].w
+                        loss_qmse = loss_fn(y_pred[train_mask].squeeze(), y[train_mask], w[train_mask])
+                        loss = loss_mse + args.alpha * loss_qmse
                     else:
-                       loss = loss_mse
+                        loss = loss_mse
                     
                     val_loss_meter.update(val=loss.item(), n=y_pred.shape[0])
                     val_loss_term1_meter.update(val=loss_mse.item(), n=y_pred.shape[0])
                     if "quantized_loss" in args.loss_fn:
                         val_loss_term2_meter.update(val=loss_qmse.item(), n=y_pred.shape[0])
 
-                    accelerator.log({'epoch':epoch, 'val loss iteration': val_loss_meter.val, 'val loss avg': val_loss_meter.avg
-                        }, step=step)
+                    accelerator.log({'epoch':epoch, 'val loss iteration': val_loss_meter.val, 
+                                    'val loss avg': val_loss_meter.avg}, step=step)
                     
                     if epoch%5==0:
-                        # Gather from all processes for metrics
                         t = graph.t
                         y_pred, y, train_mask, t = accelerator.gather((
                             y_pred.unsqueeze(0), y.unsqueeze(0), train_mask.unsqueeze(0), t))
-
-                        # nodes, time
-                        y_pred_list.append(torch.atleast_2d(y_pred)) # time, nodes
+                        y_pred_list.append(torch.atleast_2d(y_pred))
                         y_list.append(torch.atleast_2d(y))
                         train_mask_list.append(torch.atleast_2d(train_mask))
                         t_list.append(torch.atleast_2d(t))
 
-                ###### PLOTS ######
-                # TODO -> Implement function to plot
                 if epoch%5==0:
                     t = torch.cat(t_list, dim=1).squeeze()
                     y_pred = torch.cat(y_pred_list, dim=0).swapaxes(0,1)
@@ -286,15 +439,21 @@ class Trainer(object):
 
             if "quantized_loss" in args.loss_fn:
                 accelerator.log({'epoch':epoch, 'val loss avg': val_loss_meter.avg,
-                                 'val mse loss avg': val_loss_term1_meter.avg, 'val qmse loss avg': val_loss_term2_meter.avg
+                                'val mse loss avg': val_loss_term1_meter.avg, 
+                                'val qmse loss avg': val_loss_term2_meter.avg
                                 }, step=step)
             else:
                 accelerator.log({'epoch':epoch, 'val loss avg': val_loss_meter.avg,
                                 }, step=step)
-                    
+            
+            # ===== 修改：ReduceLROnPlateau 需要传入指标 =====
             if lr_scheduler is not None:
-                lr_scheduler.step()
-
+                if isinstance(lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                    # ReduceLROnPlateau 需要传入验证损失
+                    lr_scheduler.step(val_loss_meter.avg)
+                else:
+                    # 其他调度器直接step
+                    lr_scheduler.step()
 #-----------------------------------------------------
 #----------------------- TEST ------------------------
 #-----------------------------------------------------
@@ -316,10 +475,10 @@ class Tester(object):
                 
                 # Regressor
                 y_pred = model(graph)
-                if args.model_type == "R" or args.model_type == "Rall":
-                    y_pred = torch.where(torch.isfinite(torch.expm1(y_pred)), torch.expm1(y_pred), np.nan)
-                elif args.model_type == "C":
-                    y_pred = torch.where(y_pred < 0, 1, 0)
+                # if args.model_type == "R" or args.model_type == "Rall":
+                #     y_pred = torch.where(torch.isfinite(torch.expm1(y_pred)), torch.expm1(y_pred), np.nan)
+                # elif args.model_type == "C":
+                #     y_pred = torch.where(y_pred < 0, 1, 0)
                 pr.append(y_pred)
                 
                 if step % 100 == 0:

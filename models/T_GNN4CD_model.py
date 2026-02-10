@@ -11,8 +11,8 @@ from torch_geometric.nn import GATv2Conv, GraphConv
 
 class T_GNN4CD_model(nn.Module):
 
-    def __init__(self, encoding_dim=64, seq_l=3, h_in=4*3, h_hid=4*3, n_layers=2, high_in=1, low2high_out=64, high_out=64):
-        super(GNN4CD_model, self).__init__()
+    def __init__(self, encoding_dim=64, seq_l=2, h_in=4*3, h_hid=4*3, n_layers=2, high_in=1, low2high_out=64, high_out=64):
+        super(T_GNN4CD_model, self).__init__()
 
         # input shape (N,L,Hin)
         self.rnn = nn.Sequential(

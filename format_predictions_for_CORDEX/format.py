@@ -69,20 +69,22 @@ if __name__ == "__main__":
         'benchmark_id': 'v1.0',
 
         # Institution information
-        'institution_id': 'IFCA',
-        'institution': 'Instituto de Física de Cantabria (IFCA), CSIC-Universidad de Cantabria',
-        'contact': 'Contact person, email@example.com',
+        'institution_id': 'ICTP',
+        'institution': 'International Centre for Theoretical Physics (ICTP)',
+        'contact': 'Wenchang Tang, wtang@ictp.it',
         'creation_date': '2025-03-20',
 
         # Emulator information
-        'emulator_id': 'DeepESD',
-        'emulator': 'Deep convolutional neural network including 3 convolution and one dense layer, with ReLU activation functions.',
+        'emulator_id': 'GNN4CD',
+        'emulator': 'Graph neural network with gated recurrent unit temporal encoding, graph-based downscaling, and graph attention layers.',
 
         # Training configuration
-        'training_id': 'm1',
+        'training_id': 'v1',
         'training': (
-            'Standardized input data at gridbox level using mean/std of reanalysis in training period. '
-            'No bias adjustment performed. Training on historical and future experiments.'
+            'Graph-based downscaling applied to precipitation and tasmax, '
+            'Trained using MSE loss.'
+            'Standardized input data using min-max scaling in training period. '
+            'Training on historical and future experiments.'
         ),
 
         # Output characteristics

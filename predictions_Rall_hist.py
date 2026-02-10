@@ -1,9 +1,10 @@
 import numpy as np
 import pickle
-import torch
 import argparse
 import time
 import os
+os.environ["TORCHDYNAMO_DISABLE"] = "1"
+import torch
 import importlib
 
 #import safetensors
@@ -19,7 +20,7 @@ from dataset import Dataset_Graph, Iterable_Graph
 from utils.tools import date_to_idxs_new, set_seed_everything, derive_train_val_idxs_new
 from utils.train_test import Tester
 
-from utils.tools import date_to_idxs, write_log, standardize_input
+from utils.tools import date_to_idxs_new, write_log, standardize_input
         
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -89,8 +90,8 @@ if __name__ == '__main__':
         #    args.test_day_start, validation_year+1, 1,
         #    1, validation_year) 
 
-        train_idxs, val_idxs = derive_train_val_idxs_new(1960, 1, 1, 1980, 11,
-                         30, 1960, args.model_name, idxs_not_all_nan=None, validation_year=1975, args=None, accelerator=accelerator)
+        train_idxs, val_idxs = derive_train_val_idxs_new(1961, 1, 1, 1980, 11,
+                         30, 1961, args.model_name, idxs_not_all_nan=None, validation_year=1975, args=None, accelerator=accelerator)
         
         write_log(f"\n the provided val start idx is {val_idxs[0]}", args, accelerator, 'a')
         write_log(f"\n the provided test end idx is {val_idxs[-1]}", args, accelerator, 'a')
@@ -205,7 +206,7 @@ if __name__ == '__main__':
     write_log(f"\n shape of pr_target: {pr_target.shape[0]}, {pr_target.shape[1]}", args, accelerator, 'a')
     graph_high_nodes=low_high_graph["high"].num_nodes
     write_log(f"\n Number high nodes in low_high_graph: {graph_high_nodes} ", args, accelerator, 'a')
-    degree = degree(low_high_graph["high", "within", "high"].edge_index, low_high_graph["high"].num_nodes).cpu().numpy()
+    degree = degree(low_high_graph["high", "within", "high"].edge_index[0], low_high_graph["high"].num_nodes).cpu().numpy()
     write_log(f"\n shape of degree: {degree.shape}", args, accelerator, 'a')
    
     mask =  degree > 2 * np.array([~np.isnan(pr_target[i,:]).all() for i in range(pr_target.shape[0])])
@@ -243,12 +244,19 @@ if __name__ == '__main__':
     # not processed Rall output
     #pr_Rall = pr_Rall.squeeze().cpu().numpy()[:,indices]
     pr_Rall =pr_Rall.squeeze().swapaxes(0,1).cpu().numpy()[:,indices]
-    
-    # processed estimates, ready to use
     pr = np.where(np.isfinite(np.expm1(pr_Rall)), np.expm1(pr_Rall), np.nan)
-    pr[pr_Rall<threshold] = 0.0 
+    #pr = np.where(np.isfinite(pr_Rall), pr_Rall, np.nan)
+    # pr=pr_Rall.squeeze(-1) 
+    # pr = pr.T
+    pr[pr<threshold] = 0.0 
     pr = pr[mask,:]
-    
+    print(
+        "PR stats:",
+        np.nanmin(pr),
+        np.nanmean(pr),
+        np.nanmax(pr),
+        )
+
     write_log(f"\n shape of pr_target: {pr_target.shape[0]}, {pr_target.shape[1]}", args, accelerator, 'a')
     write_log(f"\n shape of pr_emulated: {pr.shape[0]}, {pr.shape[1]}", args, accelerator, 'a')
 
@@ -306,6 +314,7 @@ if __name__ == '__main__':
     pr_bias_percentage_avg = pr_bias_avg / np.nanmean(pr_target, axis=1) * 100
 
     results["pr_bias_percentage_avg"] = pr_bias_percentage_avg
+    results["pr_bias_avg"] = pr_bias_avg
 
     write_log(f"\nDone. Testing concluded in {end-start} seconds.\nWrite the files.", args, accelerator, 'a')
 

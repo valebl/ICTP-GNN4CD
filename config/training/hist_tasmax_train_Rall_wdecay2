@@ -1,0 +1,114 @@
+#!/bin/bash
+
+#------------------#
+# SLURM PARAMETERS #
+#------------------#
+TIME="01:05:00" # format HH:MM:SS
+MEM="150G"
+JOB_NAME="train_Rall"
+#LOG_PATH="/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-BENCHMARK/train/"
+N_GPU=4
+
+
+#------------------#
+# TRAIN PARAMETERS #
+#------------------#
+SEED=62
+#change to P_GNN4CD_CORDEX_model or T_GNN4CD_CORDEX_model
+MODEL_NAME="P_GNN4CD_model"
+MODEL_TYPE="Rall" # either R, C or Rall
+SEQ_L=1
+
+#EXPERIMENT="ESD_pseudo_reality"
+EXPERIMENT="Emulator_hist_future"
+EPOCHS=50
+BATCH_SIZE=32
+LR_STEP_SIZE=10
+LR=0.01
+WEIGHT_DECAY=0.01
+LR_SCHEDULER="StepLR"
+#LOSS_FN="quantized_loss"
+LOSS_FN="mse_loss"
+ALPHA=0.02
+TARGET_VAR="tasmax"
+#------------------#
+# WANDB PARAMETERS #
+#------------------#
+WANDB_API_KEY="d2f9b711020f881fdb31595fe60225e8835b104e"
+WANDB_USERNAME="tangwenchang0210"
+WANDB_PROJECT_NAME="GNN4CD-Emulator_hist_future-tasmax_wdecay2_min_max_mse_stepLR_LR01_stepsize10_SEQ2"
+#--------------------------------------------#
+# PATHS (conda env, main, accelerate config) #
+#--------------------------------------------#
+# SOURCE_PATH="/leonardo/home/userexternal/$USER/.bashrc"
+
+# ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv" # conda env
+# SOURCE_PATH="/leonardo/home/userexternal/$USER/.bashrc"
+# ACCELERATE_CONFIG_PATH="/leonardo/home/userexternal/$USER/.cache/huggingface/accelerate/default_config.yaml"
+# MAIN_PATH="/leonardo_work/ICT25_ESP/$USER/CORDEX-ML/GNN4CD-CORDEXML/" # path to the folder
+
+MAIN_PATH="$HOME/benchmarks/GNN4CD-CORDEXML-Benchmark-new/"
+SOURCE_PATH="/leonardo/home/userexternal/$USER/Conda_init.txt"
+ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv"
+ACCELERATE_CONFIG_PATH="/leonardo/home/userexternal/$USER/.cache/huggingface/accelerate/default_config.yaml"
+#-------------------------------#
+# INPUT/OUTPUT FILES PARAMETERS #
+#-------------------------------#
+
+#TODO: change data path
+DOMAIN="SA"
+
+
+#pressure levels
+N_LEVELS=3
+
+# PREPROCESSING PHASE 
+# INPUT_PATH="/leonardo_work/ICT25_ESP/$USER/CORDEX-ML/CORDEX-graphs/${DOMAIN}_domain/${EXPERIMENT}/"
+#OUTPUT_PATH=${LOG_PATH}
+#LOG_FILE="log.txt"
+OUTPUT_PATH="/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-BENCHMARK/train/${DOMAIN}_domain/${EXPERIMENT}/0204try_tasmax_hist_wdecay2_1961-1980_mse_LR01_stepsize10_SEQ1/"
+LOG_PATH=${OUTPUT_PATH}
+# INPUT_PATH="/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-BENCHMARK/logs/"
+# LOG_FILE="log_$DOMAIN_$EXPERIMENT.txt"
+# INPUT_PATH="/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-BENCHMARK/logs/hist_future_tas_preprocessed/"
+# LOG_FILE="log_tasmax_$DOMAIN_$EXPERIMENT.txt"
+INPUT_PATH="/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain/${EXPERIMENT}/"
+LOG_FILE="log_tasmax_${EXPERIMENT}.txt"
+TARGET_FILE="Emulator_hist_future_new_target_tasmax.pkl"
+GRAPH_FILE="low_high_graph_new_tasmax.pkl"
+OUT_CHECKPOINT_FILE="checkpoint.pth"
+DATASET_NAME="Dataset_Graph"
+COLLATE_NAME="custom_collate_fn_graph"
+
+
+#----------------------------------------#
+#             TRAINING PERIOD            #
+#----------------------------------------#
+
+#here we specify only starting day/month and we specify the years in the train_Rall.py scripts
+
+TRAIN_MONTH_START=1
+TRAIN_DAY_START=1
+TRAIN_MONTH_END=11
+TRAIN_DAY_END=30
+
+
+#-----------------#
+# BOOLEAN OPTIONS #
+#-----------------#
+USE_ACCELERATE=true
+MAKE_VAL_PLOTS=true
+
+#--------------do not change here below------------------
+
+if [ ${USE_ACCELERATE} = true ] ; then
+	USE_ACCELERATE="--use_accelerate"
+else
+	USE_ACCELERATE="--no-use_accelerate"
+fi
+
+if [ ${MAKE_VAL_PLOTS} = true ] ; then
+	MAKE_VAL_PLOTS="--make_val_plots"
+else
+	MAKE_VAL_PLOTS="--no-make_val_plots"
+fi

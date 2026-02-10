@@ -23,7 +23,7 @@ def write_log(s, args=None, accelerator=None, mode='a'):
     '''
     if accelerator is None or accelerator.is_main_process:
         if args is not None:
-            with open(args.log_path + args.log_file, mode) as f:
+            with open(args.output_path + args.log_file, mode) as f:
                 f.write(s)
         else:
             print(s)
@@ -424,82 +424,206 @@ def derive_train_val_idxs_CORDEX(
     return train_idxs, val_idxs
 
                    
+# def compute_input_statistics(x_low, x_high, args, accelerator=None):
+
+#     r'''
+#     input:
+#      -x_low:
+#      -x_high:
+#      -args
+#      -accelerator
+#     returns:
+#      a tuple containing 4 objects:
+#        - means_low, stds_low: mean values and standard deviation of low-resol predictors
+#        - means_high, stds_high: mean values and standard deviation  of high-resol predictors
+#     '''
+
+#     write_log(f'\nComputing statistics for the low-res input data.', args, accelerator, 'a')
+
+#     # Low-res data
+#     means_low = np.zeros((5))
+#     stds_low = np.zeros((5))
+#     for var in range(5):
+#         m = np.nanmean(x_low[:,:,var,:]) # num_nodes, time, vars, levels
+#         s = np.nanstd(x_low[:,:,var,:])  # num_nodes, time, vars, levels
+#         means_low[var] = m
+#         stds_low[var] = s
+
+#     write_log(f'\nComputing statistics for the high-res input data.', args, accelerator, 'a')
+
+#     # High-res data
+#     if x_high.size()[1] > 1:
+#         means_high = torch.tensor([x_high[:,0].mean(), x_high[:,1:].mean()])
+#         stds_high = torch.tensor([x_high[:,0].std(), x_high[:,1:].std()])
+#     else:
+#         means_high = torch.tensor(x_high.mean())
+#         stds_high = torch.tensor(x_high.std())        
+
+#     # Write the standardized data to disk
+#     with open(args.output_path + "means_low.pkl", 'wb') as f:
+#         pickle.dump(means_low, f)
+#     with open(args.output_path + "stds_low.pkl", 'wb') as f:
+#         pickle.dump(stds_low, f)
+#     with open(args.output_path + "means_high.pkl", 'wb') as f:
+#         pickle.dump(means_high, f)
+#     with open(args.output_path + "stds_high.pkl", 'wb') as f:
+#         pickle.dump(stds_high, f)
+
+#     return means_low, stds_low, means_high, stds_high
+
+
+
+
+# #this function standardize all the predictors
+# def standardize_input(x_low, x_high, means_low, stds_low, means_high, stds_high, args=None, accelerator=None):
+
+#     write_log(f'\nStandardizing the low-res input data.', args, accelerator, 'a')
+
+#     # Preallocate memory efficiently
+#     x_low_standard = torch.empty_like(x_low, dtype=torch.float32)
+    
+#     # Standardize the data
+#     for var in range(5):
+#         x_low_standard[:,:,var,:] = (x_low[:,:,var,:]-means_low[var])/stds_low[var]  # num_nodes, time, vars, levels
+    
+#     write_log(f'\nStandardizing the high-res input data.', args, accelerator, 'a')
+
+#     # Standardize the data
+#     x_high_standard = torch.zeros((x_high.size()), dtype=torch.float32)
+    
+#     #in case we have the land use fields
+#     if x_high.size()[1] > 1:
+#         x_high_standard[:,0] = (x_high[:,0] - means_high[0]) / stds_high[0]
+#         x_high_standard[:,1:] = (x_high[:,1:] - means_high[1]) / stds_high[1]
+#     else:
+#     #or if we have only orography
+#         x_high_standard = (x_high - means_high) / stds_high
+
+#     return x_low_standard, x_high_standard
+
+
+#Try 0201
 def compute_input_statistics(x_low, x_high, args, accelerator=None):
-
     r'''
-    input:
-     -x_low:
-     -x_high:
-     -args
-     -accelerator
-    returns:
-     a tuple containing 4 objects:
-       - means_low, stds_low: mean values and standard deviation of low-resol predictors
-       - means_high, stds_high: mean values and standard deviation  of high-resol predictors
+    input: 
+        -x_low: shape (num_nodes, time, vars, levels) - numpy array or torch tensor
+        -x_high: shape (num_nodes, features) - torch tensor
+        -args
+        -accelerator
+    returns: a tuple containing 4 objects:
+        - means_low, stds_low: mean values and standard deviation of low-resol predictors
+        - means_high, stds_high: mean values and standard deviation of high-resol predictors
     '''
-
     write_log(f'\nComputing statistics for the low-res input data.', args, accelerator, 'a')
-
-    # Low-res data
-    means_low = np.zeros((5))
-    stds_low = np.zeros((5))
-    for var in range(5):
-        m = np.nanmean(x_low[:,:,var,:]) # num_nodes, time, vars, levels
-        s = np.nanstd(x_low[:,:,var,:])  # num_nodes, time, vars, levels
-        means_low[var] = m
-        stds_low[var] = s
-
+    
+    # tensor to ndarray
+    if isinstance(x_low, torch.Tensor):
+        x_low_np = x_low.numpy()
+    else:
+        x_low_np = x_low
+    
+    # Low-res data - for each variable and each level separately
+    num_vars = x_low_np.shape[2]  # 5 variables
+    num_levels = x_low_np.shape[3]  # 3 levels
+    
+    means_low = np.zeros((num_vars, num_levels))
+    stds_low = np.zeros((num_vars, num_levels))
+    
+    for var in range(num_vars):
+        for level in range(num_levels):
+            m = np.nanmean(x_low_np[:, :, var, level])
+            s = np.nanstd(x_low_np[:, :, var, level])
+            s = max(s, 1e-6)  # avoid division by zero
+            means_low[var, level] = m
+            stds_low[var, level] = s
+            
+            write_log(f'  Var {var}, Level {level}: mean={m:.4f}, std={s:.4f}', 
+                     args, accelerator, 'a')
+    
     write_log(f'\nComputing statistics for the high-res input data.', args, accelerator, 'a')
-
+    
     # High-res data
     if x_high.size()[1] > 1:
-        means_high = torch.tensor([x_high[:,0].mean(), x_high[:,1:].mean()])
-        stds_high = torch.tensor([x_high[:,0].std(), x_high[:,1:].std()])
+        means_high = torch.tensor([x_high[:,0].mean().item(), x_high[:,1:].mean().item()])
+        stds_high = torch.tensor([x_high[:,0].std().item(), x_high[:,1:].std().item()])
+        stds_high = torch.clamp(stds_high, min=1e-6)  # avoid division by zero
     else:
-        means_high = torch.tensor(x_high.mean())
-        stds_high = torch.tensor(x_high.std())        
-
+        means_high = torch.tensor(x_high.mean().item())
+        stds_high = torch.tensor(x_high.std().item())
+        stds_high = torch.clamp(stds_high, min=torch.tensor(1e-6))
+    
     # Write the standardized data to disk
-    with open(args.output_path + "means_low.pkl", 'wb') as f:
-        pickle.dump(means_low, f)
-    with open(args.output_path + "stds_low.pkl", 'wb') as f:
-        pickle.dump(stds_low, f)
-    with open(args.output_path + "means_high.pkl", 'wb') as f:
-        pickle.dump(means_high, f)
-    with open(args.output_path + "stds_high.pkl", 'wb') as f:
-        pickle.dump(stds_high, f)
-
+    if accelerator is None or accelerator.is_main_process:
+        with open(args.output_path + "means_low.pkl", 'wb') as f:
+            pickle.dump(means_low, f)
+        with open(args.output_path + "stds_low.pkl", 'wb') as f:
+            pickle.dump(stds_low, f)
+        with open(args.output_path + "means_high.pkl", 'wb') as f:
+            pickle.dump(means_high, f)
+        with open(args.output_path + "stds_high.pkl", 'wb') as f:
+            pickle.dump(stds_high, f)
+    
     return means_low, stds_low, means_high, stds_high
 
 
-
-
-#this function standardize all the predictors
-def standardize_input(x_low, x_high, means_low, stds_low, means_high, stds_high, args=None, accelerator=None):
-
+def standardize_input(x_low, x_high, means_low, stds_low, means_high, stds_high, 
+                      args=None, accelerator=None):
+    r'''
+    Standardize input data using provided statistics
+    
+    Args:
+        x_low: low-resolution input, shape (num_nodes, time, vars, levels)
+        x_high: high-resolution input
+        means_low: mean values for low-res, shape (vars, levels)
+        stds_low: std values for low-res, shape (vars, levels)
+        means_high: mean values for high-res
+        stds_high: std values for high-res
+    
+    Returns:
+        x_low_standard, x_high_standard: standardized inputs
+    '''
     write_log(f'\nStandardizing the low-res input data.', args, accelerator, 'a')
-
-    # Preallocate memory efficiently
+    
+    # Standardize low-res data
     x_low_standard = torch.empty_like(x_low, dtype=torch.float32)
-
-    # Standardize the data
-    for var in range(5):
-        x_low_standard[:,:,var,:] = (x_low[:,:,var,:]-means_low[var])/stds_low[var]  # num_nodes, time, vars, levels
-
+    
+    num_vars = x_low.shape[2]
+    num_levels = x_low.shape[3]
+    
+    # Standardize low-res data for each variable and each level separately
+    for var in range(num_vars):
+        for level in range(num_levels):
+            mean_val = float(means_low[var, level])
+            std_val = float(stds_low[var, level])
+            x_low_standard[:, :, var, level] = (x_low[:, :, var, level] - mean_val) / std_val
+    
     write_log(f'\nStandardizing the high-res input data.', args, accelerator, 'a')
-
-    # Standardize the data
+    
+    # Standardize high-res data
     x_high_standard = torch.zeros((x_high.size()), dtype=torch.float32)
     
-    #in case we have the land use fields
     if x_high.size()[1] > 1:
-        x_high_standard[:,0] = (x_high[:,0] - means_high[0]) / stds_high[0]
-        x_high_standard[:,1:] = (x_high[:,1:] - means_high[1]) / stds_high[1]
+        # If there is a land use field
+        x_high_standard[:, 0] = (x_high[:, 0] - means_high[0]) / stds_high[0]
+        x_high_standard[:, 1:] = (x_high[:, 1:] - means_high[1]) / stds_high[1]
     else:
-    #or if we have only orography
+        # Or only terrain
         x_high_standard = (x_high - means_high) / stds_high
-
+    
+    # Print standardized data statistics for verification
+    write_log(f'\nStandardized low-res data statistics:', args, accelerator, 'a')
+    # Calculate statistics of finite values
+    finite_mask = torch.isfinite(x_low_standard)
+    if finite_mask.any():
+        valid_data = x_low_standard[finite_mask]
+        write_log(f'  Mean: {valid_data.mean():.6f}, Std: {valid_data.std():.6f}', 
+                 args, accelerator, 'a')
+        write_log(f'  Min: {valid_data.min():.6f}, Max: {valid_data.max():.6f}', 
+                 args, accelerator, 'a')
+    
     return x_low_standard, x_high_standard
+#0201 try end```
+
 
 
 def prepare_target(target_train, model_type, threshold = 0.1):
@@ -552,33 +676,75 @@ def prepare_target_Rall(target_train, threshold = 0.1):
     return target_train
 
 
-def prepare_target_T_Rall(target_train, procedure = 'z-score'):
+# def prepare_target_T_Rall(target_train, procedure = 'z-score'):
     
-    # derive one mask:
-    # - mask_nan, i.e. where the target is nan
-    mask_nan = torch.isnan(target_train)
+#     # derive one mask:
+#     # - mask_nan, i.e. where the target is nan
+#     mask_nan = torch.isnan(target_train)
  
-    target_train[mask_nan] = torch.nan
+#     target_train[mask_nan] = torch.nan
     
-    # round to comply with instrument sensitivity
-    target_train = torch.round(target_train, decimals=4)
+#     # round to comply with instrument sensitivity
+#     target_train = torch.round(target_train, decimals=4)
 
    
-    #-- target normalization for REGRESSOR ON ALL --#
-    if procedure=='z-score':
-        mean_tensor= target_train.mean(axis=0)
-        std_tensor= target_train.std(axis=0)
-        mean_absolute= mean_tensor.mean()
-        std_absolute= target_train.std()
-        target_train= (target_train - mean_absolute)/std_absolute
+#     #-- target normalization for REGRESSOR ON ALL --#
+#     if procedure=='z-score':
+#         mean_tensor= target_train.mean(axis=0)
+#         std_tensor= target_train.std(axis=0)
+#         mean_absolute= mean_tensor.mean()
+#         std_absolute= target_train.std()
+#         target_train= (target_train - mean_absolute)/std_absolute
         
-    else: #procedure normalization
-        max_tensor=torch.amax(target_train.T,0)
-        min_tensor=torch.amin(target_train.T,0)
-        target_train = (target_train - target_train.min())/(target_train.max()-target_train.min())
+#     else: #procedure normalization
+#         max_tensor=torch.amax(target_train.T,0)
+#         min_tensor=torch.amin(target_train.T,0)
+#         target_train = (target_train - target_train.min())/(target_train.max()-target_train.min())
 
-    return target_train
+#     return target_train
 
+
+#0201 try
+# Modified normalization, and stats were added for inverse transform
+def prepare_target_T_Rall(target_train, procedure='z-score'):
+    r'''
+    Prepare target for temperature regression
+    
+    Args:
+        target_train: raw target values
+        procedure: 'z-score' or 'minmax'
+    
+    Returns:
+        target_train: normalized target
+        stats: dict containing normalization statistics for inverse transform
+    '''
+    mask_nan = torch.isnan(target_train)
+    #target_train = torch.round(target_train, decimals=4)    
+    
+    # Target normalization
+    if procedure == 'z-score':
+        valid_data = target_train[~mask_nan]
+        mean_val = valid_data.mean()
+        std_val = valid_data.std()
+        std_val = torch.clamp(std_val, min=1e-6)  # avoid division by zero
+        
+        target_train = (target_train - mean_val) / std_val
+        stats = {'mean': mean_val.item(), 'std': std_val.item(), 'procedure': 'z-score'}
+        
+    else:  # minmax normalization
+        valid_data = target_train[~mask_nan]
+        min_val = valid_data.min()
+        max_val = valid_data.max()
+        range_val = max_val - min_val
+        range_val = torch.clamp(range_val, min=1e-6)
+        
+        target_train = (target_train - min_val) / range_val
+        stats = {'min': min_val.item(), 'max': max_val.item(), 'procedure': 'minmax'}
+    
+    target_train[mask_nan] = torch.nan
+    
+    return target_train, stats
+#0201 try end
 
 
 def derive_qmse_bins(target_train, train_idxs, args, accelerator, threshold=0.1):

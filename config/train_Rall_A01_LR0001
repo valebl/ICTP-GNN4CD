@@ -3,10 +3,9 @@
 #------------------#
 # SLURM PARAMETERS #
 #------------------#
-TIME="00:30:00" # format HH:MM:SS
+TIME="01:30:00" # format HH:MM:SS
 MEM="150G"
 JOB_NAME="train_Rall"
-LOG_PATH="examples/train/Rall/"
 N_GPU=4
 
 #------------------#
@@ -14,12 +13,15 @@ N_GPU=4
 #------------------#
 SEED=100
 #change to P_GNN4CD_CORDEX_model or T_GNN4CD_CORDEX_model
-MODEL_NAME="GNN4CD_model"
-MODEL_TYPE="Rall" # either R, C or Rall
-LR_SCHEDULER="StepLR"
-SEQ_L=3
 
-EXPERIMENT="ESD_pseudo_reality"
+MODEL_NAME="P_GNN4CD_model"
+MODEL_TYPE="Rall" # either R, C or Rall
+SEQ_L=2
+LR_SCHEDULER="StepLR"
+
+DOMAIN="SA"
+#EXPERIMENT="ESD_pseudo_reality"
+EXPERIMENT="Emulator_hist_future"
 
 EPOCHS=50
 BATCH_SIZE=32
@@ -27,31 +29,33 @@ LR_STEP_SIZE=25
 LR=0.0001
 WEIGHT_DECAY=0.0
 LOSS_FN="quantized_loss"
-ALPHA=0.005
+ALPHA=0.01
 
 #------------------#
 # WANDB PARAMETERS #
 #------------------#
-WANDB_API_KEY=""
-WANDB_USERNAME=""
-WANDB_PROJECT_NAME="GNN4CD-TEST"
+WANDB_API_KEY="d2f9b711020f881fdb31595fe60225e8835b104e"
+WANDB_USERNAME="tangwenchang0210"
+WANDB_PROJECT_NAME="GNN4CD-Pr-SA-history-future-hist"
 
 #--------------------------------------------#
 # PATHS (conda env, main, accelerate config) #
 #--------------------------------------------#
-SOURCE_PATH="/leonardo/home/userexternal/$USER/.bashrc"
-ENV_PATH="/leonardo_work/ICT25_ESP/SHARED/GNN4CDenv"
-MAIN_PATH="/leonardo_work/ICT25_ESP/$USER/GNN4CD"
-ACCELERATE_CONFIG_PATH="/leonardo/home/userexternal/$USER/.cache/huggingface/accelerate/default_config_${N_GPU}.yaml"
 
+MAIN_PATH="$HOME/benchmarks/GNN4CD-CORDEXML-Benchmark-new/"
+SOURCE_PATH="/leonardo/home/userexternal/$USER/Conda_init.txt"
+ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv"
+ACCELERATE_CONFIG_PATH="/leonardo/home/userexternal/$USER/.cache/huggingface/accelerate/default_config.yaml"
 #-------------------------------#
 # INPUT/OUTPUT FILES PARAMETERS #
 #-------------------------------#
 
 #TODO: change data path
-INPUT_PATH="/leonardo_work/ICT25_ESP/SHARED/example_data/preprocessed/"
-OUTPUT_PATH=${LOG_PATH}
-LOG_FILE="log.txt"
+
+OUTPUT_PATH="/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-BENCHMARK/train/${DOMAIN}_domain/${EXPERIMENT}/ALPHA_${ALPHA}_LR_${LR}/"
+LOG_PATH=${OUTPUT_PATH}
+INPUT_PATH="/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-BENCHMARK/logs/"
+LOG_FILE="log_$DOMAIN_$EXPERIMENT.txt"
 TARGET_FILE="target.pkl"
 GRAPH_FILE="low_high_graph.pkl"
 OUT_CHECKPOINT_FILE="checkpoint.pth"
@@ -64,25 +68,28 @@ COLLATE_NAME="custom_collate_fn_graph"
 #----------------------------------------#
 
 #change training period to CORDEX
-TRAIN_YEAR_START=2001
 TRAIN_MONTH_START=1
 TRAIN_DAY_START=1
-TRAIN_YEAR_END=2015
 TRAIN_MONTH_END=11
 TRAIN_DAY_END=30
-FIRST_YEAR=2001
-VALIDATION_YEAR=2007
-
 #-----------------#
 # BOOLEAN OPTIONS #
 #-----------------#
 USE_ACCELERATE=true
+MAKE_VAL_PLOTS=true
 
 
 #--------------do not change here below------------------
+
 
 if [ ${USE_ACCELERATE} = true ] ; then
 	USE_ACCELERATE="--use_accelerate"
 else
 	USE_ACCELERATE="--no-use_accelerate"
+fi
+
+if [ ${MAKE_VAL_PLOTS} = true ] ; then
+	MAKE_VAL_PLOTS="--make_val_plots"
+else
+	MAKE_VAL_PLOTS="--no-make_val_plots"
 fi

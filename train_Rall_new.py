@@ -5,6 +5,7 @@ import pickle
 import time
 import argparse
 import os
+os.environ["TORCHDYNAMO_DISABLE"] = "1"
 import importlib
 from dataset import Iterable_Graph
 import dataset
@@ -87,7 +88,16 @@ if __name__ == '__main__':
     #-----------------------------------------------------
 
     if args.use_accelerate is True:
-        accelerator = Accelerator(log_with="wandb", step_scheduler_with_optimizer=False)
+        #accelerator = Accelerator(log_with="wandb", step_scheduler_with_optimizer=False)
+
+        # 尝试添加混合精度训练，节省显存并加速
+        accelerator = Accelerator(
+            log_with="wandb", 
+            step_scheduler_with_optimizer=False,
+            mixed_precision='fp16'  # 使用半精度
+        )
+        write_log("\nUsing mixed precision training (fp16)", args, accelerator, 'a')
+        #尝试结束
     else:
         accelerator = None
 
@@ -100,6 +110,10 @@ if __name__ == '__main__':
         validation_years=1975#change with CORDEX validation years [1965,1975]
     elif training_experiment == 'Emulator_hist_future':
         period_training = '1961-1980_2080-2099'
+        train_year_start=1961
+        train_year_end=1980
+        first_year=1961
+        validation_years=1975#change with CORDEX validation years [1965,1975]
 
     
     number_valyears=1 #len(validation_years)
@@ -140,25 +154,64 @@ if __name__ == '__main__':
     model = Model(seq_l=args.seq_l+1)
 
     # Loss
- 
-    loss_fn = getattr(utils.loss_functions, args.loss_fn)()
+
+    #loss_fn = getattr(utils.loss_functions, args.loss_fn)()
+  
+  
+    if "quantized_loss" in args.loss_fn:
+        loss_fn = getattr(utils.loss_functions, args.loss_fn)()
+    else:
+        loss_fn = args.loss_fn  
 
     #-----------------------------------------------------
     #--------------- TARGET AND INDEXES ------------------
     #-----------------------------------------------------
 
     # Prepapre the target for the Rall model
-    if args.target_var=="precipitation":
-        target_train = prepare_target_Rall(target_train, threshold = 0.1)
-    else:
-        target_train = prepare_target_T_Rall(target_train, procedure=args.procedure)
+    # if args.target_var=="precipitation":
+    #     target_train = prepare_target_Rall(target_train, threshold = 0.1)
+    # else:
+    #     target_train = prepare_target_T_Rall(target_train, procedure=args.procedure)
     #CHECKING NAN values 
+
+    #0201 try
+        # Prepare the target for the Rall model
+    # if args.target_var == "precipitation":
+    #     target_train = prepare_target_Rall(target_train, threshold=0.1)
+    #     target_stats = None
+    # else:
+    #     target_train, target_stats = prepare_target_T_Rall(target_train, procedure=args.procedure)
+        
+    #     # save target_stats
+    #     if accelerator is None or accelerator.is_main_process:
+    #         with open(args.output_path + "target_stats.pkl", 'wb') as f:
+    #             pickle.dump(target_stats, f)
+
+    # Prepare the target for precipitation (Rall model)
+    if args.target_var == "precipitation":
+        target_train = prepare_target_Rall(target_train, threshold=0.1)
+        target_stats = None  # 降水不需要额外的统计量，因为用log1p
+        # write_log(f"\nPrepared precipitation target with log1p transform", args, accelerator, 'a')
+        # write_log(f"  Target range after transform: [{torch.nanmin(target_train):.4f}, {torch.nanmax(target_train):.4f}]", 
+        #         args, accelerator, 'a')
+    else:
+        target_train, target_stats = prepare_target_T_Rall(target_train, procedure=args.procedure)
+        
+        # 保存统计量
+        if accelerator is None or accelerator.is_main_process:
+            with open(args.output_path + "target_stats.pkl", 'wb') as f:
+                pickle.dump(target_stats, f)
+            write_log(f"\nSaved temperature target statistics", args, accelerator, 'a')
+        ##############
+        #0201 try end
+
+
 
     # Identify the indexes for which at least one node value is not nan
     idxs_not_all_nan = find_not_all_nan_times_new(target_train)
 
     #write_log(f"\nAfter removing all nan time indexes, {len(idxs_not_all_nan)}" +
-    #        f" time indexes are considered ({(len(idxs_not_all_nan) / target_train.shape[1] * 100):.1f} " +
+    #        f" time indexes are considered ({(len(idxs_not_all_nan) / target_train.shape[1] * 100):.1f} "+
     #        "% of initial ones).", args, accelerator, 'a')
     
     
@@ -195,11 +248,32 @@ if __name__ == '__main__':
 
 
     # Compute the training statistics and standardize the training data
-    means_low, stds_low, means_high, stds_high = compute_input_statistics(
-        low_high_graph['low'].x[:,train_idxs,:], low_high_graph['high'].x, args, accelerator)
+    # means_low, stds_low, means_high, stds_high = compute_input_statistics(
+    #     low_high_graph['low'].x[:,train_idxs,:], low_high_graph['high'].x, args, accelerator)
     
+    # low_high_graph['low'].x, low_high_graph['high'].x = standardize_input(
+    #     low_high_graph['low'].x, low_high_graph['high'].x, means_low, stds_low, means_high, stds_high, args, accelerator) # num_nodes, time, vars, levels
+    
+
+    # Try 0201
+    means_low, stds_low, means_high, stds_high = compute_input_statistics(
+        low_high_graph['low'].x[:, train_idxs, :, :],  
+        low_high_graph['high'].x, 
+        args, 
+        accelerator
+    )
+
     low_high_graph['low'].x, low_high_graph['high'].x = standardize_input(
-        low_high_graph['low'].x, low_high_graph['high'].x, means_low, stds_low, means_high, stds_high, args, accelerator) # num_nodes, time, vars, levels
+        low_high_graph['low'].x, 
+        low_high_graph['high'].x, 
+        means_low, stds_low, 
+        means_high, stds_high, 
+        args, accelerator
+    )
+    #Try 0201 end
+
+    # if args.target_var == "temperature":
+    #     low_high_graph['low'].x = torch.cat((low_high_graph['low'].x[:,:,:1,:], low_high_graph['low'].x[:,:,2:,:]), dim=2)
 
     # Flatten the training tensor
     low_high_graph['low'].x = torch.flatten(low_high_graph['low'].x, start_dim=2, end_dim=-1)   # num_nodes, time, vars*levels
@@ -269,8 +343,48 @@ if __name__ == '__main__':
         write_log("\nNot using accelerator to prepare model, optimizer, dataloader and loss_fn...", args, accelerator, 'a')
         model = model.cuda()
 
+    # total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    # write_log(f"\nTotal number of trainable parameters: {total_params}.", args, accelerator, 'a')
+
+
+    # More detailed model summary
+    # calculate total number of trainable parameters
     total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     write_log(f"\nTotal number of trainable parameters: {total_params}.", args, accelerator, 'a')
+    write_log(f"\n=== Model Architecture Summary ===", args, accelerator, 'a')
+
+    if hasattr(model, 'module'):
+        original_model = model.module
+    else:
+        original_model = model
+
+    if hasattr(original_model, 'h_hid'):
+        write_log(f"GRU hidden size: {original_model.h_hid}", args, accelerator, 'a')
+    if hasattr(original_model, 'n_layers'):
+        write_log(f"GRU layers: {original_model.n_layers}", args, accelerator, 'a')
+
+    write_log(f"Total trainable parameters: {total_params:,}", args, accelerator, 'a')
+    write_log(f"Model size: {total_params * 4 / 1024 / 1024:.2f} MB (fp32)", args, accelerator, 'a')
+    write_log(f"Model size: {total_params * 2 / 1024 / 1024:.2f} MB (fp16)", args, accelerator, 'a')
+
+    # GPU information
+    if torch.cuda.is_available():
+        write_log(f"\nGPU: {torch.cuda.get_device_name(0)}", args, accelerator, 'a')
+        write_log(f"Available GPUs: {torch.cuda.device_count()}", args, accelerator, 'a')
+        
+        # Log GPU memory information
+    write_log(f"\n=== Model Architecture Summary ===", args, accelerator, 'a')
+
+    write_log(f"GRU hidden size: {original_model.h_hid}", args, accelerator, 'a')
+    write_log(f"GRU layers: {original_model.n_layers}", args, accelerator, 'a')
+    write_log(f"Total trainable parameters: {total_params:,}", args, accelerator, 'a')
+    write_log(f"Model size: {total_params * 4 / 1024 / 1024:.2f} MB (fp32)", args, accelerator, 'a')
+    write_log(f"Model size: {total_params * 2 / 1024 / 1024:.2f} MB (fp16)", args, accelerator, 'a')
+
+    # Log GPU information
+    if torch.cuda.is_available():
+        write_log(f"\nGPU: {torch.cuda.get_device_name(0)}", args, accelerator, 'a')
+        write_log(f"Available GPUs: {torch.cuda.device_count()}", args, accelerator, 'a')
 
 #-----------------------------------------------------
 #----------------------- TRAIN -----------------------
