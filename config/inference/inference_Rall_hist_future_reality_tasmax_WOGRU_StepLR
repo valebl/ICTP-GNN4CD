@@ -1,0 +1,62 @@
+#!/bin/bash
+
+#------------------#
+# SLURM PARAMETERS #
+#------------------#
+TIME="00:30:00"
+MEM="150G"
+JOB_NAME="infer_tasmax_batch"
+N_GPU=1
+
+#------------------#
+# MODEL PARAMETERS #
+#------------------#
+SEED=62
+MODEL_NAME="P_GNN4CD_model"
+SEQ_L=2
+BATCH_SIZE=32
+EPOCH=21
+STATS_MODE="var"
+
+#--------------------------------------------#
+# PATHS
+#--------------------------------------------#
+MAIN_PATH="$HOME/benchmarks/GNN4CD-CORDEXML-Benchmark-new/"
+SOURCE_PATH="/leonardo/home/userexternal/$USER/Conda_init.txt"
+ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv"
+
+#-------------------------------#
+# DOMAIN & EXPERIMENT
+#-------------------------------#
+DOMAIN="SA"
+#EXPERIMENT="ESD_pseudo_reality"
+EXPERIMENT="Emulator_hist_future"
+#-------------------------------#
+# 训练模型路径（含target_stats.pkl）
+#-------------------------------#
+TRAIN_PATH="/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-BENCHMARK/train/${DOMAIN}_domain/${EXPERIMENT}/0216try_tasmax_hist_future_StepLR_1961-1980_quantized_loss_LR0008_SEQ2_woGRU/"
+CHECKPOINT_REG="checkpoint_${EPOCH}"
+
+#-------------------------------#
+# 输入图路径
+# 结构: ${BASE_GRAPH_PATH}/{period}/{mode}/{GCM}_low_graph.pkl
+#-------------------------------#
+BASE_GRAPH_PATH="/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-GRAPHS/${DOMAIN}_domain/test/"
+
+#-------------------------------#
+# 输出路径
+# 结构: ${BASE_OUTPUT_PATH}/{period}/{mode}/{GCM}_tasmax_predictions.pkl
+#-------------------------------#
+BASE_OUTPUT_PATH="/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-BENCHMARK/test/${EXPERIMENT}/"
+LOG_PATH="${BASE_OUTPUT_PATH}/logs_tasmax/"
+LOG_FILE="inference_tasmax_batch_log.txt"
+
+#-------------------------------#
+# 推理范围
+#-------------------------------#
+PERIODS="historical mid_century end_century"
+GCMS="ACCESS-CM2 NorESM2-MM"
+MODES="perfect imperfect"
+
+DATASET_NAME="Dataset_Graph"
+USE_ACCELERATE=false

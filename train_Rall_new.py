@@ -13,7 +13,7 @@ import dataset
 import utils.loss_functions
 from utils.tools import write_log, set_seed_everything
 from utils.tools import prepare_target_Rall, prepare_target_T_Rall, find_not_all_nan_times_new, derive_train_val_idxs_new, derive_train_val_idxs_CORDEX
-from utils.tools import derive_qmse_bins, compute_input_statistics, standardize_input
+from utils.tools import derive_qmse_bins_new, compute_input_statistics, standardize_input
 from utils.train_test import Trainer
 from accelerate import Accelerator
 
@@ -108,12 +108,18 @@ if __name__ == '__main__':
         train_year_end=1980
         first_year=1961
         validation_years=1975#change with CORDEX validation years [1965,1975]
+    # elif training_experiment == 'Emulator_hist_future':
+    #     period_training = '1961-1980_2080-2099'
+    #     train_year_start=1961
+    #     train_year_end=1980
+    #     first_year=1961
+    #     validation_years=1975#change with CORDEX validation years [1965,1975]
     elif training_experiment == 'Emulator_hist_future':
-        period_training = '1961-1980_2080-2099'
-        train_year_start=1961
-        train_year_end=1980
-        first_year=1961
-        validation_years=1975#change with CORDEX validation years [1965,1975]
+        period_training  = '1961-1980_2080-2099'
+        first_year       = 1961
+        validation_years = 1975
+        train_year_start = 1961  
+        train_year_end   = 2099  
 
     
     number_valyears=1 #len(validation_years)
@@ -145,13 +151,17 @@ if __name__ == '__main__':
         
     target_train = target_train.T
 
+    model_high_in=3
+    assert low_high_graph["high"].x.shape[1] == model_high_in  # whatever you chose
+
     #-----------------------------------------------------
     #--------------- MODEL, LOSS, OPTIMIZER --------------
     #-----------------------------------------------------
 
     models = importlib.import_module(f"models.{args.model_name}")
     Model = getattr(models, args.model_name)
-    model = Model(seq_l=args.seq_l+1)
+    #model = Model(seq_l=args.seq_l+1)
+    model = Model(seq_l=args.seq_l+1, high_in=3)
 
     # Loss
 
@@ -190,6 +200,7 @@ if __name__ == '__main__':
     # Prepare the target for precipitation (Rall model)
     if args.target_var == "precipitation":
         target_train = prepare_target_Rall(target_train, threshold=0.1)
+        target_train = target_train.to(torch.float32)#new
         target_stats = None  # 降水不需要额外的统计量，因为用log1p
         # write_log(f"\nPrepared precipitation target with log1p transform", args, accelerator, 'a')
         # write_log(f"  Target range after transform: [{torch.nanmin(target_train):.4f}, {torch.nanmax(target_train):.4f}]", 
@@ -208,7 +219,7 @@ if __name__ == '__main__':
 
 
     # Identify the indexes for which at least one node value is not nan
-    idxs_not_all_nan = find_not_all_nan_times_new(target_train)
+    #idxs_not_all_nan = find_not_all_nan_times_new(target_train)
 
     #write_log(f"\nAfter removing all nan time indexes, {len(idxs_not_all_nan)}" +
     #        f" time indexes are considered ({(len(idxs_not_all_nan) / target_train.shape[1] * 100):.1f} "+
@@ -217,14 +228,51 @@ if __name__ == '__main__':
     
     # Derive the train and validation indexes
 
-    train_idxs, val_idxs = derive_train_val_idxs_new(train_year_start, args.train_month_start, args.train_day_start, train_year_end, args.train_month_end,
-                         args.train_day_end, first_year, args.model_name, None, validation_years, args=args, accelerator=accelerator)
-                         
-    #train_idxs, val_idxs = derive_train_val_idxs_CORDEX(
-    #    train_year_start, args.train_month_start, args.train_day_start, train_year_end,
-    #    args.train_month_end, args.train_day_end, first_year, args.model_name, None,
-    #    validation_years, number_valyears, args=args, accelerator=accelerator)
+    # train_idxs, val_idxs = derive_train_val_idxs_new(train_year_start, args.train_month_start, args.train_day_start, train_year_end, args.train_month_end,
+    #                      args.train_day_end, first_year, args.model_name, None, validation_years, args=args, accelerator=accelerator)
     
+    if training_experiment == 'ESD_pseudo_reality':
+        train_idxs, val_idxs = derive_train_val_idxs_new(
+            train_year_start, args.train_month_start, args.train_day_start,
+            train_year_end,   args.train_month_end,   args.train_day_end,
+            first_year, args.model_name, None, validation_years,
+            args=args, accelerator=accelerator
+        )
+
+    elif training_experiment == 'Emulator_hist_future':
+        from utils.tools import date_to_idxs_new
+
+        hist_start, hist_end = date_to_idxs_new(
+            1961, 1, 1, 1980, 11, 30, first_year=1961
+        )
+        val_start, val_end = date_to_idxs_new(
+            1975, 1, 1, 1975, 12, 31, first_year=1961
+        )
+        future_start = 7300
+        future_end   = 14600
+        safe_min     = args.seq_l  # =2
+
+        train_idxs_list = (
+            [i for i in range(max(hist_start, safe_min), val_start)] +
+            [i for i in range(val_end, hist_end)]   +
+            [i for i in range(future_start + safe_min, future_end)]
+        )
+        val_idxs_list = list(range(val_start, val_end))
+
+        train_idxs = torch.tensor(train_idxs_list)
+        val_idxs   = torch.tensor(val_idxs_list)
+
+        write_log(f"\nHist train  : idx {hist_start} to {val_start} and {val_end} to {hist_end}", args, accelerator, 'a')
+        write_log(f"Future train: idx {future_start} to {future_end}", args, accelerator, 'a')
+        write_log(f"Val         : idx {val_start} to {val_end}", args, accelerator, 'a')
+        write_log(f"Train size  : {len(train_idxs)}, Val size: {len(val_idxs)}", args, accelerator, 'a')
+
+        if accelerator is None or accelerator.is_main_process:
+            import pickle
+            with open(args.output_path + "train_idxs.pkl", 'wb') as f:
+                pickle.dump(train_idxs, f)
+            with open(args.output_path + "val_idxs.pkl", 'wb') as f:
+                pickle.dump(val_idxs, f)  
     
     write_log(f"\nTrain from {args.train_day_start}/{args.train_month_start}/{train_year_start} to " +
                 f"{args.train_day_end}/{args.train_month_end}/{train_year_end} with validation years " +
@@ -243,8 +291,10 @@ if __name__ == '__main__':
         
     # Compute the weights for the regressor
     
-    target_bins = derive_qmse_bins(target_train, train_idxs, args, accelerator, threshold=0.1)
-    write_log(f'\nPrecipitation bins = {target_bins}', args, accelerator, 'a')
+
+    if "quantized" in args.loss_fn:
+        target_bins = derive_qmse_bins_new(target_train, train_idxs, args, accelerator, threshold=0.05)
+        write_log(f'\n Shape of precipitation bins= {target_bins.shape} \n Precipitation bins = {target_bins}', args, accelerator, 'a')
 
 
     # Compute the training statistics and standardize the training data
@@ -358,14 +408,14 @@ if __name__ == '__main__':
     else:
         original_model = model
 
-    if hasattr(original_model, 'h_hid'):
-        write_log(f"GRU hidden size: {original_model.h_hid}", args, accelerator, 'a')
-    if hasattr(original_model, 'n_layers'):
-        write_log(f"GRU layers: {original_model.n_layers}", args, accelerator, 'a')
+    # if hasattr(original_model, 'h_hid'):
+    #     write_log(f"GRU hidden size: {original_model.h_hid}", args, accelerator, 'a')
+    # if hasattr(original_model, 'n_layers'):
+    #     write_log(f"GRU layers: {original_model.n_layers}", args, accelerator, 'a')
 
-    write_log(f"Total trainable parameters: {total_params:,}", args, accelerator, 'a')
-    write_log(f"Model size: {total_params * 4 / 1024 / 1024:.2f} MB (fp32)", args, accelerator, 'a')
-    write_log(f"Model size: {total_params * 2 / 1024 / 1024:.2f} MB (fp16)", args, accelerator, 'a')
+    # write_log(f"Total trainable parameters: {total_params:,}", args, accelerator, 'a')
+    # write_log(f"Model size: {total_params * 4 / 1024 / 1024:.2f} MB (fp32)", args, accelerator, 'a')
+    # write_log(f"Model size: {total_params * 2 / 1024 / 1024:.2f} MB (fp16)", args, accelerator, 'a')
 
     # GPU information
     if torch.cuda.is_available():
@@ -373,13 +423,13 @@ if __name__ == '__main__':
         write_log(f"Available GPUs: {torch.cuda.device_count()}", args, accelerator, 'a')
         
         # Log GPU memory information
-    write_log(f"\n=== Model Architecture Summary ===", args, accelerator, 'a')
+    # write_log(f"\n=== Model Architecture Summary ===", args, accelerator, 'a')
 
-    write_log(f"GRU hidden size: {original_model.h_hid}", args, accelerator, 'a')
-    write_log(f"GRU layers: {original_model.n_layers}", args, accelerator, 'a')
-    write_log(f"Total trainable parameters: {total_params:,}", args, accelerator, 'a')
-    write_log(f"Model size: {total_params * 4 / 1024 / 1024:.2f} MB (fp32)", args, accelerator, 'a')
-    write_log(f"Model size: {total_params * 2 / 1024 / 1024:.2f} MB (fp16)", args, accelerator, 'a')
+    # write_log(f"GRU hidden size: {original_model.h_hid}", args, accelerator, 'a')
+    # write_log(f"GRU layers: {original_model.n_layers}", args, accelerator, 'a')
+    # write_log(f"Total trainable parameters: {total_params:,}", args, accelerator, 'a')
+    # write_log(f"Model size: {total_params * 4 / 1024 / 1024:.2f} MB (fp32)", args, accelerator, 'a')
+    # write_log(f"Model size: {total_params * 2 / 1024 / 1024:.2f} MB (fp16)", args, accelerator, 'a')
 
     # Log GPU information
     if torch.cuda.is_available():

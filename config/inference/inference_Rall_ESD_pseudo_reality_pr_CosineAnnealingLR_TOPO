@@ -1,0 +1,94 @@
+#!/bin/bash
+
+#------------------#
+# SLURM PARAMETERS #
+#------------------#
+TIME="01:30:00" # format HH:MM:SS
+MEM="200G"
+JOB_NAME="infer_pr_batch"
+N_GPU=4
+
+#------------------#
+# MODEL PARAMETERS #
+#------------------#
+SEED=42
+MODEL_NAME="P_GNN4CD_model"
+MODEL_TYPE="Rall"
+SEQ_L=2
+BATCH_SIZE=32
+EPOCH=77   # 使用的checkpoint epoch
+
+#--------------------------------------------#
+# PATHS
+#--------------------------------------------#
+MAIN_PATH="$HOME/benchmarks/GNN4CD-CORDEXML-Benchmark-new/"
+SOURCE_PATH="/leonardo/home/userexternal/$USER/Conda_init.txt"
+ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv"
+ACCELERATE_CONFIG_PATH="/leonardo/home/userexternal/$USER/.cache/huggingface/accelerate/default_config.yaml"
+
+#-------------------------------#
+# DOMAIN & EXPERIMENT
+#-------------------------------#
+DOMAIN="SA"
+EXPERIMENT="ESD_pseudo_reality"
+
+#-------------------------------#
+# 训练模型路径（含统计量pkl）
+#-------------------------------#
+TRAIN_PATH="/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-BENCHMARK/train/${DOMAIN}_domain/${EXPERIMENT}/0215try_pr_CosineAnnealingLR_1975_quantized_loss_LR0008_SEQ2_128_terrain_bin1000/"
+CHECKPOINT_REG="checkpoint_${EPOCH}"
+
+#-------------------------------#
+# 推理输入：预处理好的图文件根目录
+# 结构: ${BASE_GRAPH_PATH}/{period}/{mode}/{GCM}_low_graph.pkl
+#-------------------------------#
+BASE_GRAPH_PATH="/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-GRAPHS/${DOMAIN}_domain/${EXPERIMENT}/test/"
+
+#-------------------------------#
+# 推理输出根目录
+# 结构: ${BASE_OUTPUT_PATH}/{period}/{mode}/{GCM}_pr_predictions.pkl
+#-------------------------------#
+BASE_OUTPUT_PATH="/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-BENCHMARK/test/"
+
+#-------------------------------#
+# 日志
+#-------------------------------#
+LOG_PATH="${BASE_OUTPUT_PATH}/logs/"
+LOG_FILE="inference_pr_batch_log.txt"
+
+#-------------------------------#
+# 推理范围（可以根据需要注释掉不需要的）
+#-------------------------------#
+# 时间段
+PERIODS="historical mid_century end_century"
+
+# GCM
+GCMS="ACCESS-CM2 NorESM2-MM"
+
+# 模式
+MODES="perfect imperfect"
+
+# 降水阈值
+PR_THRESHOLD=0.1
+
+DATASET_NAME="Dataset_Graph"
+
+#--------------do not change here below------------------
+
+if [ ${USE_ACCELERATE:-true} = true ] ; then
+    USE_ACCELERATE_FLAG="--use_accelerate"
+else
+    USE_ACCELERATE_FLAG="--no-use_accelerate"
+fi
+
+mkdir -p ${LOG_PATH}
+
+# 构建PERIODS/GCMS/MODES的命令行参数
+PERIODS_ARGS=""
+for p in ${PERIODS}; do PERIODS_ARGS="${PERIODS_ARGS} ${p}"; done
+
+GCMS_ARGS=""
+for g in ${GCMS}; do GCMS_ARGS="${GCMS_ARGS} ${g}"; done
+
+MODES_ARGS=""
+for m in ${MODES}; do MODES_ARGS="${MODES_ARGS} ${m}"; done

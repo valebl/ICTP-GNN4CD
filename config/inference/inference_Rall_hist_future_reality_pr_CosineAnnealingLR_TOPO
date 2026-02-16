@@ -1,0 +1,75 @@
+#!/bin/bash
+
+#------------------#
+# SLURM PARAMETERS #
+#------------------#
+TIME="01:30:00" # format HH:MM:SS
+MEM="200G"
+JOB_NAME="infer_pr_batch"
+N_GPU=4
+
+#------------------#
+# MODEL PARAMETERS #
+#------------------#
+SEED=42
+MODEL_NAME="P_GNN4CD_model"
+MODEL_TYPE="Rall"
+SEQ_L=2
+BATCH_SIZE=32
+EPOCH=56   
+
+#--------------------------------------------#
+# PATHS
+#--------------------------------------------#
+MAIN_PATH="$HOME/benchmarks/GNN4CD-CORDEXML-Benchmark-new/"
+SOURCE_PATH="/leonardo/home/userexternal/$USER/Conda_init.txt"
+ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv"
+ACCELERATE_CONFIG_PATH="/leonardo/home/userexternal/$USER/.cache/huggingface/accelerate/default_config.yaml"
+
+#-------------------------------#
+# DOMAIN & EXPERIMENT
+#-------------------------------#
+DOMAIN="SA"
+#EXPERIMENT="ESD_pseudo_reality"
+EXPERIMENT="Emulator_hist_future"
+
+TRAIN_PATH="/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-BENCHMARK/train/${DOMAIN}_domain/${EXPERIMENT}/0216try_pr_hist_future_CosineAnnealingLR_1975_quantized_loss_LR0008_SEQ2_128_terrain_bin1000/"
+CHECKPOINT_REG="checkpoint_${EPOCH}"
+
+BASE_GRAPH_PATH="/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-GRAPHS/${DOMAIN}_domain/test/"
+
+BASE_OUTPUT_PATH="/leonardo_work/ICT25_ESP_0/wtang/CORDEXML-BENCHMARK/test/${EXPERIMENT}/"
+
+
+LOG_PATH="${BASE_OUTPUT_PATH}/logs/"
+LOG_FILE="inference_pr_batch_log.txt"
+
+PERIODS="historical mid_century end_century"
+
+GCMS="ACCESS-CM2 NorESM2-MM"
+
+MODES="perfect imperfect"
+
+PR_THRESHOLD=0.1
+
+DATASET_NAME="Dataset_Graph"
+
+#--------------do not change here below------------------
+
+if [ ${USE_ACCELERATE:-true} = true ] ; then
+    USE_ACCELERATE_FLAG="--use_accelerate"
+else
+    USE_ACCELERATE_FLAG="--no-use_accelerate"
+fi
+
+mkdir -p ${LOG_PATH}
+
+
+PERIODS_ARGS=""
+for p in ${PERIODS}; do PERIODS_ARGS="${PERIODS_ARGS} ${p}"; done
+
+GCMS_ARGS=""
+for g in ${GCMS}; do GCMS_ARGS="${GCMS_ARGS} ${g}"; done
+
+MODES_ARGS=""
+for m in ${MODES}; do MODES_ARGS="${MODES_ARGS} ${m}"; done

@@ -9,6 +9,21 @@ from utils.tools import write_log
 #---------------------- TRAIN ------------------------
 #-----------------------------------------------------
 
+def spatial_gradient_loss(y_pred, y_true, edge_index, weight=0.1):
+    """
+    空间梯度损失：惩罚预测值过于平滑
+    
+    edge_index: 高分辨率节点的边连接
+    """
+    # 计算预测值的邻近节点差异
+    src, dst = edge_index
+    pred_diff = torch.abs(y_pred[src] - y_pred[dst])
+    true_diff = torch.abs(y_true[src] - y_true[dst])
+    
+    # L1损失
+    gradient_loss = torch.mean(torch.abs(pred_diff - true_diff))
+    
+    return weight * gradient_loss
 
 class Trainer(object):
 
@@ -59,9 +74,14 @@ class Trainer(object):
                 y_pred, y = y_pred[train_mask], y[train_mask]
 
                 loss = loss_fn(y_pred, y, alpha, gamma, reduction='mean')
-                
+                #修改层数和深度剪裁
                 accelerator.backward(loss)
+                # ===== 添加梯度裁剪 =====
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
                 optimizer.step()
+                #修改结束
+                
                 step += 1
                               
                 acc = accuracy_binary_one(y_pred, y)
@@ -298,7 +318,7 @@ class Trainer(object):
 
     def train_R_Rall(self, model, dataloader_train, dataloader_val, optimizer, loss_fn, 
                     lr_scheduler, accelerator, args, epoch_start=0, log_freq=5):
-        
+    
         write_log(f"\nStart training the regressor.", args, accelerator, 'a')
 
         step = 0
@@ -329,14 +349,28 @@ class Trainer(object):
                 y_pred, y = y_pred[train_mask], y[train_mask]
 
                 loss_mse = MSELoss(y_pred, y)
-                
+
+                # =====尝试 添加空间梯度损失 =====
+                edge_index = graph.edge_index_dict[('high','within','high')]
+                loss_gradient = spatial_gradient_loss(
+                    y_pred, y, edge_index, weight=0.1
+                )
                 if "quantized_loss" in args.loss_fn:
                     w = graph['high'].w
                     w = w[train_mask]
                     loss_qmse = loss_fn(y_pred, y, w)
-                    loss = loss_mse + args.alpha * loss_qmse
+                    loss = loss_mse + args.alpha * loss_qmse + loss_gradient
                 else:
-                    loss = loss_mse
+                    loss = loss_mse + loss_gradient
+
+                #原代码，没加空间梯度损失   
+                # if "quantized_loss" in args.loss_fn:
+                #     w = graph['high'].w
+                #     w = w[train_mask]
+                #     loss_qmse = loss_fn(y_pred, y, w)
+                #     loss = loss_mse + args.alpha * loss_qmse
+                # else:
+                #     loss = loss_mse
                     
                 accelerator.backward(loss)
                 optimizer.step()
@@ -358,6 +392,7 @@ class Trainer(object):
                                     'train mse loss avg': loss_term1_meter.avg}, step=step)
             
             end = time.time()
+ 
             
             # ===== 修改：获取当前学习率的方法 =====
             # 兼容不同的学习率调度器
@@ -385,7 +420,14 @@ class Trainer(object):
             write_log(f"\nEpoch {epoch+1} completed in {end - start:.4f} seconds." +
                     f"Loss - total: {loss_meter.sum:.4f} - average: {loss_meter.avg:.10f}. ", 
                     args, accelerator, 'a')
-                    
+            
+            # 监控地形权重
+            # original_model = model.module if hasattr(model, 'module') else model
+            # if hasattr(original_model, 'terrain_weight'):
+            #     terrain_w = original_model.terrain_weight.item()
+            #     write_log(f"\nLearned terrain_weight: {terrain_w:.4f}", args, accelerator, 'a')      
+            #------------    
+                      
             accelerator.save_state(output_dir=args.output_path+f"checkpoint_{epoch}/", 
                                 safe_serialization=False)
             torch.save({"epoch": epoch}, args.output_path+f"checkpoint_{epoch}/epoch")
@@ -491,6 +533,36 @@ class Tester(object):
         times = torch.stack(times)
 
         return pr, times
+
+##加入空包检查,1980时发现，依旧有问题
+    # def test(self, model, dataloader, args, accelerator=None):
+    #     model.eval()
+    #     step = 0
+    #     pr    = []
+    #     times = []
+
+    #     with torch.no_grad():    
+    #         for graph in dataloader:
+    #             t = graph.t
+
+    #             # accelerate多GPU会在末尾补假样本，t<0说明是假样本
+    #             if (t < 0).any():
+    #                 step += 1
+    #                 continue
+
+    #             times.append(t)
+    #             y_pred = model(graph)
+    #             pr.append(y_pred)
+
+    #             if step % 100 == 0:
+    #                 if accelerator is None or accelerator.is_main_process:
+    #                     with open(args.output_path + args.log_file, 'a') as f:
+    #                         f.write(f"\nStep {step} done for time {t}.")
+    #             step += 1
+
+    #     pr    = torch.stack(pr)
+    #     times = torch.stack(times)
+    #     return pr, times
 
     def test_RC(self, model_R, model_C, dataloader, args, accelerator=None):
         model_R.eval()
