@@ -1,3 +1,4 @@
+import os
 import torch
 import numpy as np
 import pickle
@@ -12,6 +13,7 @@ import matplotlib
 import json
 from utils.helpers.tools import convert_dict
 from torch_geometric.data import HeteroData
+from utils.helpers.tools import invert_normalization
 
 
 #-----------------------------------------------------
@@ -36,7 +38,7 @@ class MSE_QMSE_PSD_Trainer(object):
             accelerator,
             args,
             epoch_start=0,
-            log_val_plots=True):
+            log_val_plots=False):
         
         write_log(f"\nStart training the regressor.", args, accelerator, 'a')
 
@@ -74,6 +76,7 @@ class MSE_QMSE_PSD_Trainer(object):
 
                 optimizer.zero_grad()
                 accelerator.backward(loss)
+                accelerator.clip_grad_norm_(model.parameters(), 5)
                 optimizer.step()
                 step += 1
                 
@@ -100,7 +103,7 @@ class MSE_QMSE_PSD_Trainer(object):
                 'train mse loss avg': loss_term1_meter.avg,
                 'train quantized loss avg': loss_term2_meter.avg,
                 'train psd loss avg': loss_term3_meter.avg,
-                'lr': np.mean(lr_scheduler.get_last_lr())
+                'lr': optimizer.param_groups[0]['lr']
             }, step=step)
 
             write_log(f"\nEpoch {epoch} completed in {end - start:.4f} seconds." +
@@ -113,31 +116,31 @@ class MSE_QMSE_PSD_Trainer(object):
             if dataloader_val is not None:
                 model.eval()
 
-                # if epoch%5==0:
-                if log_val_plots:
+                do_plots = log_val_plots and (epoch % 25 == 0 or epoch == epoch_start + args.epochs - 1)
+
+                if do_plots:
                     y_pred_list = []
                     y_list = []
                     idxs_list = []
 
-                with torch.no_grad():    
+                with torch.no_grad():
                     for graph in dataloader_val:
-                        
+
                         y_pred = model(graph)
 
                         w = graph['high'].w
                         train_mask = graph['high'].train_mask
                         y = graph['high'].y
-                        
+
                         y_pred = y_pred.squeeze()
                         y = y.squeeze()
-                
+
                         # retrieve graphs for individual time instances
-                        n_nodes = graph["high"].num_nodes
-                        B = y.shape[0] // n_nodes
-                        y = y.view(B, n_nodes)
-                        y_pred = y_pred.view(B, n_nodes)
-                        train_mask = train_mask.view(B, n_nodes)
-                        w = w.view(B, n_nodes)
+                        n_nodes_per_graph = y_pred.shape[0] // graph.num_graphs
+                        y = y.view(graph.num_graphs, n_nodes_per_graph)
+                        y_pred = y_pred.view(graph.num_graphs, n_nodes_per_graph)
+                        train_mask = train_mask.view(graph.num_graphs, n_nodes_per_graph)
+                        w = w.view(graph.num_graphs, n_nodes_per_graph)
 
                         loss, loss_mse, loss_qmse, loss_psd = loss_fn(
                             y_pred[train_mask].flatten(), y[train_mask].flatten(), w[train_mask].flatten())
@@ -153,21 +156,18 @@ class MSE_QMSE_PSD_Trainer(object):
                             'val loss iteration': val_loss_meter.val,
                             'val loss avg': val_loss_meter.avg
                         }, step=step)
-                        
-                        # if epoch%5==0:
-                        if log_val_plots:
+
+                        if do_plots:
                             y_pred = torch.atleast_2d(y_pred) # from (N,) to (1,N)
                             y = torch.atleast_2d(y)
                             idxs = torch.atleast_2d(torch.tensor(graph.idxs, device=accelerator.device))
                             y_pred_list.append(y_pred) # time, nodes
                             y_list.append(y)
-                            idxs_list.append(idxs)                    
+                            idxs_list.append(idxs)
 
                     ###### PLOTS ######
-
-                    # if epoch%5==0:
-                    if log_val_plots:
-                        y_pred_all = accelerator.gather(torch.stack(y_pred_list)).swapaxes(0,1)[:,:val_size] # (nodes, time) (449152, 48, 32)
+                    if do_plots:
+                        y_pred_all = accelerator.gather(torch.stack(y_pred_list)).swapaxes(0,1)[:,:val_size]
                         y_all = accelerator.gather(torch.stack(y_list)).swapaxes(0,1)[:,:val_size]
                         idxs_all = accelerator.gather(torch.stack(idxs_list)).squeeze()[:val_size]
 
@@ -183,17 +183,30 @@ class MSE_QMSE_PSD_Trainer(object):
                 }, step=step)
                     
             if lr_scheduler is not None:
-                lr_scheduler.step()       
+                if isinstance(lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                    if args.validation_year is not None:
+                        lr_scheduler.step(val_loss_meter.avg)
+                else:
+                    lr_scheduler.step()
 
     def _create_plots_reg(self, y_pred, y, t, times, graph, accelerator, step, epoch, args):
-        with open(f"/leonardo_work/ICT26_ESP/vblasone/ICTP-GNN4CD/utils/{args.run_type}_plot_params.json") as f:
+        utils_dir = os.path.join(os.path.dirname(__file__), '..')
+        json_path = os.path.join(utils_dir, f"{args.run_type}_plot_params.json")
+        with open(json_path) as f:
             meta = json.load(f)
 
         meta = convert_dict(meta)
         target_type = args.target_type
-        
+
         lon = graph['high'].lon.cpu().numpy()
         lat = graph['high'].lat.cpu().numpy()
+        # Reconstruct 2D coordinates if graph stores 1D unique axes
+        # y_pred shape: (n_gpus, T, n_nodes) → n_nodes is the last dim
+        n_nodes_total = y_pred.shape[-1]
+        if len(lat) != n_nodes_total and len(lat) * len(lon) == n_nodes_total:
+            lon_2d, lat_2d = np.meshgrid(lon, lat)
+            lat = lat_2d.flatten()
+            lon = lon_2d.flatten()
 
         # convert to cpu and numpy
         _, indices = torch.sort(t)
@@ -213,16 +226,13 @@ class MSE_QMSE_PSD_Trainer(object):
                 y_plot *= 24 # mm/day
                 bins = np.arange(0,40,0.5).astype(np.float32)
             elif "CORDEXML" in args.run_type:
-                bins = np.arange(0,350,1).astype(np.float32)
+                bins = np.arange(0,1000,1).astype(np.float32)
         elif target_type == "temperature":
-            min_val_temp = 230
-            max_val_temp= 320
-
-            y_pred_plot = y_pred_plot * (max_val_temp - min_val_temp) + min_val_temp
-            y_plot = y_plot * (max_val_temp - min_val_temp) + min_val_temp
+            y_pred_plot = invert_normalization(y_pred_plot, stats_path=args.output_path)
+            y_plot = invert_normalization(y_plot, stats_path=args.output_path)
             y_pred_pdf = y_pred_plot.flatten()
             y_pdf = y_plot.flatten()
-            bins = np.arange(min_val_temp,max_val_temp,1).astype(np.float32)
+            bins = np.arange(int(np.nanmin(y_plot)), int(np.nanmax(y_plot)) + 2, 1).astype(np.float32)
 
         cmap_dict = get_cmap_dict()
         bounds_avg = [0, 1, 1.5, 2, 4, 6, 8, 10, 12] #, 15, 20] #, 25, 30, 35]

@@ -1,4 +1,6 @@
 import torch
+import torch._dynamo
+torch._dynamo.config.suppress_errors = True  # fallback to eager if dynamo fails (e.g. RNN flatten_parameters)
 import numpy as np
 import pickle
 from dataset import Dataset_Graph, custom_collate_fn_graph
@@ -43,6 +45,7 @@ parser.add_argument('--metadata_file', type=str, help='metadata file')
 parser.add_argument('--epochs', type=int, default=15, help='number of total training epochs')
 parser.add_argument('--batch_size', type=int, default=64, help='batch size (global)')
 parser.add_argument('--step_size', type=int, default=10, help='scheduler step size (global)')
+parser.add_argument('--gamma', type=float, default=0.5, help='StepLR decay factor')
 parser.add_argument('--lr', type=float, default=0.0001, help='initial learning rate')
 parser.add_argument('--weight_decay', type=float, default=0.0, help='weight decay (wd)')
 parser.add_argument('--fine_tuning',  action='store_true')
@@ -60,6 +63,7 @@ parser.add_argument('--no-make_val_plots', dest='make_val_plots', action='store_
 parser.add_argument('--loss_fn', type=str)
 parser.add_argument('--alpha', type=float, default=None)
 parser.add_argument('--beta', type=float, default=None)
+parser.add_argument('--balance', type=str, default=None)
 parser.add_argument('--seed', type=int)
 parser.add_argument('--n_gpu', type=int, default=4)
 
@@ -70,6 +74,8 @@ parser.add_argument('--collate_name', type=str)
 
 parser.add_argument('--stats_mode', type=str, default="var")
 parser.add_argument('--target_type', type=str)
+parser.add_argument('--norm_mode', type=str, default="minmax",
+                    help='temperature normalization mode: minmax, z_score, z_score_gp')
 parser.add_argument('--run_type', type=str)
 
 #-- start and end training dates
@@ -84,16 +90,28 @@ parser.add_argument('--validation_year', type=int, default=None)
 parser.add_argument('--first_year', type=int, default=None)
 parser.add_argument('--last_year', type=int, default=None)
 parser.add_argument('--n_val_years', type=int, default=None)
+parser.add_argument('--train_years', type=str, default="",
+                    help='space-separated explicit list of training years '
+                         '(e.g. "1961 1962 ... 1980 2080 ... 2099"). '
+                         'When set, first_year/last_year/n_val_years are ignored. '
+                         'Use with --val_years (or --validation_year) to specify val years.')
+parser.add_argument('--val_years', type=str, default="",
+                    help='space-separated explicit list of validation years '
+                         '(e.g. "2098 2099"). Used together with --train_years.')
+
+#-- QMSE bin parameters
+parser.add_argument('--threshold', type=float, default=0.0, help='precipitation threshold for wet/dry')
+parser.add_argument('--binmin',    type=float, default=0.0,  help='lower bin edge (raw value, before scale transform)')
+parser.add_argument('--binmax',    type=float, default=1000, help='upper bin edge (raw value, before scale transform)')
+parser.add_argument('--binwidth',  type=float, default=0.5,  help='bin width (raw value, before scale transform)')
+parser.add_argument('--binscale',  type=str,   default='log', help='"log" applies np.log1p to bin edges, "linear" uses values as-is')
 
 # parser.add_argument('--validation_year', type=lambda x : None if x == 'None' else int(x), default=None)
 
 import argparse
 
 ### PARAMETERS THAT ARE NOW SET MANUALLY
-THRESHOLD = 0.0
-BINMIN = np.log1p(THRESHOLD)
-BINMAX = np.log1p(350)
-BINWIDTH = np.log1p(0.5) # 0.5*24 mm/day
+# (THRESHOLD / BINMIN / BINMAX / BINWIDTH are now derived from args inside __main__)
 
 HISTORY_LENGTH_MAP = {
     "1h": 24,   # [t-24,...,t]
@@ -108,6 +126,17 @@ HIGH_INDEPENDENT_VARS=True
 if __name__ == '__main__':
 
     args = parser.parse_args()
+
+    # Derive QMSE bin edges from config args
+    THRESHOLD = args.threshold
+    if args.binscale == "log":
+        BINMIN = np.log1p(args.binmin)
+        BINMAX = np.log1p(args.binmax)
+        BINWIDTH = np.log1p(args.binwidth)
+    else:
+        BINMIN = args.binmin
+        BINMAX = args.binmax
+        BINWIDTH = args.binwidth
 
     # Set all seeds
     set_seed_everything(seed=args.seed)
@@ -204,7 +233,7 @@ if __name__ == '__main__':
 #-----------------------------------------------------
 
     if args.loss_fn == "MSE_QMSE_PSD_Loss":
-        loss_fn = MSE_QMSE_PSD_Loss(alpha=args.alpha, beta=args.beta)
+        loss_fn = MSE_QMSE_PSD_Loss(alpha=args.alpha, beta=args.beta, balance=args.balance)
     elif args.loss_fn == "GaussianNLLLoss":
         loss_fn = GaussianNLLLoss()
     else:
@@ -214,29 +243,28 @@ if __name__ == '__main__':
 #--------------------  PREPROCESSING --------------------
 #--------------------------------------------------------
 
-    #-- Step 1 - Prepare target
-    target_prepared = prepare_target_for_train(target, args.target_type)
-
-    #-- Step 2 - Find valid time indices
-    idxs_not_all_nan = find_not_all_nan_times(target_prepared)
+    #-- Step 1 - Find valid time indices
+    idxs_not_all_nan = find_not_all_nan_times(target)
 
     write_log(f"\nAfter removing all nan time indexes, {len(idxs_not_all_nan)}" +
-        f" time indexes are considered ({(len(idxs_not_all_nan) / target_prepared.shape[1] * 100):.1f} % of initial ones).",
+        f" time indexes are considered ({(len(idxs_not_all_nan) / target.shape[1] * 100):.1f} % of initial ones).",
         args, accelerator, 'a')
 
-    #-- Step 3 - Compute train/val indices
-    if args.first_year == 0 or args.last_year == 0:
-        train_idxs, train_idxs_valid_subset, val_idxs, val_idxs_valid_subset = derive_train_val_idxs(
-            args.train_year_start, args.train_month_start, args.train_day_start,
-            args.train_year_end, args.train_month_end, args.train_day_end,
+    #-- Step 2 - Compute train/val indices
+    # Case 1: the user provides lists of train years and val years
+    write_log(f"\nargs.train_years: {args.train_years.split(' ')}\nargs.val_years: {args.val_years.split(' ')}", args, accelerator, 'a')
+    if args.train_years != "" and args.val_years != "":
+        train_years = [int(y) for y in args.train_years.split(' ')]
+        val_years = [int(y) for y in args.val_years.split(' ')]
+        train_idxs, train_idxs_valid_subset, val_idxs, val_idxs_valid_subset = derive_train_val_idxs_years_list(
+            train_years,
+            val_years,
             history_length=history_length,
             time_index=time_index,
-            idxs_not_all_nan=idxs_not_all_nan,
-            validation_year=args.validation_year,
             args=args,
             accelerator=accelerator
         )
-    else:
+    elif args.first_year is not None and args.first_year != 0 and args.last_year is not None:
         # Build the full range
         all_years = list(range(args.first_year, args.last_year + 1))
         # Randomly sample validation years
@@ -251,6 +279,17 @@ if __name__ == '__main__':
             args=args,
             accelerator=accelerator
         )
+    else:
+        train_idxs, train_idxs_valid_subset, val_idxs, val_idxs_valid_subset = derive_train_val_idxs(
+            args.train_year_start, args.train_month_start, args.train_day_start,
+            args.train_year_end, args.train_month_end, args.train_day_end,
+            history_length=history_length,
+            time_index=time_index,
+            idxs_not_all_nan=idxs_not_all_nan,
+            validation_year=args.validation_year,
+            args=args,
+            accelerator=accelerator
+        )
 
     np.save(args.output_path + "train_idxs.npy", train_idxs)
     np.save(args.output_path + "train_idxs_valid_subset.npy", train_idxs_valid_subset)
@@ -258,6 +297,14 @@ if __name__ == '__main__':
         np.save(args.output_path + "val_idxs.npy", val_idxs)
         np.save(args.output_path + "val_idxs_valid_subset.npy", val_idxs_valid_subset)
 
+    #-- Step 3 - Prepare target
+    target_prepared = prepare_target_for_train(
+        target=target,
+        target_type=args.target_type,
+        train_idxs=train_idxs[train_idxs_valid_subset],
+        stats_path=args.output_path,
+        mode=args.norm_mode
+    )
 
     #-- Step 4 - Compute QMSE bins
     if "QMSE" in args.loss_fn:
@@ -278,7 +325,6 @@ if __name__ == '__main__':
             x_high=orog,
             train_idxs=train_idxs,
             n_vars=n_vars,
-            n_levels=n_levels,
             apply_stats=True,
             high_independent_vars=HIGH_INDEPENDENT_VARS,
             args=args,
@@ -352,7 +398,7 @@ if __name__ == '__main__':
         history_length,
     )
 
-    if args.validation_year is not None or args.val_years is not None:
+    if args.validation_year is not None or args.val_years != "":
         dataset_graph_val_tmp = Dataset_Graph(
             low_high_graph,
             low_input_val,
@@ -404,7 +450,7 @@ if __name__ == '__main__':
     # optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     
     if args.lr_scheduler == "StepLR":
-        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=0.5)
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
     elif args.lr_scheduler == "ReduceLROnPlateau":
         lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
     elif args.lr_scheduler == "CosineAnnealingLR":
@@ -480,7 +526,8 @@ if __name__ == '__main__':
         time_index[val_idxs][val_idxs_valid_subset],
         accelerator,
         args,
-        epoch_start=epoch_start)
+        epoch_start=epoch_start,
+        log_val_plots=args.make_val_plots)
 
     end = time.time()
 

@@ -20,7 +20,7 @@ class MSE_QMSE_PSD_Loss(nn.Module):
         self.qmse_loss_fn = QMSELoss(balance)
         self.psd_loss_fn = PSDLoss(apply_expm1=True, *psd_args, **psd_kwargs)
 
-    def __call__(self, pred, target, bins):
+    def forward(self, pred, target, bins):
         loss_mse = self.mse_loss_fn(pred, target)
         loss_qmse = self.qmse_loss_fn(pred, target, bins)
         loss_psd = self.psd_loss_fn(pred, target)

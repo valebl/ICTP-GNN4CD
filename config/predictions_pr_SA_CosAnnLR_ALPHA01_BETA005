@@ -1,0 +1,79 @@
+#!/bin/bash
+
+TRAIN_FOLDER="0416_pr_SA_CosineAnnealingLR_ALPHA01_BETA005_LR0008_bin25"
+EPOCH="199"
+MODEL_TYPE="Rall"
+OUTPUT_FILE="G_SA_1980.pkl"
+MODEL_NAME="GNN4CD_model_mod1"
+GRAPH_FILE="low_high_graph.pkl"
+SEED="100"
+TARGET_TYPE="precipitation"
+VAR="pr"
+RUN_TYPE="CORDEXML"
+TEST_YEARS=""
+EXPERIMENT="ESD_pseudo_reality"
+
+TRAIN_PATH_R="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/ESD_pseudo_reality/${TRAIN_FOLDER}/"
+TRAIN_PATH_C=""
+CHECKPOINT_C=""
+
+#------------------#
+# SLURM PARAMETERS #
+#------------------#
+TIME="00:30:00"
+MEM="100G"
+JOB_NAME="pred-pr-SA-CosAnn-A01B005"
+LOG_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/ESD_pseudo_reality/predictions/mse_20/${TRAIN_FOLDER}_e$((EPOCH+1))/"
+N_GPU="1"
+
+#--------------------------------------------#
+# PATHS (conda env, main, accelerate config) #
+#--------------------------------------------#
+SOURCE_PATH="/leonardo/home/userexternal/$USER/Conda_init.txt"
+ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv"
+MAIN_PATH="$HOME/benchmarks/Experiments_Valentina"
+ACCELERATE_CONFIG_PATH="/leonardo/home/userexternal/$USER/.cache/huggingface/accelerate/default_config.yaml"
+
+#-------------------------------#
+# INPUT/OUTPUT FILES PARAMETERS #
+#-------------------------------#
+INPUT_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain_0403/ESD_pseudo_reality/pr/train/"
+OUTPUT_PATH="${LOG_PATH}"
+LOG_FILE="log.txt"
+LOW_INPUT_FILE="low_input.npy"
+OROG_FILE="orog.npy"
+MASK_SEALAND_FILE="mask_sealand.npy"
+COORDS_IJ_FILE="coords_ij.npy"
+TARGET_FILE="target.npy"
+METADATA_FILE="low_input_metadata.json"
+CHECKPOINT_R="checkpoints/checkpoint_${EPOCH}"
+DATASET_NAME="Dataset_Graph"
+TEST_IDXS_FILE=""
+
+#----------------------------------------#
+TEST_DAY_START=1
+TEST_MONTH_START=1
+TEST_YEAR_START=1980
+TEST_DAY_END=31
+TEST_MONTH_END=12
+TEST_YEAR_END=1980
+
+#-----------------#
+# BOOLEAN OPTIONS #
+#-----------------#
+USE_ACCELERATE=true
+MAKE_PLOTS=false
+
+#--------------do not change here below------------------
+
+if [ ${USE_ACCELERATE} = true ] ; then
+	USE_ACCELERATE="--use_accelerate"
+else
+	USE_ACCELERATE="--no-use_accelerate"
+fi
+
+if [ ${MAKE_PLOTS} = true ] ; then
+	MAKE_PLOTS="--make_plots"
+else
+	MAKE_PLOTS="--no-make_plots"
+fi

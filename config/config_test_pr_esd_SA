@@ -1,0 +1,157 @@
+[CONFIG]
+#!/bin/bash
+# create the slurm scripts to run the test?
+write_slurm=True
+# run the test?
+run_slurm=True
+# create the reports?
+run_report=True
+
+#------------------#
+# SLURM PARAMETERS #
+#------------------#
+# format HH:MM:SS
+TIME=00:30:00 
+MEM=50G 
+JOB_NAME=ESD
+
+#--------------------------#
+# OTHER GENERAL PARAMETERS #
+#--------------------------#
+
+# conda env
+# ENV_PATH=/leonardo/home/userexternal/vblasone/.conda/envs/GNN4CDenv
+ENV_PATH=/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv
+#### update SOURCE_PATH with your path
+SOURCE_PATH=/leonardo/home/userexternal/$USER/Conda_init.txt
+#### update MAIN_PATH with your path
+MAIN_PATH=$HOME/benchmarks/Experiments_Valentina/
+ #### update ACCELERATE_CONFIG_PATH with your path
+ACCELERATE_CONFIG_PATH=/leonardo/home/userexternal/$USER/.cache/huggingface/accelerate/default_config.yaml
+USE_ACCELERATE=--use_accelerate
+
+#---------------------------#
+# INPUT DATA TO PERSONALIZE #
+#---------------------------#
+
+LOW_GRAPH_FILE=low_high_graph.pkl
+OROG_FILE=orog.npy
+MASK_SEALAND_FILE=mask_sealand.npy
+COORDS_IJ_FILE=coords_ij.npy
+METADATA_FILE=low_input_metadata.json
+EPOCH=199
+
+MODEL_NAME=GNN4CD_model_mod1
+MODEL_TYPE=Rall
+DATASET_NAME=Dataset_Graph
+RUN_TYPE=CORDEXML
+TARGET_TYPE=precipitation
+STATS_MODE=var
+VAR=pr
+
+
+EXPERIMENT=ESD_pseudo_reality
+DOMAIN=SA
+NUM_TESTS=12
+
+#### update TRAINING_PATH with the path to your best run
+TRAINING_PATH=/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/ESD_pseudo_reality/0416_pr_SA_CosineAnnealingLR_ALPHA01_BETA005_LR0008_bin25/
+#### update INPUT_PATH with the path to the folder where you saved the preprocess files for training
+INPUT_PATH=/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain_0403/ESD_pseudo_reality/pr/train/
+PLOT_PATH=/leonardo_work/ICT26_ESP/SHARED/CORDEX-predictions/SA_domain/ESD_pseudo_reality/Test_reports/
+
+PREDICTORS_FILE_1=ACCESS-CM2_1981-2000.nc 
+INPUT_PATH_1=/leonardo_work/ICT26_ESP/sdigioia/CORDEX-ML/CORDEX-domains/SA_domain/test/historical/predictors/perfect/
+OUTPUT_PATH_1=/leonardo_work/ICT26_ESP/SHARED/CORDEX-predictions/SA_domain/ESD_pseudo_reality/historical/perfect/
+OUTPUT_1=ACCESS_CM2_pr_pred.pkl
+PERIOD_1=historical
+VAL_MODE_1=val_1
+TEST_ID_1=test-1_val-1_ESD_ACCESS-CM2_hist_perfect
+
+PREDICTORS_FILE_2=NorESM2-MM_1981-2000.nc 
+INPUT_PATH_2=/leonardo_work/ICT26_ESP/sdigioia/CORDEX-ML/CORDEX-domains/SA_domain/test/historical/predictors/perfect/
+OUTPUT_PATH_2=/leonardo_work/ICT26_ESP/SHARED/CORDEX-predictions/SA_domain/ESD_pseudo_reality/historical/perfect/
+OUTPUT_2=NorESM2_MM_pr_pred.pkl
+PERIOD_2=historical
+VAL_MODE_2=era5
+TEST_ID_2=test-2_era5_ESD_NorESM2-MM_hist_perfect
+
+PREDICTORS_FILE_3=ACCESS-CM2_1981-2000.nc 
+INPUT_PATH_3=/leonardo_work/ICT26_ESP/sdigioia/CORDEX-ML/CORDEX-domains/SA_domain/test/historical/predictors/imperfect/
+OUTPUT_PATH_3=/leonardo_work/ICT26_ESP/SHARED/CORDEX-predictions/SA_domain/ESD_pseudo_reality/historical/imperfect/
+OUTPUT_3=ACCESS_CM2_pr_pred.pkl
+PERIOD_3=historical
+VAL_MODE_3=val_1
+TEST_ID_3=test-3_val-1_ESD_ACCESS-CM2_hist_imperfect
+
+PREDICTORS_FILE_4=NorESM2-MM_1981-2000.nc 
+INPUT_PATH_4=/leonardo_work/ICT26_ESP/sdigioia/CORDEX-ML/CORDEX-domains/SA_domain/test/historical/predictors/imperfect/
+OUTPUT_PATH_4=/leonardo_work/ICT26_ESP/SHARED/CORDEX-predictions/SA_domain/ESD_pseudo_reality/historical/imperfect/
+OUTPUT_4=NorESM2_MM_pr_pred.pkl
+PERIOD_4=historical
+VAL_MODE_4=era5
+TEST_ID_4=test-4_era5_ESD_NorESM2-MM_hist_imperfect
+
+PREDICTORS_FILE_5=ACCESS-CM2_2041-2060.nc 
+INPUT_PATH_5=/leonardo_work/ICT26_ESP/sdigioia/CORDEX-ML/CORDEX-domains/SA_domain/test/mid_century/predictors/perfect/
+OUTPUT_PATH_5=/leonardo_work/ICT26_ESP/SHARED/CORDEX-predictions/SA_domain/ESD_pseudo_reality/mid_century/perfect/
+OUTPUT_5=ACCESS_CM2_pr_pred.pkl
+PERIOD_5=mid_century
+VAL_MODE_5=val_2
+TEST_ID_5=test-5_val-2_ESD_ACCESS-CM2_mid_perfect
+
+PREDICTORS_FILE_6=NorESM2-MM_2041-2060.nc 
+INPUT_PATH_6=/leonardo_work/ICT26_ESP/sdigioia/CORDEX-ML/CORDEX-domains/SA_domain/test/mid_century/predictors/perfect/
+OUTPUT_PATH_6=/leonardo_work/ICT26_ESP/SHARED/CORDEX-predictions/SA_domain/ESD_pseudo_reality/mid_century/perfect/
+OUTPUT_6=NorESM2_MM_pr_pred.pkl
+PERIOD_6=mid_century
+VAL_MODE_6=""
+TEST_ID_6=""
+
+PREDICTORS_FILE_7=ACCESS-CM2_2041-2060.nc 
+INPUT_PATH_7=/leonardo_work/ICT26_ESP/sdigioia/CORDEX-ML/CORDEX-domains/SA_domain/test/mid_century/predictors/imperfect/
+OUTPUT_PATH_7=/leonardo_work/ICT26_ESP/SHARED/CORDEX-predictions/SA_domain/ESD_pseudo_reality/mid_century/imperfect/
+OUTPUT_7=ACCESS_CM2_pr_pred.pkl
+PERIOD_7=mid_century
+VAL_MODE_7=val_2
+TEST_ID_7=test-7_val-2_ESD_ACCESS-CM2_mid_imperfect
+
+PREDICTORS_FILE_8=NorESM2-MM_2041-2060.nc 
+INPUT_PATH_8=/leonardo_work/ICT26_ESP/sdigioia/CORDEX-ML/CORDEX-domains/SA_domain/test/mid_century/predictors/imperfect/
+OUTPUT_PATH_8=/leonardo_work/ICT26_ESP/SHARED/CORDEX-predictions/SA_domain/ESD_pseudo_reality/mid_century/imperfect/
+OUTPUT_8=NorESM2_MM_pr_pred.pkl
+PERIOD_8=mid_century
+VAL_MODE_8=""
+TEST_ID_8=""
+
+PREDICTORS_FILE_9=ACCESS-CM2_2080-2099.nc 
+INPUT_PATH_9=/leonardo_work/ICT26_ESP/sdigioia/CORDEX-ML/CORDEX-domains/SA_domain/test/end_century/predictors/perfect/
+OUTPUT_PATH_9=/leonardo_work/ICT26_ESP/SHARED/CORDEX-predictions/SA_domain/ESD_pseudo_reality/end_century/perfect/
+OUTPUT_9=ACCESS_CM2_pr_pred.pkl
+PERIOD_9=end_century
+VAL_MODE_9=val_2
+TEST_ID_9=test-9_val-2_ESD_ACCESS-CM2_end_perfect
+
+PREDICTORS_FILE_10=NorESM2-MM_2080-2099.nc 
+INPUT_PATH_10=/leonardo_work/ICT26_ESP/sdigioia/CORDEX-ML/CORDEX-domains/SA_domain/test/end_century/predictors/perfect/
+OUTPUT_PATH_10=/leonardo_work/ICT26_ESP/SHARED/CORDEX-predictions/SA_domain/ESD_pseudo_reality/end_century/perfect/
+OUTPUT_10=NorESM2_MM_pr_pred.pkl
+PERIOD_10=end_century 
+VAL_MODE_10=""
+TEST_ID_10=""
+
+PREDICTORS_FILE_11=ACCESS-CM2_2080-2099.nc 
+INPUT_PATH_11=/leonardo_work/ICT26_ESP/sdigioia/CORDEX-ML/CORDEX-domains/SA_domain/test/end_century/predictors/imperfect/
+OUTPUT_PATH_11=/leonardo_work/ICT26_ESP/SHARED/CORDEX-predictions/SA_domain/ESD_pseudo_reality/end_century/imperfect/
+OUTPUT_11=ACCESS_CM2_pr_pred.pkl
+PERIOD_11=end_century
+VAL_MODE_11=val_2
+TEST_ID_11=test-11_val-2_ESD_ACCESS-CM2_end_imperfect
+
+PREDICTORS_FILE_12=NorESM2-MM_2080-2099.nc 
+INPUT_PATH_12=/leonardo_work/ICT26_ESP/sdigioia/CORDEX-ML/CORDEX-domains/SA_domain/test/end_century/predictors/imperfect/
+OUTPUT_PATH_12=/leonardo_work/ICT26_ESP/SHARED/CORDEX-predictions/SA_domain/ESD_pseudo_reality/end_century/imperfect/
+OUTPUT_12=NorESM2_MM_pr_pred.pkl
+PERIOD_12=end_century
+VAL_MODE_12=""
+TEST_ID_12=""

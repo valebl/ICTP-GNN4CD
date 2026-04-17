@@ -1,0 +1,113 @@
+#!/bin/bash
+
+#------------------#
+# SLURM PARAMETERS #
+#------------------#
+TIME="10:00:00"
+MEM="150G"
+JOB_NAME="mse-qmse-psd-SA"
+MAIL="wtang@ictp.it"
+LOG_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/ESD_pseudo_reality/0416_pr_SA_CosineAnnealingLR_ALPHA01_BETA005_LR0008_bin25/"
+N_GPU="1"
+SEED=100
+MODEL_NAME="GNN4CD_model_mod1"
+MODEL_TYPE="Rall"
+TARGET_TYPE="precipitation"
+LR_SCHEDULER="CosineAnnealingLR"
+RUN_TYPE="CORDEXML"
+
+#--------------------------------------------#
+# PATHS (conda env, main, accelerate config) #
+#--------------------------------------------#
+SOURCE_PATH="/leonardo/home/userexternal/$USER/Conda_init.txt"
+ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv"
+MAIN_PATH="$HOME/benchmarks/Experiments_Valentina"
+ACCELERATE_CONFIG_PATH="/leonardo/home/userexternal/$USER/.cache/huggingface/accelerate/default_config.yaml"
+
+#-------------------------------#
+# INPUT/OUTPUT FILES PARAMETERS #
+#-------------------------------#
+INPUT_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain_0403/ESD_pseudo_reality/pr/train/"
+OUTPUT_PATH=${LOG_PATH}
+LOG_FILE="log.txt"
+LOW_INPUT_FILE="low_input.npy"
+OROG_FILE="orog.npy"
+MASK_SEALAND_FILE="mask_sealand.npy"
+COORDS_IJ_FILE="coords_ij.npy"
+TARGET_FILE="target.npy"
+METADATA_FILE="low_input_metadata.json"
+GRAPH_FILE="low_high_graph.pkl"
+DATASET_NAME="Dataset_Graph"
+COLLATE_NAME="custom_collate_fn_graph"
+
+#---------------------#
+# TRAINING PARAMETERS #
+#---------------------#
+EPOCHS=200
+BATCH_SIZE=32
+LR_STEP_SIZE=25
+LR_GAMMA=0.5
+LR=0.0008
+WEIGHT_DECAY=0.0
+LOSS_FN="MSE_QMSE_PSD_Loss"
+ALPHA=0.01
+BETA=0.005
+BALANCE="None"
+THRESHOLD=0.0
+BINMIN=0.0
+BINMAX=1000
+BINWIDTH=0.25
+BINSCALE="log"
+WANDB_PROJECT_NAME="CORDEXML_pr_SA"
+
+#----------------------------------------#
+#             TRAINING PERIOD            #
+#----------------------------------------#
+TRAIN_YEAR_START=1961
+TRAIN_MONTH_START=1
+TRAIN_DAY_START=3
+TRAIN_YEAR_END=1979
+TRAIN_MONTH_END=12
+TRAIN_DAY_END=29
+VALIDATION_YEAR=1980
+
+FIRST_YEAR=0
+LAST_YEAR=0
+N_VAL_YEARS=0
+TRAIN_YEARS=""
+VAL_YEARS=""
+
+#-----------------#
+# BOOLEAN OPTIONS #
+#-----------------#
+CTD_TRAINING=false
+FINE_TUNING=true
+USE_ACCELERATE=true
+MAKE_VAL_PLOTS=true
+CHECKPOINT_CTD=""
+
+#--------------do not change here below------------------
+
+if [ ${USE_ACCELERATE} = true ] ; then
+	USE_ACCELERATE="--use_accelerate"
+else
+	USE_ACCELERATE="--no-use_accelerate"
+fi
+
+if [ ${CTD_TRAINING} = true ] ; then
+	CTD_TRAINING="--ctd_training"
+else
+	CTD_TRAINING="--no-ctd_training"
+fi
+
+if [ ${FINE_TUNING} = true ] ; then
+	FINE_TUNING="--fine_tuning"
+else
+	FINE_TUNING="--no-fine_tuning"
+fi
+
+if [ ${MAKE_VAL_PLOTS} = true ] ; then
+	MAKE_VAL_PLOTS="--make_val_plots"
+else
+	MAKE_VAL_PLOTS="--no-make_val_plots"
+fi

@@ -4,6 +4,8 @@ import torch
 import numpy as np
 import torch
 import ast
+import datetime
+import cftime
 
 ######################################################
 #------------------ GENERAL UTILITIES ---------------
@@ -41,45 +43,96 @@ def date_to_idxs_from_timeindex(
 ):
     """
     Compute start/end indices using the actual time_index array.
-    The time index must be sorted. The period [day_start, day_end]
-    can be obtain with [start_idx, end_idx)
-    Args:
-        time_index: numpy array datetime64
-    Returns:
-        start_idx: int
-        end_idx: int
+    Works with numpy.datetime64, Python datetime, and cftime calendars.
     """
 
-    # Build datetime64 timestamps
-    start_ts = np.datetime64(f"{year_start:04d}-{month_start:02d}-{day_start:02d}T00:00:00")
-    if year_end is not None:
-        end_ts = np.datetime64(f"{year_end:04d}-{month_end:02d}-{day_end:02d}T23:59:59")
+    # Detect reference type from the first element
+    ref = time_index[0]
 
-    # Find indices using binary search
-    # Note - np.searchsorted returns the insertion position that would keep the array sorted,
-    # even if the exact timestamp is not present.
-    start_idx = np.searchsorted(time_index, start_ts, side="left")
-    start_idx = int(start_idx)
+    # Build start timestamp in Python datetime ----
+    start_dt = datetime.datetime(year_start, month_start, day_start, 0, 0, 0)
+
+    # Build end timestamp if needed ----
     if year_end is not None:
-        end_idx   = np.searchsorted(time_index, end_ts,   side="right")
-        end_idx = int(end_idx) 
+        end_dt = datetime.datetime(year_end, month_end, day_end, 23, 59, 59)
+
+    # Convert Python datetime to same type as time_index
+    def convert(ts, ref):
+        # Case 1: time_index uses numpy.datetime64
+        if isinstance(ref, np.datetime64):
+            return np.datetime64(ts)
+
+        # Case 2: time_index uses Python datetime
+        if isinstance(ref, datetime.datetime):
+            return ts
+
+        # Case 3: time_index uses CFTime
+        if isinstance(ref, cftime.datetime):
+            return cftime.datetime(
+                ts.year, ts.month, ts.day,
+                ts.hour, ts.minute, ts.second,
+                calendar=ref.calendar
+            )
+
+        raise TypeError(f"Unsupported time index type: {type(ref)}")
+
+    start_ts = convert(start_dt, ref)
+    if year_end is not None:
+        end_ts = convert(end_dt, ref)
+
+    # Searchsorted
+    start_idx = int(np.searchsorted(time_index, start_ts, side="left"))
+
+    if year_end is not None:
+        end_idx = int(np.searchsorted(time_index, end_ts, side="right"))
         return start_idx, end_idx
-    else:
-        return start_idx
+
+    return start_idx
+
     
 
-def prepare_target_for_train(target, target_type):
-
+def prepare_target_for_train(target, target_type, train_idxs, stats_path="", mode="minmax"):
+    target_train = target[:, train_idxs]
     if target_type == "precipitation":
-        target = np.log1p(target)
+        return np.log1p(target)
     elif target_type == "temperature":
-        min_val_temp = 230
-        max_val_temp= 320
-        target = (target - min_val_temp) / (max_val_temp - min_val_temp)
+        if mode == "minmax":
+            min_val_temp = int(np.floor(np.nanmin(target)))
+            max_val_temp = int(np.ceil(np.nanmax(target)))
+            np.savez(stats_path+"tasmax_norm_stats.npz", mode="minmax", min=min_val_temp, max=max_val_temp)
+            return (target - min_val_temp) / (max_val_temp - min_val_temp)
+        elif mode == "z_score":
+            mean_all = np.nanmean(target_train)
+            std_all = np.nanstd(target_train)
+            np.savez(stats_path+"tasmax_norm_stats.npz", mode=mode, mean=mean_all, std=std_all)
+            return (target - mean_all) / std_all
+        elif mode == "z_score_gp":
+            mean_grid_points = np.nanmean(target_train, axis=1)[:, None]
+            std_grid_points = (np.nanstd(target_train, axis=1) + 1e-6)[:, None]
+            np.savez(stats_path+"tasmax_norm_stats.npz", mode=mode, mean=mean_grid_points, std=std_grid_points)
+            return (target - mean_grid_points) / std_grid_points
     else:
         raise ValueError(f"Unknown target type: {target_type}")
-    
-    return target
+
+
+def invert_normalization(y_norm, sigma_norm=None, stats_path=None):
+    stats = np.load(stats_path+"tasmax_norm_stats.npz")
+    if stats["mode"] == "minmax":
+        min_val_temp = stats["min"]
+        max_val_temp = stats["max"]
+        y_pred = y_norm * (max_val_temp - min_val_temp) + min_val_temp
+        if sigma_norm is not None:
+            sigma_pred = sigma_norm * (max_val_temp - min_val_temp)
+    elif stats["mode"] == "z_score" or stats["mode"] == "z_score_gp":
+        mean = stats["mean"]
+        std  = stats["std"]
+        y_pred = y_norm * std + mean
+        if sigma_norm is not None:
+            sigma_pred = sigma_norm * std
+    if sigma_norm is not None:
+        return y_pred, sigma_pred
+    else:
+        return y_pred
 
 
 def find_not_all_nan_times(target_train, skip=24):
@@ -137,8 +190,8 @@ def derive_train_val_idxs_years_list(
         train_idxs.append(np.arange(start_idx - history_length, end_idx))
         train_idxs_valid.append(np.arange(start_idx, end_idx))
 
-    train_idxs = np.concat(train_idxs)
-    train_idxs_valid = np.concat(train_idxs_valid)
+    train_idxs = np.concatenate(train_idxs)
+    train_idxs_valid = np.concatenate(train_idxs_valid)
     # Filter the train_idxs that are valid and return their positions inside train_idxs
     train_idxs_valid = np.where(np.isin(train_idxs, train_idxs_valid))[0]
 
@@ -156,8 +209,8 @@ def derive_train_val_idxs_years_list(
         val_idxs.append(np.arange(start_idx - history_length, end_idx))
         val_idxs_valid.append(np.arange(start_idx, end_idx))
     
-    val_idxs = np.concat(val_idxs)
-    val_idxs_valid = np.concat(val_idxs_valid)
+    val_idxs = np.concatenate(val_idxs)
+    val_idxs_valid = np.concatenate(val_idxs_valid)
     # Filter the val_idxs that are valid and return their positions inside val_idxs
     val_idxs_valid = np.where(np.isin(val_idxs, val_idxs_valid))[0]
         
@@ -320,9 +373,9 @@ def derive_train_val_idxs(
     # --- Save to disk if requested ---
     if args is not None:
         if accelerator is None or accelerator.is_main_process:
-            np.save("train_time_index.npy", time_index[train_idxs])
+            np.save(args.output_path+"train_time_index.npy", time_index[train_idxs])
             if validation_year is not None:
-                np.save("val_time_index.npy", time_index[val_idxs])
+                np.save(args.output_path+"val_time_index.npy", time_index[val_idxs])
 
     return train_idxs, train_idxs_valid_subset, val_idxs, val_idxs_valid_subset
 
@@ -384,9 +437,14 @@ def derive_qmse_bins(target, train_idxs, args, accelerator, binmin=np.log1p(0.1)
 
 
 def compute_input_statistics_and_standardize(
-        x_low, x_high, train_idxs, args,
-        accelerator=None, n_vars=5, n_levels=5,
-        apply_stats=True, high_independent_vars=False):
+        x_low,
+        x_high,
+        train_idxs,
+        n_vars,
+        args,
+        accelerator=None,
+        apply_stats=True,
+        high_independent_vars=False):
 
     write_log(f"\nComputing statistics for the low-res input data", args, accelerator, 'a')
 
@@ -433,34 +491,26 @@ def compute_input_statistics_and_standardize(
         x_low, x_high,
         means_low, stds_low,
         means_high, stds_high,
-        n_vars=n_vars, n_levels=n_levels,
-        args=args
+        n_vars=n_vars,
+        high_independent_vars=high_independent_vars
     )
 
     return x_low_std, x_high_std
 
 
 def standardize_input(
-    x_low, x_high,
-    means_low, stds_low,
-    means_high, stds_high,
-    n_vars=5, n_levels=5,
-    args=None,
-    stats_mode_default="var",
+    x_low,
+    x_high,
+    means_low,
+    stds_low,
+    means_high,
+    stds_high,
+    n_vars,
     high_independent_vars=False
 ):
-    # Determine stats mode
-    stats_mode = args.stats_mode if args is not None else stats_mode_default
-
     # ---- LOW-RES STANDARDIZATION ----
-    # if stats_mode == "var":
     means_b = means_low.reshape(1, 1, n_vars, 1) # from (n_vars,)
     stds_b  = stds_low.reshape(1, 1, n_vars, 1) # from (n_vars,)
-    # elif stats_mode == "field":
-    #     means_b = means_low.reshape(1, 1, n_vars, n_levels) # from (n_vars, n_levels)
-    #     stds_b  = stds_low.reshape(1, 1, n_vars, n_levels) # from (n_vars, n_levels)
-    # else:
-    #     raise ValueError("stats_mode must be 'var' or 'field'")
 
     x_low = (x_low - means_b) / stds_b
 
