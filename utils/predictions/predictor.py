@@ -12,7 +12,7 @@ class Predictor(object):
         with torch.no_grad():
             for graph in dataloader:
                 
-                out = model(graph)
+                out = model(graph, inference=True)
                 y_pred = extract_prediction(out, loss_name=args.loss_name)
 
                 idxs = torch.atleast_2d(torch.tensor(graph.idxs, device=accelerator.device))

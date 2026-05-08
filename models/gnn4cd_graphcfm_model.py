@@ -231,7 +231,7 @@ class GNN4CD_GraphCFM_Model(nn.Module):
 
             out = torch.cat([v_pred, v_target], dim=1)
 
-        # validation/prediction mode: no target -> sample
+        # validation/prediction mode: -> sample
         if y is None or inference:
             samples_mean = self._sample(encod_high, data.edge_index_dict[('high','within','high')])
             if "out" in locals():

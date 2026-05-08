@@ -215,7 +215,7 @@ class GNN4CD_CFM_Model(nn.Module):
 
             out = torch.cat([v_pred, v_target], dim=1)
 
-        # validation/prediction mode: no target -> sample
+        # validation/prediction mode: -> sample
         if y is None or inference:
             samples_mean = self._sample(encod_high)
             if "out" in locals():
