@@ -135,7 +135,7 @@ class Trainer(object):
                         train_mask = graph['high'].train_mask
                         y = graph["high"].y
 
-                        y_out = model(graph, inference=True)
+                        y_out = model(graph)
                         
                         if getattr(loss_fn, "use_bins", False):
                             bins = graph['high'].w

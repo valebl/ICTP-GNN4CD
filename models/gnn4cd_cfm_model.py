@@ -195,7 +195,7 @@ class GNN4CD_CFM_Model(nn.Module):
         
         return samples_mean
     
-    def forward(self, data, inference=False):
+    def forward(self, data):
         encod_rnn, _ = self.rnn(data.x_dict['low']) # out, h
         encod_rnn = encod_rnn.flatten(start_dim=1)
         encod_rnn = self.dense(encod_rnn)
@@ -216,7 +216,7 @@ class GNN4CD_CFM_Model(nn.Module):
             out = torch.cat([v_pred, v_target], dim=1)
 
         # validation/prediction mode: -> sample
-        if y is None or inference:
+        if not self.training:
             samples_mean = self._sample(encod_high)
             if "out" in locals():
                 out = torch.cat([out, samples_mean], dim=1)
