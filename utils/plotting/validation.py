@@ -76,7 +76,7 @@ def create_validation_plots(
         aggr=None,
         s=meta[target_type]["s"],
         legend_title=meta[target_type]["map_unit"],
-        cmap=cmap=meta[target_type]["cmap_bias"],
+        cmap=meta[target_type]["cmap_bias"],
         sub_titles=["GNN4CD - TARGET"],
         x_size=meta["general"]["figsize"][0],
         y_size=meta["general"]["figsize"][1],
