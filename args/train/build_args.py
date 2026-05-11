@@ -1,6 +1,7 @@
 import argparse
 
-from args.train.add_base_args import add_base_args, add_lr_specific_args
+from args.train.add_base_args import add_base_args
+from args.add_lr_specific_args import add_lr_specific_args
 from args.train.add_loss_specific_args import add_loss_specific_args
 from args.shared.add_model_specific_args import add_model_specific_args
 
