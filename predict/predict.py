@@ -13,8 +13,9 @@ from torch_geometric.data import HeteroData
 from torch_geometric.utils import degree
 from data.datasets.graph_dataset import Graph_Dataset, custom_collate_fn_graph
 
+from args.predict.build_args import build_args
+
 from models.build_model import build_model
-from models.add_model_specific_args import add_model_specific_args
 
 from utils.helpers.tools import (
     set_seed_everything,
@@ -30,20 +31,10 @@ from utils.predictand_transforms.inverse_transform_predictand import inverse_tra
 from utils.predictor_transforms.transform_predictors import transform_predictors
 from utils.losses.registry import get_loss
 
-from predict.add_base_args import add_base_args
-from predict.add_target_specific_args import add_target_specific_args
-
 
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser = add_base_args(parser)
-
-    args, unknown = parser.parse_known_args()
-
-    # Update args with target-specific arguments
-    parser = add_target_specific_args(parser, args.target_type)
-    args = parser.parse_args()
+    args = build_args()
     
     # Set all seeds
     set_seed_everything(seed=args.seed)
@@ -176,10 +167,6 @@ if __name__ == '__main__':
     #--------------------------------------------
     #-------------- BUILD MODEL -----------------
     #--------------------------------------------
-
-    # Update args with loss- and model-specific arguments
-    parser = add_model_specific_args(parser, args.model_name)
-    args = parser.parse_args()
 
     LossClass = get_loss(args.loss_name)
     output_dim = LossClass.output_dim

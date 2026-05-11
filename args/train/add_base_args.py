@@ -21,12 +21,12 @@ def add_base_args(parser):
     #-- training hyperparameters
     parser.add_argument('--epochs', type=int, default=15, help='number of total training epochs')
     parser.add_argument('--batch_size', type=int, default=64, help='batch size (global)')
-    parser.add_argument('--step_size', type=int, default=10, help='scheduler step size (global)')
     parser.add_argument('--lr', type=float, default=0.0001, help='initial learning rate')
+    parser.add_argument('--lr_scheduler', type=str, default="StepLR")
     parser.add_argument('--weight_decay', type=float, default=0.0, help='weight decay (wd)')
     parser.add_argument('--load_checkpoint',  action='store_true')
     parser.add_argument('--no-load_checkpoint', dest='load_checkpoint', action='store_false')
-    parser.add_argument('--lr_scheduler', type=str, default="StepLR")
+
 
     parser.add_argument('--checkpoint_ctd', type=str, help='checkpoint to load to continue')
     parser.add_argument('--ctd_training',  action='store_true')
