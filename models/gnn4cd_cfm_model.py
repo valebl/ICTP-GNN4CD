@@ -74,7 +74,7 @@ class CFMHead(nn.Module):
         # input: (x_t (output_dim), t_emb (time_emb_dim), c (cond_dim))
         self.net = nn.Sequential(
             nn.Linear(output_dim + time_emb_dim + cond_dim, hidden),
-            nn.SiLU(), # SiLU frequenctly used in flow matching, smooth and continuous
+            nn.SiLU(), # SiLU frequently used in flow matching, smooth and continuous
             nn.Linear(hidden, hidden),
             nn.SiLU(),
             nn.Linear(hidden, output_dim),
@@ -98,10 +98,12 @@ class SinusoidalTimeEmbedding(nn.Module):
         freqs = torch.exp(
             -torch.arange(half, dtype=torch.float32) * (np.log(10000) / (half - 1))
         )
+        # register_buffer saves freqs in the model's state_dict so it moves correctly with
+        # .to(device) and gets saved/loaded with the model, but is never updated by the optimizer
         self.register_buffer("freqs", freqs)
  
     def forward(self, t: torch.Tensor) -> torch.Tensor:
-        # t: scalar or (1,)  →  (1, dim)
+        # t: scalar or (1,)  ->  (1, dim)
         t = t.view(1, 1).float()
         args = t * self.freqs.unsqueeze(0) * 2 * np.pi    # (1, half)
         return torch.cat([args.sin(), args.cos()], dim=-1) # (1, dim)

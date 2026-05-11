@@ -38,6 +38,9 @@ class GATBlock(nn.Module):
         return x
 
 class Processor(nn.Module):
+    """Reduced version, because GraphCFMHead adds further message passing
+    layers on the high-within-high graph
+    """
     def __init__(self, hidden):
         super().__init__()
         self.block1 = GATBlock(hidden, 32, heads=2, dropout=0.1)
@@ -82,7 +85,7 @@ class GraphCFMHead(nn.Module):
  
         # output projection
         self.out   = nn.Linear(hidden * heads, output_dim)
- 
+  
     def forward(self, node_emb, x_t, t, edge_index):
         N = node_emb.shape[0]
         t_emb = self.time_emb(t).expand(N, -1)      # (N, time_emb_dim)
@@ -108,6 +111,8 @@ class SinusoidalTimeEmbedding(nn.Module):
         freqs = torch.exp(
             -torch.arange(half, dtype=torch.float32) * (np.log(10000) / (half - 1))
         )
+        # register_buffer saves freqs in the model's state_dict so it moves correctly with
+        # .to(device) and gets saved/loaded with the model, but is never updated by the optimizer
         self.register_buffer("freqs", freqs)
  
     def forward(self, t: torch.Tensor) -> torch.Tensor:
