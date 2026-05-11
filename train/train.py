@@ -9,13 +9,13 @@ import json
 import random
 from accelerate import Accelerator
 
+from args.train.build_args import build_args
+
 # Models
 from models.build_model import build_model
-from models.add_model_specific_args import add_model_specific_args
 
 # Losses
 from utils.losses.build_loss import build_loss
-from utils.losses.add_loss_specific_args import add_loss_specific_args
 from utils.losses.qmse import derive_qmse_bins
 
 # Helpers
@@ -31,7 +31,6 @@ from utils.helpers.tools import (
 # Training
 from utils.training.detect_train_val_idxs_config import detect_train_val_idxs_config
 from utils.training.trainer import Trainer
-from train.add_base_args import add_base_args
 
 # Data
 from data.datasets.graph_dataset import Graph_Dataset, custom_collate_fn_graph
@@ -42,11 +41,8 @@ from utils.predictor_transforms.transform_predictors import transform_predictors
 
 
 if __name__ == '__main__':
-
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser = add_base_args(parser)
-
-    args, unknown = parser.parse_known_args()
+    
+    args = build_args()
 
     # Set all seeds
     set_seed_everything(seed=args.seed)
@@ -211,10 +207,6 @@ if __name__ == '__main__':
     #-------------- BUILD LOSS -----------------
     #-------------------------------------------
 
-    # Update args with loss-specific arguments
-    parser = add_loss_specific_args(parser, args.loss_name)
-    args = parser.parse_args()
-
     loss_fn, output_dim = build_loss(args)
 
     # Eventually compute QMSE bins
@@ -273,10 +265,6 @@ if __name__ == '__main__':
     #-------------- BUILD MODEL -----------------
     #--------------------------------------------
 
-    # Update args with model-specific arguments
-    parser = add_model_specific_args(parser, args.model_name)
-    args = parser.parse_args()
-    
     model = build_model(
         x_low_var_dim=n_vars,
         x_low_lev_dim=n_levels,
@@ -346,11 +334,43 @@ if __name__ == '__main__':
     # optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     
     if args.lr_scheduler == "StepLR":
-        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=0.5)
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(
+            optimizer,
+            step_size=args.step_size,
+            gamma=args.step_lr_gamma
+        )
     elif args.lr_scheduler == "ReduceLROnPlateau":
-        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            mode='min',
+            factor=0.5,
+            patience=10
+        )
     elif args.lr_scheduler == "CosineAnnealingLR":
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6, last_epoch=-1)
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=args.epochs,
+            eta_min=1e-6,
+            last_epoch=-1
+        )
+    elif args.lr_scheduler == "CosineAnnealingLR_with_warmup":
+        # 2 epochs warmup
+        warmup = LinearLR(
+            optimizer,
+            start_factor=0.1,            # starts at 3e-5, ramps to 3e-4
+            end_factor=1.0,
+            total_iters=2,               # epochs
+        )
+        cosine = CosineAnnealingLR(
+            optimizer,
+            T_max=args.epochs - 2,
+            eta_min=1e-6,
+        )
+        lr_scheduler = SequentialLR(
+            optimizer,
+            schedulers=[warmup, cosine],
+            milestones=[2],
+        )
     else:
         lr_scheduler = None
 
