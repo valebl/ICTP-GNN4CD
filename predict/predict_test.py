@@ -11,18 +11,14 @@ from torch_geometric.data import HeteroData
 import xarray as xr
 
 from models.build_model import build_model
-from models.add_model_specific_args import add_model_specific_args
 from data.datasets.graph_dataset import Graph_Dataset, custom_collate_fn_graph
-from data.loaders.complete_loader import load_dataset_CORDEXML
+from data.loaders.registry import get_dataset_loader
 from utils.predictions.predictor import Predictor
 from utils.helpers.tools import set_seed_everything, write_log, date_to_idxs_from_timeindex
 from utils.extractors.extract_prediction import extract_prediction
 from utils.predictand_transforms.inverse_transform_predictand import inverse_transform_predictand
 from utils.predictor_transforms.transform_predictors import transform_predictors
-from utils.losses.registry import LOSS_REGISTRY
-from predict.add_base_args_test import add_base_args_test
-from predict.add_target_specific_args import add_target_specific_args
-
+from utils.losses.registry import get_loss
 
 def return_test_idxs_from_years_list(years_list, time_index, history_length):
     test_idxs_list = []
@@ -133,7 +129,8 @@ if __name__ == '__main__':
     predictors_filename = args.input_path_P + args.predictors_filename
 
     # Load the input dataset
-    x_low, lat_low, lon_low, time_index, _, _ = load_dataset_CORDEXML(
+    load_dataset = get_dataset_loader(args.dataset_name)
+    x_low, lat_low, lon_low, time_index, _, _ = load_dataset(
         file_path=args.input_path_P,
         file=args.predictors_filename,
         args=args
@@ -238,7 +235,7 @@ if __name__ == '__main__':
     parser = add_model_specific_args(parser, args.model_name)
     args = parser.parse_args()
 
-    LossClass = LOSS_REGISTRY[args.loss_name]
+    LossClass = get_loss(args.loss_name)
     output_dim = LossClass.output_dim
     
     model = build_model(
