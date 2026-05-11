@@ -1,8 +1,10 @@
-from predict.add_base_args import add_base_args
-from predict.add_target_specific_args import add_target_specific_args
-from models.add_model_specific_args import add_model_specific_args
+import argparse
 
-def build_args()
+from args.predict.add_base_args import add_base_args
+from args.predict.add_target_specific_args import add_target_specific_args
+from args.shared.add_model_specific_args import add_model_specific_args
+
+def build_args():
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
