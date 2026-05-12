@@ -248,6 +248,11 @@ if __name__ == '__main__':
     predictand_stats = np.load(args.train_path + "predictand_stats.npz", allow_pickle=True)
     y_pred = inverse_transform_predictand(y_pred_raw, predictand_stats)
 
+    if y_pred.ndim == 3:
+        write_log(f"\nComputing samples mean, from shape {y_pred.shape}... ", args, accelerator, 'a')
+        y_pred = np.mean(y_pred, axis=-1)     
+        write_log(f"to {y_pred.shape}.", args, accelerator, 'a')
+
     if args.target_type == "precipitation":
         y_pred[y_pred < args.threshold] = 0.0
 

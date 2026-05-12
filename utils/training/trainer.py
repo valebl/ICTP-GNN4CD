@@ -179,21 +179,27 @@ class Trainer(object):
                     if args.make_val_plots:
 
                         # Gather from GPUs and remove duplicated values due to gather
-                        y_pred_all = accelerator.gather(torch.stack(y_pred_list)).squeeze()[:val_size, :] # (time, nodes)
-                        y_all = accelerator.gather(torch.stack(y_list)).squeeze()[:val_size, :]
-                        idxs_all = accelerator.gather(torch.stack(idxs_list)).squeeze()[:val_size]
-
-                        # Squeeze, swapaxes and , convert to cpu and numpy
-                        y_pred_all = y_pred_all.swapaxes(0,1).cpu().numpy() # (nodes, time)
-                        y_all = y_all.swapaxes(0,1).cpu().numpy()
+                        y_pred_all = accelerator.gather(torch.stack(y_pred_list)) # (time, nodes)
+                        y_all = accelerator.gather(torch.stack(y_list))
+                        idxs_all = accelerator.gather(torch.stack(idxs_list))
 
                         # Indices to ensure data are sorted correctly
+                        idxs_all = idxs_all.squeeze()[:val_size]
                         _, indices = torch.sort(idxs_all)
                         indices = indices.cpu().numpy()
 
-                        y_pred_all = y_pred_all[:, indices]
-                        y_all = y_all[:, indices]
+                        # Squeeze, swapaxes and , convert to cpu and numpy
+                        y_pred_all = y_pred_all.cpu().numpy()
+                        y_all = y_all.cpu().numpy()
                         times = times[indices]
+
+                        # Squeeze, swapaxes and , convert to cpu and numpy
+                        y_pred_all = y_pred_all.squeeze()[:val_size, :][indices, :] # (time, nodes)
+                        y_all = y_all.squeeze()[:val_size, :][indices, :]
+
+                        # Squeeze, swapaxes and , convert to cpu and numpy
+                        y_pred_all = y_pred_all.swapaxes(0,1) # (nodes, time)
+                        y_all = y_all.swapaxes(0,1)
 
                         print(f"y_pred_all.shape: {y_pred_all.shape}, y_all.shape: {y_all.shape}, indices.shape: {indices.shape}")
 
@@ -201,6 +207,10 @@ class Trainer(object):
                         stats = np.load(args.output_path+"predictand_stats.npz", allow_pickle=True)
                         y_all = inverse_transform_predictand(y_all, stats)
                         y_pred_all = inverse_transform_predictand(y_pred_all, stats)
+
+                        if y_pred_all.ndim == 3:
+                            y_pred_all = np.mean(y_pred_all, axis=-1)     
+                            print(f"After averaging y_pred_all.shape: {y_pred_all.shape}.")
 
                         # Load validation plots metadata
                         metadata_file_path = args.val_plot_config

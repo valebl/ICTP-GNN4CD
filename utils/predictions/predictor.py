@@ -42,16 +42,17 @@ class Predictor(object):
             accelerator.wait_for_everyone()
             y_pred_all = accelerator.gather(y_pred)
             idxs_all = accelerator.gather(idxs)
-            
-        # Squeeze, swapaxes, convert to cpu and numpy
-        y_pred_all = y_pred_all.squeeze().swapaxes(0,1).cpu().numpy()[:, :pred_size] # (nodes, time)
-        idxs_all = idxs_all.squeeze().squeeze()[:pred_size]
+
 
         # Indices to ensure data are sorted correctly
         _, idxs_sorted = torch.sort(idxs_all)
         idxs_sorted = idxs_sorted.cpu().numpy()
+        idxs_all = idxs_all.squeeze()[:pred_size]
 
-        y_pred_all = y_pred_all[:, idxs_sorted]
+        # Squeeze, swapaxes, convert to cpu and numpy
+        y_pred_all = y_pred_all.cpu().numpy()
+        y_pred_all = y_pred_all.squeeze()[:pred_size, :][idxs_sorted, :] # (nodes, time)
+        y_pred_all = y_pred_all.swapaxes(0,1) # (nodes, time)
 
         print(f"\ny_pred_all.shape: {y_pred_all.shape}, idxs_sorted.shape: {idxs_sorted.shape}")
 
