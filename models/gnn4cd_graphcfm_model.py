@@ -212,9 +212,12 @@ class GNN4CD_GraphCFM_Model(nn.Module):
                 x = x + v * dt
             samples.append(x)
             
-        samples_mean = torch.stack(samples, dim=-1).squeeze(1).mean(dim=-1, keepdim=True)
-        
-        return samples_mean
+        # samples_mean = torch.stack(samples, dim=-1).squeeze(1).mean(dim=-1, keepdim=True)        
+        # return samples_mean
+
+        samples = torch.stack(samples, dim=-1).squeeze(1)
+
+        return samples
     
     def forward(self, data):
         encod_rnn, _ = self.rnn(data.x_dict['low']) # out, h
@@ -238,10 +241,10 @@ class GNN4CD_GraphCFM_Model(nn.Module):
 
         # validation/prediction mode: -> sample
         if not self.training:
-            samples_mean = self._sample(encod_high, data.edge_index_dict[('high','within','high')])
+            samples = self._sample(encod_high, data.edge_index_dict[('high','within','high')])
             if "out" in locals():
-                out = torch.cat([out, samples_mean], dim=1)
+                out = [out, samples]
             else:
-                out = samples_mean
+                out = samples
 
         return out
