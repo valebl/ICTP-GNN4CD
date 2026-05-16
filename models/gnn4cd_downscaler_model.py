@@ -90,18 +90,40 @@ class TemporalTransformer(nn.Module):
 
 
 class CrossResDownscaler(nn.Module):
-    """
-    Cross-resolution GNN: low-res embeddings -> high-res nodes.
-    """
-
-    def __init__(self, low_dim, high_in_dim, out_dim):
+    def __init__(self, low_dim, high_dim, out_dim, hidden_dim=128, num_layers=3):
         super().__init__()
-        self.conv = GraphConv((low_dim, high_in_dim), out_dim, aggr='mean')
 
-    def forward(self, h_low, x_high, edge_index_low2high):
-        # h_low:  (N_low, low_dim)
-        # x_high: (N_high, high_in_dim)
-        return self.conv((h_low, x_high), edge_index_low2high)  # (N_high, out_dim)
+        # project high-res features to hidden_dim
+        self.high_proj = nn.Linear(high_dim, hidden_dim)
+
+        layers = []
+        in_low = low_dim
+        in_high = hidden_dim
+
+        for i in range(num_layers):
+            conv = GraphConv((in_low, in_high), hidden_dim, aggr='mean')
+            norm = nn.LayerNorm(hidden_dim)
+            layers.append((conv, norm))
+
+            # after first layer, low features also become hidden_dim
+            in_low = hidden_dim
+            in_high = hidden_dim
+
+        self.layers = nn.ModuleList([nn.ModuleList([c, n]) for c, n in layers])
+        self.final = nn.Linear(hidden_dim, out_dim)
+
+    def forward(self, h_low, x_high, edge_low2high):
+        # project high-res features to hidden_dim
+        h = self.high_proj(x_high)  # (N_high, hidden_dim)
+
+        for conv, norm in self.layers:
+            h_new = conv((h_low, h), edge_low2high)
+            h_new = norm(h_new)
+            h_new = F.relu(h_new)
+            h = h + h_new  # residual
+
+        return self.final(h)
+
 
 
 class SpatioTemporalDownscaler(nn.Module):
