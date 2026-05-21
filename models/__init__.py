@@ -1,7 +1,3 @@
-import pkgutil
-import importlib
-from .registry import MODEL_REGISTRY, register_model
+from .residual_denoiser_lr import ResidualDenoiserLR
 
-# Automatically import all modules in this package
-for module_info in pkgutil.iter_modules(__path__):
-    importlib.import_module(f"{__name__}.{module_info.name}")
+__all__ = ["ResidualDenoiserLR"]

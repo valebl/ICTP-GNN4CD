@@ -1,9 +1,7 @@
 ## GNN Output Residual Flow Matching
 
 This branch contains a lightweight post-processing workflow for GNN4CD
-downscaling outputs. The deterministic GNN prediction is used as the large-scale
-anchor, and a Conditional Flow Matching model learns the stochastic
-high-frequency residual between the GNN output and the high-resolution target.
+downscaling outputs. The deterministic GNN prediction is used as the large-scale anchor, and a Conditional Flow Matching model learns the stochastic high-frequency residual between the GNN output and the high-resolution target.
 
 For precipitation, training is done in `log1p(mm/day)` space:
 
