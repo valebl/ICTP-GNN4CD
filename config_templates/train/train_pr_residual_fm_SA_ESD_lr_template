@@ -1,0 +1,61 @@
+#!/bin/bash
+
+#------------------#
+# SLURM PARAMETERS #
+#------------------#
+ACCOUNT="ict26_esp_0"
+PARTITION="boost_usr_prod"
+QOS=""
+TIME="08:00:00"
+MEM="120G"
+JOB_NAME="resfm-train-pr-ESD-lr"
+N_GPU="1"
+
+#--------------------------------------------#
+# PATHS
+#--------------------------------------------#
+SOURCE_PATH="/leonardo/home/userexternal/$USER/Conda_init.txt"
+ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv"
+MAIN_PATH="$HOME/benchmarks/GNN_output_Res_FM"
+
+#---------------------------#
+# INPUT FILES
+#---------------------------#
+GNN_PRED_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/diffusion/ESD_pseudo_reality/gnn_train_preds_pr/G_SA_pr_train_1961_1980.pkl"
+TARGET_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain_0403/ESD_pseudo_reality/pr/train/target.npy"
+TIME_INDEX_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain_0403/ESD_pseudo_reality/pr/train/time_index.npy"
+LOW_INPUT_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain_0403/ESD_pseudo_reality/pr/train/low_input.npy"
+GRAPH_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain_0403/ESD_pseudo_reality/pr/train/low_high_graph.pkl"
+STATIC_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain_0403/ESD_pseudo_reality/pr/train/orog.npy"
+
+#---------------------------#
+# OUTPUT
+#---------------------------#
+OUTPUT_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/diffusion/ESD_pseudo_reality/gnn_output_res_fm_pr_train/"
+LOG_FILE="log.txt"
+
+#---------------------------#
+# TRAINING PARAMETERS
+#---------------------------#
+TARGET_TYPE="precipitation"
+EPOCHS=200
+BATCH_SIZE=32
+LR=0.0001
+WEIGHT_DECAY=0.0
+UNET_BASE=32
+LR_HIDDEN=16
+TIME_EMB_DIM=64
+GRID_H=128
+GRID_W=128
+HIGHPASS_KERNEL=9
+COARSE_BLOCK_SIZE=8
+
+# Loss weights:
+# total = FM + lambda_psd*PSD + lambda_quantile*Q + lambda_coarse*coarse + lambda_wet*wet
+LAMBDA_PSD=0.02
+LAMBDA_QUANTILE=0.02
+LAMBDA_COARSE=0.05
+LAMBDA_WET=0.01
+WET_THRESHOLD=1.0
+
+SEED=42

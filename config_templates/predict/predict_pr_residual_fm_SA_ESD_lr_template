@@ -1,0 +1,62 @@
+#!/bin/bash
+
+#------------------#
+# SLURM PARAMETERS #
+#------------------#
+ACCOUNT="ict26_esp_0"
+PARTITION="boost_usr_prod"
+QOS=""
+TIME="00:30:00"
+MEM="60G"
+JOB_NAME="resfm-pred-pr-ESD-lr"
+N_GPU="1"
+
+#--------------------------------------------#
+# PATHS
+#--------------------------------------------#
+SOURCE_PATH="/leonardo/home/userexternal/$USER/Conda_init.txt"
+ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv"
+MAIN_PATH="$HOME/benchmarks/GNN_output_Res_FM"
+VALENTINA_PATH="$HOME/benchmarks/Experiments_Valentina"
+
+#---------------------------#
+# INPUT FILES
+#---------------------------#
+GNN_PRED_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/ESD_pseudo_reality/predictions/mse_20/0416_pr_SA_CosineAnnealingLR_ALPHA01_BETA005_LR0008_bin25_e200/G_SA_1980.pkl"
+GRAPH_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain_0403/ESD_pseudo_reality/pr/train/low_high_graph.pkl"
+STATIC_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain_0403/ESD_pseudo_reality/pr/train/orog.npy"
+LOW_INPUT_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain_0403/ESD_pseudo_reality/pr/train/low_input.npy"
+TIME_INDEX_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain_0403/ESD_pseudo_reality/pr/train/time_index.npy"
+LR_NORM_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/diffusion/ESD_pseudo_reality/gnn_output_res_fm_pr_train/lr_norm.npz"
+CHECKPOINT="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/diffusion/ESD_pseudo_reality/gnn_output_res_fm_pr_train/best_model.pt"
+
+#---------------------------#
+# OUTPUT
+#---------------------------#
+OUTPUT_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/diffusion/ESD_pseudo_reality/prediction/gnn_output_res_fm_pred_pr/"
+OUTPUT_FILE="G_SA_pr_gnn_output_res_fm_1980.pkl"
+LOG_FILE="log.txt"
+
+#---------------------------#
+# INFERENCE PARAMETERS
+#---------------------------#
+TARGET_TYPE="precipitation"
+VAR="pr"
+EXPERIMENT="ESD_pseudo_reality"
+TEST_YEAR_START=1980
+N_INFERENCE_STEPS=50
+UNET_BASE=32
+LR_HIDDEN=16
+TIME_EMB_DIM=64
+N_SAMPLES=1
+BATCH_SIZE=16
+GRID_H=128
+GRID_W=128
+COARSE_BLOCK_SIZE=8
+APPLY_COARSE_CONSERVATION=true
+NOISE_SCALE=1.0
+SEED=42
+
+# 0 means use all times in GNN_PRED_FILE. Set to 1980 when the file contains
+# multiple years and you want to filter a single validation/prediction year.
+YEAR_FILTER=0
