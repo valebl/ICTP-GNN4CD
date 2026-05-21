@@ -1,0 +1,134 @@
+#!/bin/bash
+
+#------------------#
+# SLURM PARAMETERS #
+#------------------#
+ACCOUNT="ict26_esp_0"
+PARTITION="boost_usr_prod"
+QOS=""
+TIME="12:00:00"
+MEM="120G"
+JOB_NAME="unet-cfm-a005-b008"
+MAIL="wtang@ictp.it"
+LOG_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/diffusion/ESD_pseudo_reality/0517_unet_cfm_qmse_psd_pr_ALPHA005_BETA008_LR0008_bin25/"
+N_GPU="1"
+SEED=100
+TARGET_TYPE="precipitation"
+DOMAIN="SA"
+
+#------------------#
+# WANDB PARAMETERS #
+#------------------#
+WANDB_PROJECT_NAME="Unet_flow_matching_pr_SA"
+WANDB_API_KEY="d2f9b711020f881fdb31595fe60225e8835b104e"
+WANDB_USERNAME="tangwenchang0210"
+WANDB_TEAM="tangwenchang0210"
+
+#--------------------------------------------#
+# PATHS (conda env, main, accelerate config) #
+#--------------------------------------------#
+SOURCE_PATH="/leonardo/home/userexternal/$USER/Conda_init.txt"
+ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv"
+MAIN_PATH="$HOME/benchmarks/Unet_flow_matching_SA"
+ACCELERATE_CONFIG_PATH="/leonardo/home/userexternal/$USER/.cache/huggingface/accelerate/default_config.yaml"
+CARTOPY_DATA_DIR="/leonardo_work/ICT26_ESP/vblasone/cartopy/"
+
+#-------------------------------#
+# INPUT/OUTPUT FILES PARAMETERS #
+#-------------------------------#
+INPUT_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain_0403/ESD_pseudo_reality/pr/train/"
+OUTPUT_PATH=${LOG_PATH}
+LOG_FILE="log.txt"
+LOW_INPUT_FILE="low_input.npy"
+OROG_FILE="orog.npy"
+MASK_SEALAND_FILE="mask_sealand.npy"
+COORDS_IJ_FILE="coords_ij.npy"
+TARGET_FILE="target.npy"
+METADATA_FILE="low_input_metadata.json"
+GRAPH_FILE="low_high_graph.pkl"
+DATASET_NAME="Dataset_Graph"
+COLLATE_NAME="custom_collate_fn_graph"
+
+#------------------#
+# MODEL PARAMETERS #
+#------------------#
+MODEL_NAME="GNN4CD_UNet_Model"
+HISTORY_LENGTH=2
+N_STEPS=50
+N_SAMPLES=10
+
+#-----------------#
+# LOSS PARAMETERS #
+#-----------------#
+LOSS_NAME="CFM_QMSE_PSD_Loss"
+ALPHA=0.005
+BETA=0.008
+BINMIN=0.0
+BINMAX=1000
+BINWIDTH=0.25
+BINSCALE="log"
+
+#------------------------------------#
+# PREDICTOR AND PREDICTAND TRANSFORM #
+#------------------------------------#
+PREDICTAND_TRANSFORM_MODE="log1p"
+PREDICTOR_LOW_TRANSFORM_MODE="zscore_low_var"
+PREDICTOR_HIGH_TRANSFORM_MODE="zscore_high_independent"
+
+#---------------------#
+# TRAINING PARAMETERS #
+#---------------------#
+EPOCHS=150
+BATCH_SIZE=32
+LR=0.0008
+LR_SCHEDULER="CosineAnnealingLR_with_warmup"
+LR_WARMUP_EPOCHS=2
+WEIGHT_DECAY=1e-4
+
+CTD_TRAINING=false
+USE_ACCELERATE=true
+CHECKPOINT_CTD=""
+
+#------------------#
+# VALIDATION PLOTS #
+#------------------#
+MAKE_VAL_PLOTS=true
+VAL_PLOT_FREQUENCY=30
+VAL_PLOT_CONFIG="${MAIN_PATH}/config_templates/plot/CORDEXML_plot_params_${DOMAIN}.json"
+
+#-----------------#
+# TRAINING PERIOD #
+#-----------------#
+TRAIN_YEAR_START=1961
+TRAIN_MONTH_START=1
+TRAIN_DAY_START=3
+TRAIN_YEAR_END=1979
+TRAIN_MONTH_END=12
+TRAIN_DAY_END=29
+VALIDATION_YEAR=1980
+
+FIRST_YEAR=""
+LAST_YEAR=""
+N_VAL_YEARS=""
+TRAIN_YEARS=()
+VAL_YEARS=()
+
+#--------------do not change here below------------------
+
+if [ ${USE_ACCELERATE} = true ] ; then
+	USE_ACCELERATE="--use_accelerate"
+else
+	USE_ACCELERATE="--no-use_accelerate"
+fi
+
+if [ ${CTD_TRAINING} = true ] ; then
+	CTD_TRAINING="--ctd_training"
+else
+	CTD_TRAINING="--no-ctd_training"
+fi
+
+if [ ${MAKE_VAL_PLOTS} = true ] ; then
+	MAKE_VAL_PLOTS="--make_val_plots"
+else
+	MAKE_VAL_PLOTS="--no-make_val_plots"
+fi

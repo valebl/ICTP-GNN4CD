@@ -17,6 +17,9 @@
         "cmap_bias": "BrBG",
         "tail_zoom": "True",
         "xlim_pdf": "None",
+        "binmin": 0,
+        "binmax": 1000,
+        "binwidth": 0.5,
         "plot_func_pdf": "scatter",
         "legend_outside": "False"
     },
@@ -37,6 +40,9 @@
         "cmap": "plasma",
         "tail_zoom": "False",
         "xlim_pdf": "[230,320]",
+        "binmin": 230,
+        "binmax": 320,
+        "binwidth": 1,
         "plot_func_pdf": "step",
         "legend_outside": "True"
     },

@@ -14,10 +14,13 @@ class CFM_Loss(nn.Module):
     def forward(self, out, *args, **kwargs):
         """
         Args:
-            out: the output of the GNN_CFM_Model or GNN4CD_GrapfCFM_Model
+            out: the output of the GNN4CD_UNet_Model or GNN4CD_GraphCFM_Model
                 out[:,0] are the predicted velocities
                 out[:,1] are the target velocities
         """
+        if type(out) == list:
+            out = out[0]
+
         v_pred = out[:,0]
         v_target = out[:,1]
 

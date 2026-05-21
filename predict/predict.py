@@ -31,6 +31,70 @@ from utils.predictor_transforms.transform_predictors import transform_predictors
 from utils.losses.registry import get_loss
 
 
+def probability_matched_mean(samples):
+    """Probability-matched mean over samples.
+
+    samples: (nodes, time, samples)
+    returns: (nodes, time)
+    """
+    mean_field = np.nanmean(samples, axis=-1)
+    pmm = np.full_like(mean_field, np.nan)
+    n_nodes, n_times = mean_field.shape
+
+    for t in range(n_times):
+        mean_t = mean_field[:, t]
+        pool_t = samples[:, t, :].reshape(-1)
+        valid_mean = np.isfinite(mean_t)
+        pool_t = pool_t[np.isfinite(pool_t)]
+        if valid_mean.sum() == 0 or pool_t.size == 0:
+            continue
+
+        order = np.argsort(mean_t[valid_mean])
+        quantile_idx = np.linspace(0, pool_t.size - 1, int(valid_mean.sum()))
+        matched_values = np.sort(pool_t)[np.rint(quantile_idx).astype(int)]
+
+        valid_indices = np.where(valid_mean)[0]
+        pmm[valid_indices[order], t] = matched_values
+
+    return pmm
+
+
+def select_best_member(samples, args):
+    """Select one coherent ensemble member per time step.
+
+    The score favors fields close to the ensemble median while softly
+    penalizing members whose tail is too weak or, optionally, too strong.
+    """
+    if args.best_member_transform == "log1p":
+        x = np.log1p(np.maximum(samples, 0.0)).astype(np.float32, copy=False)
+    else:
+        x = samples.astype(np.float32, copy=False)
+
+    reference_field = np.nanquantile(x, args.best_member_reference_quantile, axis=-1)
+    diff = x - reference_field[:, :, None]
+    closeness = np.sqrt(np.nanmean(diff * diff, axis=0))  # (time, sample)
+
+    tail = np.nanquantile(x, args.best_member_tail_quantile, axis=0)  # (time, sample)
+    tail_target = np.nanquantile(tail, args.best_member_tail_target, axis=1)
+    tail_deficit = np.maximum(tail_target[:, None] - tail, 0.0)
+    tail_excess = np.maximum(tail - tail_target[:, None], 0.0)
+
+    closeness_scale = np.nanmedian(closeness, axis=1, keepdims=True)
+    closeness_scale = np.where(np.isfinite(closeness_scale) & (closeness_scale > 0), closeness_scale, 1.0)
+    tail_scale = np.maximum(np.abs(tail_target[:, None]), 1e-6)
+
+    score = (
+        closeness / closeness_scale
+        + args.best_member_tail_weight * tail_deficit / tail_scale
+        + args.best_member_tail_excess_weight * tail_excess / tail_scale
+    )
+    score = np.where(np.isfinite(score), score, np.inf)
+    member_idx = np.argmin(score, axis=1)
+
+    pred = samples[:, np.arange(samples.shape[1]), member_idx]
+    return pred.astype(np.float32), member_idx.astype(np.int64), score.astype(np.float32)
+
+
 if __name__ == '__main__':
 
     args = build_args()
@@ -247,14 +311,29 @@ if __name__ == '__main__':
     # from raw model prediction to actual pr/tasmax values
     predictand_stats = np.load(args.train_path + "predictand_stats.npz", allow_pickle=True)
     y_pred = inverse_transform_predictand(y_pred_raw, predictand_stats)
+    y_pred_samples = None
+    y_pred_sample0 = None
+    y_pred_q90 = None
+    y_pred_pmm = None
+    y_pred_best_member = None
+    best_member_idx = None
+    best_member_score = None
 
     if y_pred.ndim == 3:
-        write_log(f"\nComputing samples mean, from shape {y_pred.shape}... ", args, accelerator, 'a')
-        y_pred = np.mean(y_pred, axis=-1)     
+        write_log(f"\nComputing sample aggregations from shape {y_pred.shape}... ", args, accelerator, 'a')
+        y_pred_samples = y_pred
+        y_pred_sample0 = y_pred_samples[:, :, 0]
+        y_pred_q90 = np.nanquantile(y_pred_samples, 0.9, axis=-1)
+        y_pred_pmm = probability_matched_mean(y_pred_samples)
+        y_pred_best_member, best_member_idx, best_member_score = select_best_member(y_pred_samples, args)
+        y_pred = np.nanmean(y_pred_samples, axis=-1)
         write_log(f"to {y_pred.shape}.", args, accelerator, 'a')
 
     if args.target_type == "precipitation":
         y_pred[y_pred < args.threshold] = 0.0
+        for arr in (y_pred_samples, y_pred_sample0, y_pred_q90, y_pred_pmm, y_pred_best_member):
+            if arr is not None:
+                arr[arr < args.threshold] = 0.0
 
     # LON LAT
     lat_low = low_high_graph["low"].lat.cpu().numpy()
@@ -277,6 +356,9 @@ if __name__ == '__main__':
         degree[~mask] = np.nan
         if y_pred is not None:
             y_pred[~mask,:] = np.nan
+        for arr in (y_pred_samples, y_pred_sample0, y_pred_q90, y_pred_pmm, y_pred_best_member):
+            if arr is not None:
+                arr[~mask, ...] = np.nan
 
     #-----------------------------------------------------
     #-------------------- SAVE RESULTS -------------------
@@ -286,13 +368,36 @@ if __name__ == '__main__':
 
     if args.target_type == "precipitation":
         data.pr_gnn4cd = y_pred
+        if y_pred_samples is not None:
+            data.pr_gnn4cd_samples = y_pred_samples
+            data.pr_gnn4cd_sample0 = y_pred_sample0
+            data.pr_gnn4cd_q90 = y_pred_q90
+            data.pr_gnn4cd_pmm = y_pred_pmm
+            data.pr_gnn4cd_best_member = y_pred_best_member
     elif args.target_type == "temperature":
         data.tasmax_gnn4cd = y_pred
+        if y_pred_samples is not None:
+            data.tasmax_gnn4cd_samples = y_pred_samples
+            data.tasmax_gnn4cd_sample0 = y_pred_sample0
+            data.tasmax_gnn4cd_q90 = y_pred_q90
+            data.tasmax_gnn4cd_pmm = y_pred_pmm
+            data.tasmax_gnn4cd_best_member = y_pred_best_member
     
     data.target = target_test
+    data.best_member_idx = best_member_idx
+    data.best_member_score = best_member_score
+    data.best_member_transform = args.best_member_transform
+    data.best_member_reference_quantile = args.best_member_reference_quantile
+    data.best_member_tail_quantile = args.best_member_tail_quantile
+    data.best_member_tail_target = args.best_member_tail_target
+    data.best_member_tail_weight = args.best_member_tail_weight
+    data.best_member_tail_excess_weight = args.best_member_tail_excess_weight
 
-    data.times = time_index_test[idxs_sorted]
-    data.times_target = time_index_test
+    # Predictions are sorted by graph.idxs inside Predictor. These correspond to
+    # test_idxs_valid_subset, not to positions starting from zero. Using
+    # time_index_test[idxs_sorted] shifts daily plots by history_length days.
+    data.times = time_index_test[test_idxs_valid_subset]
+    data.times_target = time_index_test[test_idxs_valid_subset]
     data["low"].lat = lat_low
     data["low"].lon = lon_low
     data["high"].lat = lat_high

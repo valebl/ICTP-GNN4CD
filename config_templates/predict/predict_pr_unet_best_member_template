@@ -1,0 +1,121 @@
+#!/bin/bash
+
+#------------------#
+# SLURM PARAMETERS #
+#------------------#
+ACCOUNT="ict26_esp_0"
+PARTITION="boost_usr_prod"
+QOS=""
+TIME="02:00:00"
+MEM="100G"
+JOB_NAME="pred-unet-a005-b008-best-member"
+LOG_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/diffusion/ESD_pseudo_reality/predictions/0517_unet_cfm_qmse_psd_pr_ALPHA005_BETA008_LR0008_bin25_e118_best_member/"
+N_GPU="1"
+
+#------------------#
+# TRAIN PARAMETERS #
+#------------------#
+TRAIN_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/diffusion/ESD_pseudo_reality/0517_unet_cfm_qmse_psd_pr_ALPHA005_BETA008_LR0008_bin25/"
+EPOCH="110"
+GRAPH_FILE="low_high_graph.pkl"
+SEED="100"
+TARGET_TYPE="precipitation"
+
+#--------------------------------------------#
+# PATHS (conda env, main, accelerate config) #
+#--------------------------------------------#
+SOURCE_PATH="/leonardo/home/userexternal/$USER/Conda_init.txt"
+ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv"
+MAIN_PATH="$HOME/benchmarks/Unet_flow_matching_SA"
+ACCELERATE_CONFIG_PATH="/leonardo/home/userexternal/$USER/.cache/huggingface/accelerate/default_config.yaml"
+CARTOPY_DATA_DIR="/leonardo_work/ICT26_ESP/vblasone/cartopy/"
+
+#-------------------------------#
+# INPUT/OUTPUT FILES PARAMETERS #
+#-------------------------------#
+INPUT_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain_0403/ESD_pseudo_reality/pr/train/"
+OUTPUT_PATH=${LOG_PATH}
+LOG_FILE="log.txt"
+LOW_INPUT_FILE="low_input.npy"
+OROG_FILE="orog.npy"
+MASK_SEALAND_FILE="mask_sealand.npy"
+COORDS_IJ_FILE="coords_ij.npy"
+TARGET_FILE="target.npy"
+METADATA_FILE="low_input_metadata.json"
+CHECKPOINT="checkpoints/checkpoint_${EPOCH}"
+DATASET_NAME="Dataset_Graph"
+TEST_IDXS_FILE=""
+OUTPUT_FILE="G_SA_pr_unet_cfm_ALPHA005_BETA008_LR0008_e${EPOCH}_1980_best_member.pkl"
+
+#------------------#
+# MODEL PARAMETERS #
+#------------------#
+MODEL_NAME="GNN4CD_UNet_Model"
+HISTORY_LENGTH=2
+LOSS_NAME="CFM_QMSE_PSD_Loss"
+THRESHOLD=0.0
+N_STEPS=50
+N_SAMPLES=10
+
+#-------------------------#
+# BEST-MEMBER PARAMETERS  #
+#-------------------------#
+# Transform used only for member scoring. "log1p" reduces the dominance of
+# very large precipitation values; "none" scores in physical units.
+BEST_MEMBER_TRANSFORM="log1p"
+
+# Quantile across ensemble members used as the reference field. For each day,
+# every full sample map is compared against this reference map. Lower values
+# such as 0.20/0.30 favor drier, less extreme members; 0.50 is the median map.
+BEST_MEMBER_REFERENCE_QUANTILE=0.20
+
+# Spatial tail statistic used to judge whether a sample map has enough intense
+# precipitation. 0.98 means the p98 value over all high-resolution grid cells.
+BEST_MEMBER_TAIL_QUANTILE=0.98
+
+# Target rank for the tail statistic across ensemble members. 0.75 means the
+# desired tail is around the 75th percentile of the candidate members' tails.
+BEST_MEMBER_TAIL_TARGET=0.75
+
+# Penalty weight for samples whose tail is weaker than the target tail.
+# Set to 0.00 for pure closeness-only member selection.
+BEST_MEMBER_TAIL_WEIGHT=0.50
+
+# Penalty weight for samples whose tail is stronger than the target tail.
+# Useful if false extreme rain appears too often; 0.00 leaves high tails unpenalized.
+BEST_MEMBER_TAIL_EXCESS_WEIGHT=0.00
+
+# Closeness-only selection:
+# BEST_MEMBER_TAIL_WEIGHT=0.00
+# BEST_MEMBER_TAIL_EXCESS_WEIGHT=0.00
+
+#-------------------#
+# PREDICTION PERIOD #
+#-------------------#
+TEST_DAY_START=1
+TEST_MONTH_START=1
+TEST_YEAR_START=1980
+TEST_DAY_END=31
+TEST_MONTH_END=12
+TEST_YEAR_END=1980
+TEST_YEARS=""
+
+#------------#
+# VAL REPORT #
+#------------#
+VAR="pr"
+DOMAIN="SA"
+CONFIG_FILE_VAL_REPORT="${MAIN_PATH}/config_templates/plot/CORDEXML_test_report_${DOMAIN}.json"
+
+#-----------------#
+# BOOLEAN OPTIONS #
+#-----------------#
+USE_ACCELERATE=true
+
+#--------------do not change here below------------------
+
+if [ ${USE_ACCELERATE} = true ] ; then
+	USE_ACCELERATE="--use_accelerate"
+else
+	USE_ACCELERATE="--no-use_accelerate"
+fi

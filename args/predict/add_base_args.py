@@ -35,6 +35,13 @@ def add_base_args(parser):
     parser.add_argument('--batch_size', type=int)
     parser.add_argument('--seed', type=int)
 
+    parser.add_argument('--best_member_transform', type=str, default='log1p', choices=('none', 'log1p'))
+    parser.add_argument('--best_member_reference_quantile', type=float, default=0.5)
+    parser.add_argument('--best_member_tail_quantile', type=float, default=0.98)
+    parser.add_argument('--best_member_tail_target', type=float, default=0.75)
+    parser.add_argument('--best_member_tail_weight', type=float, default=0.5)
+    parser.add_argument('--best_member_tail_excess_weight', type=float, default=0.0)
+
     parser.add_argument('--use_accelerate',  action='store_true')
     parser.add_argument('--no-use_accelerate', dest='use_accelerate', action='store_false')
 

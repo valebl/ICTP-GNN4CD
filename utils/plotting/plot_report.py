@@ -54,6 +54,7 @@ parser.add_argument('--var', type=str)
 parser.add_argument('--domain', type=str)
 parser.add_argument('--experiment', type=str)
 parser.add_argument('--config_file', type=str)
+parser.add_argument('--pred_attr', type=str, default=None)
 
 # ==================== Utility Functions ====================
 
@@ -453,7 +454,10 @@ if __name__ == '__main__':
     season_file=args.season_file
 
     VAL_FILE = input_path + val_file
-    OUTPUT_PDF = plot_path + f"GNN4CD_{EXPERIMENT}_{DOMAIN}_{val_year}_{VAR}.pdf"
+    default_pred_attr = 'pr_gnn4cd' if VAR == 'pr' else 'tasmax_gnn4cd'
+    pred_attr = args.pred_attr or default_pred_attr
+    pred_suffix = "" if pred_attr == default_pred_attr else f"_{pred_attr}"
+    OUTPUT_PDF = plot_path + f"GNN4CD_{EXPERIMENT}_{DOMAIN}_{val_year}_{VAR}{pred_suffix}.pdf"
 
     print("Loading validation data...")
     with open(VAL_FILE, 'rb') as f:
@@ -484,13 +488,13 @@ if __name__ == '__main__':
     IS_HETERODATA = hasattr(data, '_node_store_dict')
 
     if IS_HETERODATA:
-        pred   = data.pr_gnn4cd   if VAR == 'pr' else data.tasmax_gnn4cd
+        pred   = getattr(data, pred_attr)
         target = data.target if VAR == 'pr' else data.target
         lon    = data['high'].lon
         lat    = data['high'].lat           
         times  = data.times if hasattr(data, 'times') else np.arange(pred.shape[1])
     else:
-        pred   = data['pr_gnn4cd']   if VAR == 'pr' else data['tasmax_gnn4cd']
+        pred   = data[pred_attr]
         target = data['pr_target']   if VAR == 'pr' else data['tasmax_target']
         lon    = data['lon']
         lat    = data['lat']

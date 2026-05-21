@@ -7,7 +7,7 @@ sbatch << EOT
 #!/bin/bash
 #SBATCH -A ${ACCOUNT}
 #SBATCH -p ${PARTITION}
-#SBATCH --qos=${QOS}
+$( [[ -n "${QOS}" ]] && echo "#SBATCH --qos=${QOS}" )
 #SBATCH --time=${TIME}
 #SBATCH -N 1
 #SBATCH --mem=${MEM}
@@ -76,6 +76,9 @@ add_arg n_val_years "${N_VAL_YEARS}"
 add_arg checkpoint_ctd "${CHECKPOINT_CTD}"
 add_arg alpha "${ALPHA}"
 add_arg beta "${BETA}"
+add_arg gamma "${GAMMA}"
+add_arg anchor_weight "${ANCHOR_WEIGHT}"
+add_arg wet_threshold "${WET_THRESHOLD}"
 add_arg binmin "${BINMIN}"
 add_arg binmax "${BINMAX}"
 add_arg binwidth "${BINWIDTH}"
@@ -110,6 +113,8 @@ fi
 
 # More args
 add_arg history_length "${HISTORY_LENGTH}"
+add_arg n_steps "${N_STEPS}"
+add_arg n_samples "${N_SAMPLES}"
 add_arg predictand_transform_mode "${PREDICTAND_TRANSFORM_MODE}"
 add_arg predictor_low_transform_mode "${PREDICTOR_LOW_TRANSFORM_MODE}"
 add_arg predictor_high_transform_mode "${PREDICTOR_HIGH_TRANSFORM_MODE}"

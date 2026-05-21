@@ -349,7 +349,7 @@ if __name__ == '__main__':
         lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
             T_max=args.epochs,
-            eta_min=args.eta_min,
+            eta_min=args.lr_eta_min,
             last_epoch=-1
         )
     elif args.lr_scheduler == "CosineAnnealingLR_with_warmup":
@@ -363,7 +363,7 @@ if __name__ == '__main__':
         cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
             T_max=args.epochs - 2,
-            eta_min=args.eta_min,
+            eta_min=args.lr_eta_min,
         )
         lr_scheduler = torch.optim.lr_scheduler.SequentialLR(
             optimizer,
