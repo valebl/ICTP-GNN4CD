@@ -1,0 +1,124 @@
+#!/bin/bash
+
+#------------------#
+# SLURM PARAMETERS #
+#------------------#
+TIME="08:00:00"
+MEM="100G"
+JOB_NAME="crps"
+MAIL="vblasone@ictp.it"
+LOG_PATH="/leonardo_work/ICT26_ESP/vblasone/GNN4CD-CORDEXML/runs/pr/crps_noisy/"
+N_GPU="1"
+SEED=100
+MODEL_NAME="GNN4CD_model_mod1_Noisy"
+MODEL_TYPE="Rall"
+TARGET_TYPE="precipitation"
+LR_SCHEDULER="StepLR"
+RUN_TYPE="CORDEXML"
+
+#--------------------------------------------#
+# PATHS (conda env, main, accelerate config) #
+#--------------------------------------------#
+SOURCE_PATH="/leonardo/home/userexternal/vblasone/.bashrc"
+ENV_PATH="/leonardo/home/userexternal/vblasone/.conda/envs/GNN4CDenv"
+MAIN_PATH="/leonardo_work/ICT26_ESP/vblasone/GNN4CD-CORDEXML"
+ACCELERATE_CONFIG_PATH="/leonardo/home/userexternal/vblasone/.cache/huggingface/accelerate/default_config_${N_GPU}.yaml"
+
+#-------------------------------#
+# INPUT/OUTPUT FILES PARAMETERS #
+#-------------------------------#
+INPUT_PATH="/leonardo_work/ICT26_ESP/SHARED/preprocessed/CORDEXML/ALPS/train/ESD_pseudo_reality/pr/"
+OUTPUT_PATH=${LOG_PATH}
+LOG_FILE="log.txt"
+LOW_INPUT_FILE="low_input.npy"
+OROG_FILE="orog.npy"
+MASK_SEALAND_FILE="mask_sealand.npy"
+COORDS_IJ_FILE="coords_ij.npy"
+TARGET_FILE="target.npy"
+METADATA_FILE="low_input_metadata.json"
+GRAPH_FILE="low_high_graph.pkl"
+DATASET_NAME="Dataset_Graph"
+COLLATE_NAME="custom_collate_fn_graph"
+
+#---------------------#
+# TRAINING PARAMETERS #
+#---------------------#
+
+EPOCHS=150
+BATCH_SIZE=64
+LR_STEP_SIZE=25
+LR=0.001
+WEIGHT_DECAY=0.0
+LOSS_FN="CRPSLoss"
+ALPHA=0.0
+BETA=0.0
+WANDB_PROJECT_NAME="CORDEXML_pr_crps"
+
+# Noisy model / CRPS-specific parameters
+NUM_CHANNELS_NOISE=5
+MEMBERS_FOR_TRAINING=5
+SPATIAL_GRAD_WEIGHT=0.0
+VAL_ENSEMBLE_SIZE=1
+ENSEMBLE_SIZE=10
+
+# CRPSSpectralLoss parameters (used only when LOSS_FN="CRPSSpectralLoss").
+# H_SHAPE * W_SHAPE must equal the number of high-res nodes per snapshot,
+# i.e. the high-res grid must be regular. main_2.py asserts this at startup.
+# SPATIAL_RESOLUTION <= 0 disables the optional Nyquist low-pass filter.
+H_SHAPE=128
+W_SHAPE=128
+LAMBDA_SPECTRAL=0.1
+SPATIAL_RESOLUTION=0.0
+
+#----------------------------------------#
+#             TRAINING PERIOD            #
+#----------------------------------------#
+
+TRAIN_YEARS=""
+VAL_YEARS=""
+
+TRAIN_YEAR_START=1961
+TRAIN_MONTH_START=1
+TRAIN_DAY_START=3
+TRAIN_YEAR_END=1979
+TRAIN_MONTH_END=12
+TRAIN_DAY_END=29
+VALIDATION_YEAR=1980
+
+FIRST_YEAR=""
+LAST_YEAR=""
+N_VAL_YEARS=""
+
+#-----------------#
+# BOOLEAN OPTIONS #
+#-----------------#
+CTD_TRAINING=false
+FINE_TUNING=true
+USE_ACCELERATE=true
+MAKE_VAL_PLOTS=true
+
+#--------------do not change here below------------------
+
+if [ ${USE_ACCELERATE} = true ] ; then
+	USE_ACCELERATE="--use_accelerate"
+else
+	USE_ACCELERATE="--no-use_accelerate"
+fi
+
+if [ ${CTD_TRAINING} = true ] ; then
+	CTD_TRAINING="--ctd_training"
+else
+	CTD_TRAINING="--no-ctd_training"
+fi
+
+if [ ${FINE_TUNING} = true ] ; then
+	FINE_TUNING="--fine_tuning"
+else
+	FINE_TUNING="--no-fine_tuning"
+fi
+
+if [ ${MAKE_VAL_PLOTS} = true ] ; then
+	MAKE_VAL_PLOTS="--make_val_plots"
+else
+	MAKE_VAL_PLOTS="--no-make_val_plots"
+fi
