@@ -103,7 +103,7 @@ if __name__ == '__main__':
         date_to_idxs_from_timeindex
     )
 
-    if accelerator.is_main_process:
+    if accelerator is None or accelerator.is_main_process:
         print(f"Output (start_idx, end_idx): {test_idxs_valid[0], test_idxs_valid[-1]}" +
         f" corresponding to {time_index[test_idxs_valid[0]], time_index[test_idxs_valid[-1]]}")
 
@@ -183,7 +183,7 @@ if __name__ == '__main__':
     #-----------------------------------------------------
 
     if accelerator is None:
-        checkpoint = torch.load(args.train_path + args.checkpoint, map_location=torch.device('cpu'), weights_only=True)
+        checkpoint = torch.load(args.train_path + args.checkpoint + "/pytorch_model.bin", map_location=torch.device('cpu'), weights_only=True)
         device = 'cpu'
     else:
         try:
@@ -291,8 +291,7 @@ if __name__ == '__main__':
     
     data.target = target_test
 
-    data.times = time_index_test[idxs_sorted]
-    data.times_target = time_index_test
+    data.times = time_index_test[test_idxs_valid_subset][idxs_sorted]
     data["low"].lat = lat_low
     data["low"].lon = lon_low
     data["high"].lat = lat_high
