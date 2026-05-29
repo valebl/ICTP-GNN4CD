@@ -165,8 +165,10 @@ def get_edge_features_lon_lat_orog(
 
     delta_lon = lon_senders[senders] - lon_receivers[receivers]
     delta_lat = lat_senders[senders] - lat_receivers[receivers]
-    delta_orog = orog_senders[senders] - orog_receivers[receivers]
-
-    return np.column_stack((delta_lon, delta_lat, delta_orog))
+    if orog_senders is not None and orog_receivers is not None:
+        delta_orog = orog_senders[senders] - orog_receivers[receivers]
+        return np.column_stack((delta_lon, delta_lat, delta_orog))
+    else:
+        return np.column_stack((delta_lon, delta_lat))
 
 

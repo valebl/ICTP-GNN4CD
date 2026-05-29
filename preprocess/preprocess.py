@@ -168,7 +168,7 @@ low_high_graph = HeteroData()
 
 #-- EDGES --#
 use_edge_attr_high = False
-use_edge_attr_low = False
+use_edge_attr_low = True
 
 write_log(f"\n-- 1. Derive low-to-high edges", args, accelerator=None, mode='a')
 
@@ -207,7 +207,7 @@ edges_low2high_upd[0] = new_index[edges_low2high[0]]
 assert (edges_low2high_upd[0] >= 0).all()
 assert low_input_upd.shape[0] == unique_src.shape[0]
 
-# 2. Low-to-high edges
+# 2. high-within-high edges
 write_log(f"\n-- 2. Derive high-within-high edges", args, accelerator=None, mode='a')
 
 edges_high, edges_high_attr = derive_edge_index_within(
@@ -223,6 +223,21 @@ edges_high, edges_high_attr = derive_edge_index_within(
     )
 
 edges_high = torch.tensor(edges_high)
+
+# 3. Low-within-low edges
+write_log(f"\n-- 3. Derive low-within-low edges", args, accelerator=None, mode='a')
+
+edges_low, edges_low_attr = derive_edge_index_within(
+    lon_radius=args.lon_grid_radius_high,
+    lat_radius=args.lat_grid_radius_high,
+    lon_senders=lon_low_upd,
+    lat_senders=lat_low_upd,
+    lon_receivers=lon_low_upd,
+    lat_receivers=lat_low_upd,
+    use_edge_attr=False
+    )
+
+edges_low = torch.tensor(edges_low)
 
 #-- TO GRAPH ATTRIBUTES --#
 
@@ -245,6 +260,12 @@ if use_edge_attr_low:
 low_high_graph['high', 'within', 'high'].edge_index = edges_high
 if use_edge_attr_high:
     low_high_graph['high', 'within', 'high'].edge_attr = torch.tensor(edges_high_attr).float()
+
+# 3. Low within Low
+low_high_graph['low', 'within', 'low'].edge_index = edges_low
+
+# 4. High to Low
+low_high_graph['high', 'to', 'low'].edge_index = low_high_graph['low', 'to', 'high'].edge_index.flip(0)
 
 #-- SAVE METADATA --#
 
