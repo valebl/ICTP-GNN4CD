@@ -8,9 +8,11 @@ def extract_bernoulli_gamma_mean(y_out):
     shape_raw = y_out[:, 1]
     scale_raw = y_out[:, 2]
 
+    # transforms
     p = torch.sigmoid(p_raw)
     shape = F.softplus(shape_raw)
     scale = F.softplus(scale_raw)
 
-    # mean of mixture: (1 - p_zero) * mean_gamma
-    return (1 - p) * (shape * scale)
+    # mean of mixture: p * mean_gamma
+    return p * shape * scale
+

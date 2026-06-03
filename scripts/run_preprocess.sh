@@ -63,6 +63,8 @@ add_arg log_file "${LOG_FILE}"
 # Grid radius
 add_arg lon_grid_radius_high "${LON_GRID_RADIUS_HIGH}"
 add_arg lat_grid_radius_high "${LAT_GRID_RADIUS_HIGH}"
+add_arg lon_grid_radius_low "${LON_GRID_RADIUS_LOW}"
+add_arg lat_grid_radius_low "${LAT_GRID_RADIUS_LOW}"
 
 # Mask + land use
 add_arg mask_path "${MASK_PATH}"

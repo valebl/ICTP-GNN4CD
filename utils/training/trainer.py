@@ -38,6 +38,9 @@ class Trainer(object):
         
         write_log(f"\nStart training the regressor.", args, accelerator, 'a')
 
+        # Load stats for validation
+        stats = np.load(args.output_path+"predictand_stats.npz", allow_pickle=True)
+
         step = 0
         
         for epoch in range(epoch_start, epoch_start+args.epochs):
@@ -72,13 +75,19 @@ class Trainer(object):
                     loss, loss_components = loss_fn(y_out, y, bins)
                 else:
                     if getattr(loss_fn, "components", False):
-                        loss, loss_components = loss_fn(y_out, y)  # the loss internally handles the different y_out cases
+                        if "GRAD" in loss_fn.components:
+                            if "BCE" in loss_fn.components:
+                                loss, loss_components = loss_fn(y_out, y, stats, graph['high', 'within', 'high'].edge_index)
+                            else:
+                                loss, loss_components = loss_fn(y_out, y, graph['high', 'within', 'high'].edge_index)
+                        else:
+                            loss, loss_components = loss_fn(y_out, y)  # the loss internally handles the different y_out cases
                     else:
                         loss = loss_fn(y_out, y)  # the loss internally handles the different y_out cases
                 
                 optimizer.zero_grad()
                 accelerator.backward(loss)
-                #accelerator.clip_grad_norm_(model.parameters(), 5)
+                accelerator.clip_grad_norm_(model.parameters(), 1)
                 optimizer.step()
                 step += 1
                 
@@ -142,7 +151,13 @@ class Trainer(object):
                             loss, loss_components = loss_fn(y_out, y, bins)
                         else:
                             if getattr(loss_fn, "components", False):
-                                loss, loss_components = loss_fn(y_out, y)  # the loss internally handles the different y_out cases
+                                if "GRAD" in loss_fn.components:
+                                    if "BCE" in loss_fn.components:
+                                        loss, loss_components = loss_fn(y_out, y, stats, graph['high', 'within', 'high'].edge_index)
+                                    else:
+                                        loss, loss_components = loss_fn(y_out, y, graph['high', 'within', 'high'].edge_index)
+                                else:
+                                    loss, loss_components = loss_fn(y_out, y)  # the loss internally handles the different y_out cases
                             else:
                                 loss = loss_fn(y_out, y)  # the loss internally handles the different y_out cases
 
@@ -204,7 +219,6 @@ class Trainer(object):
                         print(f"y_pred_all.shape: {y_pred_all.shape}, y_all.shape: {y_all.shape}, indices.shape: {indices.shape}")
 
                         # Get the actual precipitation/temperature prediction
-                        stats = np.load(args.output_path+"predictand_stats.npz", allow_pickle=True)
                         y_all = inverse_transform_predictand(y_all, stats)
                         y_pred_all = inverse_transform_predictand(y_pred_all, stats)
 

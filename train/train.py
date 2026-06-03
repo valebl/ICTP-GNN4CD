@@ -91,14 +91,14 @@ if __name__ == '__main__':
     orog = np.load(args.input_path+args.orog_file)
 
     #-- 5. Mask sea-land
-    if args.mask_sealand_file != "":
+    if args.mask_sealand_file != "" and args.mask_sealand_file is not None:
         mask_sealand = np.load(args.input_path+args.mask_sealand_file)
         use_mask_sealand = True
     else:
         use_mask_sealand = False
     
     #-- 6. Coords ij
-    if args.coords_ij_file != "":
+    if args.coords_ij_file != "" and args.coords_ij_file is not None:
         coords_ij = np.load(args.input_path+args.coords_ij_file)
         use_coords_ij = True
     else:
@@ -192,15 +192,12 @@ if __name__ == '__main__':
     write_log(f"\nn_vars: {n_vars}, n_levels: {n_levels}, n_static_high: {n_static_high}", args, accelerator, 'a')
 
     # 2. Transform predictand
-    if args.loss_name == "Bernoulli_Gamma_NLL_Loss":
-        target_trans = target
-    else:
-        target_trans = transform_predictand(
-            target,
-            mode=args.predictand_transform_mode,      # e.g. "log1p", "z_score", "minmax"
-            train_idxs=train_idxs,
-            stats_save_path=args.output_path + "predictand_stats.npz"
-        )
+    target_trans = transform_predictand(
+        target,
+        mode=args.predictand_transform_mode,      # e.g. "log1p", "z_score", "minmax"
+        train_idxs=train_idxs,
+        stats_save_path=args.output_path + "predictand_stats.npz"
+    )
     
     #-------------------------------------------
     #-------------- BUILD LOSS -----------------
@@ -326,17 +323,31 @@ if __name__ == '__main__':
         write_log(f"\nRAM memory {round((used_memory/total_memory) * 100, 2)} %", args, accelerator, 'a')
 
     #-----------------------------------------------------
+    #----------------- LOAD A CHECKPOINT -----------------
+    #-----------------------------------------------------
+
+    if args.ctd_training:
+        write_log("\nContinuing the training.")
+        accelerator.load_state(args.checkpoint_ctd)
+        epoch_start = torch.load(args.checkpoint_ctd+"epoch")["epoch"] + 1
+            
+    inspect_model(model, args, accelerator)
+
+    total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    write_log(f"\nTotal number of trainable parameters: {total_params}.", args, accelerator, 'a')
+
+    #-----------------------------------------------------
     #------------ OPTIMIZER AND LR SCHEDULER -------------
     #-----------------------------------------------------
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    # optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, weight_decay=args.weight_decay)
+    # optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, weight_decay=args.weight_decay)
     
     if args.lr_scheduler == "StepLR":
         lr_scheduler = torch.optim.lr_scheduler.StepLR(
             optimizer,
-            step_size=args.step_size,
-            gamma=args.step_lr_gamma
+            step_size=args.lr_step_size,
+            gamma=args.lr_gamma
         )
     elif args.lr_scheduler == "ReduceLROnPlateau":
         lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -349,7 +360,7 @@ if __name__ == '__main__':
         lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
             T_max=args.epochs,
-            eta_min=args.eta_min,
+            eta_min=args.lr_eta_min,
             last_epoch=-1
         )
     elif args.lr_scheduler == "CosineAnnealingLR_with_warmup":
@@ -358,12 +369,12 @@ if __name__ == '__main__':
             optimizer,
             start_factor=0.1,            # starts at 3e-5, ramps to 3e-4
             end_factor=1.0,
-            total_iters=2,               # epochs
+            total_iters=args.lr_warmup_epochs,               # epochs
         )
         cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
             T_max=args.epochs - 2,
-            eta_min=args.eta_min,
+            eta_min=args.lr_eta_min,
         )
         lr_scheduler = torch.optim.lr_scheduler.SequentialLR(
             optimizer,
@@ -387,16 +398,6 @@ if __name__ == '__main__':
     else:
         write_log("\nNot using accelerator to prepare model, optimizer, dataloader and loss...", args, accelerator, 'a')
         model = model.cuda()
-
-    if args.ctd_training:
-        write_log("\nContinuing the training.")
-        accelerator.load_state(args.checkpoint_ctd)
-        epoch_start = torch.load(args.checkpoint_ctd+"epoch")["epoch"] + 1
-    
-    inspect_model(model, args, accelerator)
-
-    total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    write_log(f"\nTotal number of trainable parameters: {total_params}.", args, accelerator, 'a')
 
 #-----------------------------------------------------
 #----------------------- TRAIN -----------------------

@@ -2,7 +2,7 @@ def add_lr_specific_args(parser, lr_scheduler_name):
 
     if lr_scheduler_name == "StepLR":
         parser.add_argument('--lr_step_size', type=int, default=10, help='scheduler step size (global) for the StepLR scheduler')
-        parser.add_argument('--lr_gamma', type=int, help='gamma param for the StepLR scheduler')
+        parser.add_argument('--lr_gamma', type=float, help='gamma param for the StepLR scheduler')
 
     elif lr_scheduler_name == "ReduceLROnPlateau":
         parser.add_argument('--lr_mode', type=str, help='mode param for the ReduceLROnPlateau scheduler', default='min')

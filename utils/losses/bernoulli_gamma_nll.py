@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from .registry import register_loss
 
 
@@ -20,8 +21,8 @@ class Bernoulli_Gamma_NLL_Loss(nn.Module):
 
         # transforms
         p = torch.sigmoid(p_raw)
-        shape = torch.nn.functional.softplus(shape_raw) + self.eps
-        scale = torch.nn.functional.softplus(scale_raw) + self.eps
+        shape = F.softplus(shape_raw) + self.eps
+        scale = F.softplus(scale_raw) + self.eps
 
         if self.ignore_nans:
             mask = ~torch.isnan(target)

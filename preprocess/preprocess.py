@@ -168,6 +168,7 @@ low_high_graph = HeteroData()
 
 #-- EDGES --#
 use_edge_attr_high = False
+use_edge_attr_low2high = True
 use_edge_attr_low = True
 
 write_log(f"\n-- 1. Derive low-to-high edges", args, accelerator=None, mode='a')
@@ -179,7 +180,7 @@ edges_low2high, edges_low2high_attr = derive_edge_index_multiscale(
     lon_receivers=lon_high,
     lat_receivers=lat_high,
     k=9, undirected=False,
-    use_edge_attr=use_edge_attr_low)
+    use_edge_attr=use_edge_attr_low2high)
 
 edges_low2high = torch.tensor(edges_low2high)
 
@@ -228,13 +229,13 @@ edges_high = torch.tensor(edges_high)
 write_log(f"\n-- 3. Derive low-within-low edges", args, accelerator=None, mode='a')
 
 edges_low, edges_low_attr = derive_edge_index_within(
-    lon_radius=args.lon_grid_radius_high,
-    lat_radius=args.lat_grid_radius_high,
+    lon_radius=args.lon_grid_radius_low,
+    lat_radius=args.lat_grid_radius_low,
     lon_senders=lon_low_upd,
     lat_senders=lat_low_upd,
     lon_receivers=lon_low_upd,
     lat_receivers=lat_low_upd,
-    use_edge_attr=False
+    use_edge_attr=use_edge_attr_low
     )
 
 edges_low = torch.tensor(edges_low)
@@ -253,7 +254,7 @@ low_high_graph['high'].num_nodes = low_high_graph["high"].lon.shape[0]
 
 # 1. Low to High
 low_high_graph['low', 'to', 'high'].edge_index = edges_low2high_upd
-if use_edge_attr_low:
+if use_edge_attr_low2high:
     low_high_graph['low', 'to', 'high'].edge_attr = torch.tensor(edges_low2high_attr).float()
 
 # 2. High within High
@@ -263,6 +264,8 @@ if use_edge_attr_high:
 
 # 3. Low within Low
 low_high_graph['low', 'within', 'low'].edge_index = edges_low
+if use_edge_attr_low:
+    low_high_graph['low', 'within', 'low'].edge_attr = torch.tensor(edges_low_attr).float()
 
 # 4. High to Low
 low_high_graph['high', 'to', 'low'].edge_index = low_high_graph['low', 'to', 'high'].edge_index.flip(0)

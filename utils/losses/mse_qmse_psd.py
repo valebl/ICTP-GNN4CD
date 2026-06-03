@@ -18,6 +18,8 @@ class MSE_QMSE_PSD_Loss(nn.Module):
         parser.add_argument('--binmax', type=float)
         parser.add_argument('--binwidth', type=float)
         parser.add_argument('--binscale', type=str)
+        parser.add_argument('--y_dim', type=int)
+        parser.add_argument('--x_dim', type=int)   
         return parser
 
     def __init__(
@@ -25,15 +27,15 @@ class MSE_QMSE_PSD_Loss(nn.Module):
         alpha,
         beta,
         balance=None,
-        *psd_args,
-        **psd_kwargs
+        x_dim=128,
+        y_dim=128,
         ):
         super().__init__()
         self.alpha = alpha
         self.beta = beta
         self.mse_loss_fn = nn.MSELoss()
         self.qmse_loss_fn = QMSE_Loss(balance)
-        self.psd_loss_fn = PSD_Loss(apply_expm1=True, *psd_args, **psd_kwargs)
+        self.psd_loss_fn = PSD_Loss(apply_expm1=True, x_dim=x_dim, y_dim=y_dim)
 
     def forward(self, pred, target, bins):
         pred = pred.squeeze()
