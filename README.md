@@ -77,39 +77,3 @@ This is much faster than generating a full yearly report every epoch and avoids 
 For `ESD_pseudo_reality`, first generate one deterministic Attention prediction file covering 1961-1980. The DDPM training config uses 1961-1979 for training and 1980 for validation/checkpoint selection.
 
 For `Emulator_hist_future`, first generate one deterministic Attention prediction file covering 1961-1980 and 2080-2099. The DDPM training config uses 1961-1980 and 2080-2097 for training, and 2098-2099 for validation/checkpoint selection. This clean DDPM package includes a prediction/report config for 2098 only.
-
-## Commands
-
-Generate the ESD Attention baseline file:
-
-```bash
-bash $HOME/benchmarks/Experiments_Attention/scripts/run_predict.sh \
-  $HOME/benchmarks/Experiments_Attention/config/predict_pr_attention_SA_ESD_train_1961_1980
-```
-
-Train and predict ESD:
-
-```bash
-bash $HOME/benchmarks/Experiments_GNN_diffusion_ddpm_recon_wet_loss/run_residual_ddpm_lr.sh \
-  $HOME/benchmarks/Experiments_GNN_diffusion_ddpm_recon_wet_loss/config/train_pr_recon_wet_SA_ESD
-
-bash $HOME/benchmarks/Experiments_GNN_diffusion_ddpm_recon_wet_loss/run_predict_residual_ddpm_lr.sh \
-  $HOME/benchmarks/Experiments_GNN_diffusion_ddpm_recon_wet_loss/config/predict_pr_recon_wet_SA_ESD_1980
-```
-
-Generate the Emulator_hist_future Attention baseline file:
-
-```bash
-bash $HOME/benchmarks/Experiments_Attention/scripts/run_predict.sh \
-  $HOME/benchmarks/Experiments_Attention/config/predict_pr_attention_SA_Emulator_hist_future_train_1961_1980_2080_2099
-```
-
-Train and predict Emulator_hist_future:
-
-```bash
-bash $HOME/benchmarks/Experiments_GNN_diffusion_ddpm_recon_wet_loss/run_residual_ddpm_lr.sh \
-  $HOME/benchmarks/Experiments_GNN_diffusion_ddpm_recon_wet_loss/config/train_pr_recon_wet_SA_Emulator_hist_future
-
-bash $HOME/benchmarks/Experiments_GNN_diffusion_ddpm_recon_wet_loss/run_predict_residual_ddpm_lr.sh \
-  $HOME/benchmarks/Experiments_GNN_diffusion_ddpm_recon_wet_loss/config/predict_pr_recon_wet_SA_Emulator_hist_future_2098
-```
