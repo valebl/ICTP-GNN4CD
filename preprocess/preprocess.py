@@ -107,50 +107,125 @@ else:
 write_log(f"\n-- 2. OROGRAPHY ", args, accelerator=None, mode='a')
 orog_ds = xr.open_dataset(args.input_path_topo + args.topo_file)
 
-try:
-    orog = orog_ds.orog.to_numpy()
-except:
-    orog = orog_ds.z.to_numpy()
-
 if target_high is None:
-    lon_high = orog_ds.lon.to_numpy()
-    lat_high = orog_ds.lat.to_numpy()
+    try:
+        lon_high = orog_ds.lon.to_numpy()
+        lat_high = orog_ds.lat.to_numpy()
+    except:
+        lon_high = orog_ds.longitude.to_numpy()
+        lat_high = orog_ds.latitude.to_numpy()
+
+try:
+    orog_var = orog_ds.orog
+except:
+    orog_var = orog_ds.z
+
+# SA files usually store target lon/lat as 1D axes while topo may cover a
+# larger region. Select the topo field on the target grid before flattening.
+if target_high is not None:
+    lat_high_1d = np.unique(lat_high.flatten()) if lat_high.ndim > 1 else lat_high
+    lon_high_1d = np.unique(lon_high.flatten()) if lon_high.ndim > 1 else lon_high
+    lat_coord = "lat" if "lat" in orog_ds.coords or "lat" in orog_ds.dims else "latitude"
+    lon_coord = "lon" if "lon" in orog_ds.coords or "lon" in orog_ds.dims else "longitude"
+    try:
+        orog_sel = orog_var.sel(
+            {lat_coord: lat_high_1d, lon_coord: lon_high_1d},
+            method="nearest",
+            tolerance=0.01
+        )
+        orog = orog_sel.to_numpy()
+        write_log(
+            f"\n\tTopo selected shape: {orog.shape} to match target grid.",
+            args,
+            accelerator=None,
+            mode='a'
+        )
+    except Exception as exc:
+        orog = orog_var.to_numpy()
+        write_log(
+            f"\n\tCould not subset topo on target grid ({exc}); using raw topo shape {orog.shape}.",
+            args,
+            accelerator=None,
+            mode='a'
+        )
+else:
+    orog = orog_var.to_numpy()
 
 # 3. Mask sea-land
 write_log(f"\n-- 3. MASK SEA-LAND ", args, accelerator=None, mode='a')
-mask_sealand_ds = xr.open_dataset(args.input_path_mask_sealand + args.mask_sealand_file)
-
-mask_sealand = mask_sealand_ds.z.to_numpy()
+if args.mask_sealand_file not in ("", "None", None):
+    mask_sealand_ds = xr.open_dataset(args.input_path_mask_sealand + args.mask_sealand_file)
+    mask_sealand = mask_sealand_ds.z.to_numpy()
+else:
+    # SA preprocessing in Experiments_Valentina derives the mask from topography.
+    # Keep this as a fallback only for configs without an explicit mask file.
+    write_log(
+        "\n\tNo mask file provided; deriving SA land-sea mask from topography "
+        "(land where orog > 0).",
+        args,
+        accelerator=None,
+        mode='a'
+    )
+    mask_sealand = (orog > 0).astype(np.float32)
 
 # 4. Matrix coordinates ij
 write_log(f"\n-- 4. MATRIX COORDINATES ij ", args, accelerator=None, mode='a')
-i, j = np.meshgrid(
-    np.arange(lon_high.shape[0]),
-    np.arange(lon_high.shape[1]),
-    indexing="ij"
-)
+if lon_high.ndim == 1 and lat_high.ndim == 1:
+    y_dim = lat_high.shape[0]
+    x_dim = lon_high.shape[0]
+    ii, jj = np.meshgrid(np.arange(y_dim), np.arange(x_dim), indexing="ij")
+    lon_high_2d, lat_high_2d = np.meshgrid(lon_high, lat_high, indexing="xy")
+elif lon_high.ndim == 2 and lat_high.ndim == 2:
+    y_dim, x_dim = lon_high.shape
+    ii, jj = np.meshgrid(np.arange(y_dim), np.arange(x_dim), indexing="ij")
+    lon_high_2d, lat_high_2d = lon_high, lat_high
+else:
+    raise ValueError(
+        f"Unsupported high-resolution lon/lat shapes: lon={lon_high.shape}, lat={lat_high.shape}"
+    )
 
-i = 2.0 * i / (lon_high.shape[0] - 1) - 1.0 # normalise in [-1,1]
-j = 2.0 * j / (lon_high.shape[1] - 1) - 1.0
+if orog.shape != (y_dim, x_dim):
+    raise ValueError(
+        f"Orography shape {orog.shape} does not match high-resolution grid "
+        f"({y_dim}, {x_dim}). Check topo/target lat-lon alignment."
+    )
 
-coords = np.stack([i, j], axis=-1).reshape(-1, 2)
+if mask_sealand.shape != (y_dim, x_dim):
+    raise ValueError(
+        f"Mask shape {mask_sealand.shape} does not match high-resolution grid "
+        f"({y_dim}, {x_dim})."
+    )
+
+if target_high is not None and target_high.shape[1:] != (y_dim, x_dim):
+    raise ValueError(
+        f"Target spatial shape {target_high.shape[1:]} does not match high-resolution grid "
+        f"({y_dim}, {x_dim})."
+    )
+
+ii = 2.0 * ii / (y_dim - 1) - 1.0
+jj = 2.0 * jj / (x_dim - 1) - 1.0
+
+coords = np.stack([ii, jj], axis=-1).reshape(-1, 2)
 
 # 5. Land use
 write_log(f"\n-- 5. LAND USE - ignoring", args, accelerator=None, mode='a')
 
 write_log(f"\n\nDone! Spatial domain is [{lon_high.min()}, {lon_high.max()}] x [{lat_high.min()}, {lat_high.max()}].", args, accelerator=None, mode='a')
-write_log(f"\nlon shape {lon_high.shape}, lat shape {lat_high.shape}", args, accelerator=None, mode='a')
+write_log(
+    f"\nlon shape {lon_high.shape}, lat shape {lat_high.shape}, "
+    f"orog shape {orog.shape}, target shape {None if target_high is None else target_high.shape}",
+    args,
+    accelerator=None,
+    mode='a'
+)
 
 ## Now reshape for PYG compatibility but keep track of original dims
-y_dim = lon_high.shape[0] # time, x, y
-x_dim = lon_high.shape[1]
-
 if target_high is not None:
     target_high = target_high.reshape(target_high.shape[0],-1) # (time, num_nodes)
     target_high = target_high.swapaxes(0,1) # (num_nodes, time)
 
-lon_high = lon_high.flatten()
-lat_high = lat_high.flatten()
+lon_high = lon_high_2d.flatten()
+lat_high = lat_high_2d.flatten()
 orog = np.expand_dims(orog.flatten(), axis=-1)
 mask_sealand = np.expand_dims(mask_sealand.flatten(), axis=-1)
 

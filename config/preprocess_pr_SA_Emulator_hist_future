@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# SLURM
+ACCOUNT="ict26_esp_0"
+PARTITION="boost_usr_prod"
+QOS=""
+MAIL="wtang@ictp.it"
+TIME="00:30:00"
+MEM="150G"
+JOB_NAME="prep-att-pr-SA-Emul"
+
+# Paths
+SOURCE_PATH="/leonardo/home/userexternal/$USER/Conda_init.txt"
+ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv"
+MAIN_PATH="$HOME/benchmarks/Experiments_Attention"
+OUTPUT_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain_attention/Emulator_hist_future/pr/train/"
+LOG_FILE="log.txt"
+
+# Input data
+INPUT_PATH_PREDICTORS="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/SA_domain/train/Emulator_hist_future/predictors/"
+PREDICTORS_FILE="ACCESS-CM2_1961-1980_2080-2099.nc"
+INPUT_PATH_TARGET="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/SA_domain/train/Emulator_hist_future/target/"
+TARGET_FILE="pr_tasmax_ACCESS-CM2_1961-1980_2080-2099.nc"
+INPUT_PATH_TOPO="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/SA_domain/train/ESD_pseudo_reality/predictors/"
+TOPO_FILE="Static_fields.nc"
+
+# SA fallback: mask is derived from orography in preprocess.py when these are empty.
+INPUT_PATH_MASK_SEALAND=""
+MASK_SEALAND_FILE=""
+
+# Preprocess settings
+TARGET_TYPE="precipitation"
+TARGET_MULTIPLIER=1.0
+DATASET_NAME="CORDEXML"
+PARAMS="q,t,u,v,z"
+LEVELS="500,700,850"
+LON_GRID_RADIUS_HIGH=0.16
+LAT_GRID_RADIUS_HIGH=0.16

@@ -61,8 +61,10 @@ if __name__ == '__main__':
     else:
         accelerator = None
     
-    os.environ['WANDB_API_KEY'] = args.WANDB_API_KEY
-    os.environ['WANDB_USERNAME'] = args.WANDB_USERNAME
+    if args.WANDB_API_KEY:
+        os.environ['WANDB_API_KEY'] = args.WANDB_API_KEY
+    if args.WANDB_USERNAME:
+        os.environ['WANDB_USERNAME'] = args.WANDB_USERNAME
     os.environ['WANDB_MODE'] = 'offline'
     os.environ['WANDB_CONFIG_DIR']='./wandb/'
     os.environ['WANDB_SERVICE_WAIT'] = '300'
@@ -91,14 +93,14 @@ if __name__ == '__main__':
     orog = np.load(args.input_path+args.orog_file)
 
     #-- 5. Mask sea-land
-    if args.mask_sealand_file != "":
+    if args.mask_sealand_file not in ("", "None", None):
         mask_sealand = np.load(args.input_path+args.mask_sealand_file)
         use_mask_sealand = True
     else:
         use_mask_sealand = False
     
     #-- 6. Coords ij
-    if args.coords_ij_file != "":
+    if args.coords_ij_file not in ("", "None", None):
         coords_ij = np.load(args.input_path+args.coords_ij_file)
         use_coords_ij = True
     else:
@@ -335,8 +337,8 @@ if __name__ == '__main__':
     if args.lr_scheduler == "StepLR":
         lr_scheduler = torch.optim.lr_scheduler.StepLR(
             optimizer,
-            step_size=args.step_size,
-            gamma=args.step_lr_gamma
+            step_size=args.lr_step_size,
+            gamma=args.lr_gamma
         )
     elif args.lr_scheduler == "ReduceLROnPlateau":
         lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -349,7 +351,7 @@ if __name__ == '__main__':
         lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
             T_max=args.epochs,
-            eta_min=args.eta_min,
+            eta_min=args.lr_eta_min,
             last_epoch=-1
         )
     elif args.lr_scheduler == "CosineAnnealingLR_with_warmup":
@@ -363,7 +365,7 @@ if __name__ == '__main__':
         cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
             T_max=args.epochs - 2,
-            eta_min=args.eta_min,
+            eta_min=args.lr_eta_min,
         )
         lr_scheduler = torch.optim.lr_scheduler.SequentialLR(
             optimizer,
@@ -433,4 +435,3 @@ if __name__ == '__main__':
 
     write_log(f"\nCompleted in {end - start} seconds.\nDONE!", args, accelerator, 'a')
     
-

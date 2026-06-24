@@ -103,18 +103,25 @@ def create_validation_plots(
     y_pred_pdf = y_pred_plot.flatten()
     y_pdf = y_plot.flatten()
 
+    plot_meta = meta[target_type]
+
     # binmin
-    binmin = meta[target_type]["binmin"]
+    binmin = plot_meta.get("binmin")
     if binmin is None:
         binmin = min(np.floor(np.min(y_pred_plot)), np.floor(np.min(y_plot))) - 5
         
     # binmax
-    binmax = meta[target_type]["binmax"]
+    binmax = plot_meta.get("binmax")
     if binmax is None:
-        binmax = max(np.ceil(np.max(y_pred_plot)), np.ceil(np.min(y_plot))) + 5
+        binmax = max(np.ceil(np.max(y_pred_plot)), np.ceil(np.max(y_plot))) + 5
+
+    # binwidth
+    binwidth = plot_meta.get("binwidth", 0.5 if target_type == "precipitation" else 1.0)
+    if binwidth is None:
+        binwidth = 0.5 if target_type == "precipitation" else 1.0
 
     # bins
-    bins = np.arange(binmin,binmax,meta[target_type]["binwidth"]).astype(np.float32)
+    bins = np.arange(binmin, binmax, binwidth).astype(np.float32)
 
     hist_vals, bins = np.histogram(y_pred_pdf, bins=bins, density=False)
     bins_mid = (bins[:-1] + bins[1:]) / 2
@@ -146,5 +153,4 @@ def create_validation_plots(
     )
     
     return fig_avg, fig_bias, fig_pdf
-
 

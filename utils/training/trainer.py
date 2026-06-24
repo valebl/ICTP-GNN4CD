@@ -123,7 +123,8 @@ class Trainer(object):
                 model.eval()
 
                 # if epoch%5==0:
-                if args.make_val_plots and epoch % args.val_plot_frequency==0:
+                make_plots_this_epoch = args.make_val_plots and (epoch + 1) % args.val_plot_frequency == 0
+                if make_plots_this_epoch:
                     y_list = []
                     y_pred_list = []
                     idxs_list = []
@@ -157,7 +158,7 @@ class Trainer(object):
                             'val loss avg': val_loss_meter.avg
                         }, step=step)
                         
-                        if args.make_val_plots:
+                        if make_plots_this_epoch:
                             y_pred = extract_prediction(y_out, args.loss_name)
 
                             # Retrieve graphs for individual time instances
@@ -176,7 +177,7 @@ class Trainer(object):
                             idxs_list.append(idxs)     
 
                     ###### PLOTS ######
-                    if args.make_val_plots:
+                    if make_plots_this_epoch:
 
                         # Gather from GPUs and remove duplicated values due to gather
                         y_pred_all = accelerator.gather(torch.stack(y_pred_list)) # (time, nodes)
@@ -274,4 +275,4 @@ class Trainer(object):
                         }, step=step)
                     
             if lr_scheduler is not None:
-                lr_scheduler.step()  
+                lr_scheduler.step()

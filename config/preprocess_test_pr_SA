@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# SLURM
+ACCOUNT="ict26_esp_0"
+PARTITION="boost_usr_prod"
+QOS=""
+TIME="01:00:00"
+MEM="80G"
+JOB_NAME="prep-att-pr-SA-test"
+MAIL="wtang@ictp.it"
+
+# Runtime
+SOURCE_PATH="/leonardo/home/userexternal/$USER/Conda_init.txt"
+ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv"
+MAIN_PATH="/leonardo/home/userexternal/wtang001/benchmarks/Experiments_Attention"
+
+# This is the raw test directory currently used by the benchmark.
+RAW_TEST_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/SA_domain/test"
+
+# This is the newly preprocessed Attention-specific test directory.
+OUTPUT_TEST_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/test/axialattention_crossedgefeat"
+
+# Test subsets to mirror from RAW_TEST_PATH to OUTPUT_TEST_PATH.
+PERIODS="historical,mid_century,end_century"
+REALIZATIONS="perfect,imperfect"
+
+# Predictor variables expected by the Attention loader/model.
+PARAMS="q,t,u,v,z"
+LEVELS="500,700,850"
+
+# Set to "--overwrite" to regenerate existing files.
+OVERWRITE="--overwrite"

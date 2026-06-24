@@ -243,8 +243,8 @@ def derive_train_val_idxs_from_years_list(
         train_idxs.append(np.arange(start_idx - history_length, end_idx))
         train_idxs_valid.append(np.arange(start_idx, end_idx))
 
-    train_idxs = np.concat(train_idxs)
-    train_idxs_valid = np.concat(train_idxs_valid)
+    train_idxs = np.concatenate(train_idxs)
+    train_idxs_valid = np.concatenate(train_idxs_valid)
     # Filter the train_idxs that are valid and return their positions inside train_idxs
     train_idxs_valid = np.where(np.isin(train_idxs, train_idxs_valid))[0]
 
@@ -262,8 +262,8 @@ def derive_train_val_idxs_from_years_list(
         val_idxs.append(np.arange(start_idx - history_length, end_idx))
         val_idxs_valid.append(np.arange(start_idx, end_idx))
     
-    val_idxs = np.concat(val_idxs)
-    val_idxs_valid = np.concat(val_idxs_valid)
+    val_idxs = np.concatenate(val_idxs)
+    val_idxs_valid = np.concatenate(val_idxs_valid)
     # Filter the val_idxs that are valid and return their positions inside val_idxs
     val_idxs_valid = np.where(np.isin(val_idxs, val_idxs_valid))[0]
         

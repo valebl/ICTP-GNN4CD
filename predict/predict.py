@@ -70,14 +70,14 @@ if __name__ == '__main__':
     orog = np.load(args.input_path+args.orog_file)
 
     #-- 5. Mask sea-land
-    if args.mask_sealand_file != "":
+    if args.mask_sealand_file not in ("", "None", None):
         mask_sealand = np.load(args.input_path+args.mask_sealand_file)
         use_mask_sealand = True
     else:
         use_mask_sealand = False
     
     #-- 6. Coords ij
-    if args.coords_ij_file != "":
+    if args.coords_ij_file not in ("", "None", None):
         coords_ij = np.load(args.input_path+args.coords_ij_file)
         use_coords_ij = True
     else:

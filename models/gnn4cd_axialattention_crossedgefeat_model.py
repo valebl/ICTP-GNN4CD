@@ -182,7 +182,7 @@ class GNN4CD_AxialAttention_CrossEdgeFeat_Model(nn.Module):
     def add_model_specific_args(parser):
         parser.add_argument("--rnn_n_layers", type=int, default=2)
         parser.add_argument("--x_low_encoding_dim", type=int, default=128)
-        parser.add_argument("--x_low2high_dim", type=float, default=64)
+        parser.add_argument("--x_low2high_dim", type=int, default=64)
         return parser
     
     def __init__(
@@ -194,7 +194,7 @@ class GNN4CD_AxialAttention_CrossEdgeFeat_Model(nn.Module):
         history_length,
         rnn_n_layers,
         x_low_encoding_dim,
-        x_low2high_dim
+        x_low2high_dim,
         ):
 
         super().__init__()
@@ -223,6 +223,7 @@ class GNN4CD_AxialAttention_CrossEdgeFeat_Model(nn.Module):
         
         self.processor = Processor(64)
 
+        # Original point-wise MLP predictor.
         self.predictor = nn.Sequential(
             nn.Linear(64, 64),
             nn.ReLU(),
@@ -238,6 +239,8 @@ class GNN4CD_AxialAttention_CrossEdgeFeat_Model(nn.Module):
         x_low = x_low.view(N, T, self.x_low_var_dim, self.x_low_lev_dim).swapaxes(-2,-1) # (N, T, lev_dim, var_dim)
         encod_low = self.encoder(x_low)  # (N, x_low_encoding_dim)
         encod_low2high  = self.downscaler(encod_low, data.x_dict['high'], data['low', 'to', 'high'].edge_index, data['low', 'to', 'high'].edge_attr)
-        encod_high = self.processor(encod_low2high , data.edge_index_dict[('high','within','high')])
+
+        high_edge_index = data.edge_index_dict[('high','within','high')]
+        encod_high = self.processor(encod_low2high, high_edge_index)
         out = self.predictor(encod_high)
         return out

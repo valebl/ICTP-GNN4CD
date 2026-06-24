@@ -10,6 +10,10 @@ from accelerate import Accelerator
 from torch_geometric.data import HeteroData
 import xarray as xr
 
+import data.loaders  # noqa: F401 - register CORDEXML test loader
+from args.predict.add_base_args_test import add_base_args_test
+from args.predict.add_target_specific_args import add_target_specific_args
+from args.shared.add_model_specific_args import add_model_specific_args
 from models.build_model import build_model
 from data.datasets.graph_dataset import Graph_Dataset, custom_collate_fn_graph
 from data.loaders.registry import get_dataset_loader
@@ -20,49 +24,21 @@ from utils.predictand_transforms.inverse_transform_predictand import inverse_tra
 from utils.predictor_transforms.transform_predictors import transform_predictors
 from utils.losses.registry import get_loss
 
-def return_test_idxs_from_years_list(years_list, time_index, history_length):
-    test_idxs_list = []
-    test_idxs_valid_list = []
-    test_idxs_list = []
-    years = sorted(years_list)
-    for year in years:
-        test_start_idx, test_end_idx = date_to_idxs_from_timeindex(
-            year_start=year, month_start=1, day_start=1,
-            year_end=year, month_end=12, day_end=31,
-            time_index=time_index
-        )
-        if test_start_idx - history_length < 0:
-            test_start_idx = history_length
-        # indices of output
-        test_idxs_list.append(np.arange(test_start_idx - history_length, test_end_idx))
-        # indices of input
-        test_idxs_valid_list.append(np.arange(test_start_idx, test_end_idx))
-    test_idxs = np.concatenate(test_idxs_list)
-    test_idxs_valid = np.concatenate(test_idxs_valid_list)
-    # indices of input but referred to test_idxs_valid
-    test_idxs_valid_subset = np.where(np.isin(test_idxs, test_idxs_valid))[0]
+def return_test_idxs(predictor: xr.Dataset, period: str):
+    """Split test data by period using the NetCDF predictor time axis.
 
-    return test_idxs, test_idxs_valid_subset
-
-def return_test_idxs(predictor: xr.Dataset, 
-                     period: str):
-    """Split data into training and test sets.
-    
-    Args:
-        predictor: Predictor dataset
-        period: periof experiment name. #(['1981-2000','2041-2060','2080-2099'])
-        
+    This follows the original test workflow: the selected indices are taken
+    directly from the predictor file, so they stay aligned with the raw test
+    NetCDF calendar.
     """
     if period == 'historical':
         years_test = list(range(1981, 2001))
-        
     elif period == 'mid_century':
         years_test = list(range(2041, 2061))
     else:
         years_test = list(range(2080, 2100))
-    
-    test_idxs=np.argwhere(np.isin(predictor['time'].dt.year, years_test))
-    
+
+    test_idxs = np.argwhere(np.isin(predictor['time'].dt.year, years_test))
     return test_idxs
 
 
@@ -127,10 +103,17 @@ if __name__ == '__main__':
 
     #--6 Original netcdf predictors
     predictors_filename = args.input_path_P + args.predictors_filename
+    write_log(f"\nPredictor file: {predictors_filename}", args, accelerator, 'a')
 
     # Load the input dataset
     load_dataset = get_dataset_loader(args.dataset_name)
+    params = metadata.get("variables", ['q', 't', 'u', 'v', 'z'])
+    levels = metadata.get("levels", [850, 700, 500])
+    levels = [str(level) for level in levels]
+    write_log(f"\nUsing predictor channel order from metadata: params={params}, levels={levels}", args, accelerator, 'a')
     x_low, lat_low, lon_low, time_index, _, _ = load_dataset(
+        params=params,
+        levels=levels,
         file_path=args.input_path_P,
         file=args.predictors_filename,
         args=args
@@ -146,6 +129,11 @@ if __name__ == '__main__':
 
     x_low = np.transpose(x_low, (3, 4, 0, 1, 2)) #torch.permute(x_low, (3,4,0,1,2)) # lat, lon, time, vars, levels
     x_low = x_low.reshape(-1, *x_low.shape[2:]) # num_nodes, time, vars, levels
+    write_log(
+        f"\nLoaded test predictors: shape={x_low.shape}, "
+        f"min={np.nanmin(x_low):.6g}, max={np.nanmax(x_low):.6g}",
+        args, accelerator, 'a'
+    )
 
     # conditional (depends on how the graph was preprocessed)
     src = low_high_graph["low", "to", "high"].edge_index[0,:]              # shape (2,num_edges)
@@ -155,6 +143,11 @@ if __name__ == '__main__':
         write_log(f"\nLoading unique_src.npy to update the predictors, keeping only the points corresponding to the Low nodes (from {num_low} to {unique_src.shape[0]})", args, accelerator=None, mode='a')
         unique_src = np.load(args.input_path + "unique_src.npy")
         x_low = x_low[unique_src]
+        write_log(
+            f"\nAfter unique_src filtering: shape={x_low.shape}, "
+            f"min={np.nanmin(x_low):.6g}, max={np.nanmax(x_low):.6g}",
+            args, accelerator=None, mode='a'
+        )
 
     n_vars = x_low.shape[2]
     n_levels = x_low.shape[3]
@@ -163,10 +156,12 @@ if __name__ == '__main__':
     #---------------------- INDICES  ---------------------
     #-----------------------------------------------------
 
-    # test_idxs, test_idxs_valid_subset = return_test_idxs_from_years_list(years_test, low_time_index, args.history_length)
+    # Original test indexing: select the requested years from the raw predictor
+    # NetCDF time axis, then drop the first history_length outputs.
     predictor = xr.open_dataset(predictors_filename, engine="netcdf4")
     test_idxs = return_test_idxs(predictor, args.period).squeeze()
     test_idxs_valid_subset = test_idxs[args.history_length:]
+    predictor.close()
 
     #-- Slice time index and target
     time_index_test = time_index[test_idxs]
@@ -314,6 +309,12 @@ if __name__ == '__main__':
 
     if args.target_type == "precipitation":
         y_pred[y_pred < args.threshold] = 0.0
+    write_log(
+        f"\nPrediction diagnostics: raw_min={np.nanmin(y_pred_raw):.6g}, "
+        f"raw_max={np.nanmax(y_pred_raw):.6g}, "
+        f"phys_min={np.nanmin(y_pred):.6g}, phys_max={np.nanmax(y_pred):.6g}",
+        args, accelerator, 'a'
+    )
 
     # LON LAT
     lat_low = low_high_graph["low"].lat.cpu().numpy()
@@ -343,7 +344,11 @@ if __name__ == '__main__':
     elif args.target_type == "temperature":
         data.tasmax_gnn4cd = y_pred    
 
-    data.times = time_index_test[idxs_sorted]
+    # TEST FIX (2026-06): predictions are produced only for valid output
+    # indices after the history window. Keep the same alignment used by
+    # predict.py; otherwise daily reports can pair a prediction with the
+    # wrong calendar date.
+    data.times = time_index_test[test_idxs_valid_subset][idxs_sorted]
     data["low"].lat = lat_low
     data["low"].lon = lon_low
     data["high"].lat = lat_high

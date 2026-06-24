@@ -3,11 +3,16 @@ source "$1"
 
 mkdir -p "${LOG_PATH}"
 
+SBATCH_QOS_DIRECTIVE=""
+[[ -n "${QOS}" ]] && SBATCH_QOS_DIRECTIVE="#SBATCH --qos=${QOS}"
+SBATCH_MAIL_DIRECTIVE=""
+[[ -n "${MAIL}" ]] && SBATCH_MAIL_DIRECTIVE="#SBATCH --mail-user=${MAIL}"
+
 sbatch << EOT
 #!/bin/bash
 #SBATCH -A ${ACCOUNT}
 #SBATCH -p ${PARTITION}
-#SBATCH --qos=${QOS}
+${SBATCH_QOS_DIRECTIVE}
 #SBATCH --time=${TIME}
 #SBATCH -N 1
 #SBATCH --mem=${MEM}
@@ -15,6 +20,7 @@ sbatch << EOT
 #SBATCH --gres=gpu:${N_GPU}
 #SBATCH --job-name=${JOB_NAME}
 #SBATCH --mail-type=FAIL,END
+${SBATCH_MAIL_DIRECTIVE}
 #SBATCH -o ${LOG_PATH}run.out
 #SBATCH -e ${LOG_PATH}run.err
 
@@ -99,14 +105,9 @@ add_arg mask_sealand_file "${MASK_SEALAND_FILE}"
 add_arg coords_ij_file "${COORDS_IJ_FILE}"
 add_arg metadata_file "${METADATA_FILE}"
 
-# Arrays
-if [[ \${#TRAIN_YEARS[@]} -gt 0 ]]; then
-    ARGS+=( "--train_years" "\${TRAIN_YEARS[@]}" )
-fi
-
-if [[ \${#VAL_YEARS[@]} -gt 0 ]]; then
-    ARGS+=( "--val_years" "\${VAL_YEARS[@]}" )
-fi
+# Explicit year lists are passed as strings, e.g. "1961 1962 2080".
+add_arg train_years "${TRAIN_YEARS}"
+add_arg val_years "${VAL_YEARS}"
 
 # More args
 add_arg history_length "${HISTORY_LENGTH}"

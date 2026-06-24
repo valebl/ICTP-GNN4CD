@@ -1,0 +1,59 @@
+#!/bin/bash
+
+TRAIN_FOLDER="attention_pr_SA_CosAnnLR_ALPHA01_BETA005_LR0008_bin25"
+EPOCH="199"
+OUTPUT_FILE="G_SA_attention_pr_1980.pkl"
+
+# SLURM
+ACCOUNT="ict26_esp_0"
+PARTITION="boost_usr_prod"
+QOS=""
+TIME="00:30:00"
+MEM="100G"
+JOB_NAME="pred-att-pr-SA-ESD"
+N_GPU="1"
+
+# Paths
+SOURCE_PATH="/leonardo/home/userexternal/$USER/Conda_init.txt"
+ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv"
+MAIN_PATH="$HOME/benchmarks/Experiments_Attention"
+ACCELERATE_CONFIG_PATH="/leonardo/home/userexternal/$USER/.cache/huggingface/accelerate/default_config.yaml"
+CARTOPY_DATA_DIR="/leonardo_work/ICT26_ESP/vblasone/cartopy/"
+TRAIN_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/ESD_pseudo_reality/${TRAIN_FOLDER}/"
+LOG_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/ESD_pseudo_reality/predictions/attention/${TRAIN_FOLDER}_e$((EPOCH+1))/"
+OUTPUT_PATH="${LOG_PATH}"
+INPUT_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain_attention/ESD_pseudo_reality/pr/train/"
+LOG_FILE="log.txt"
+CONFIG_FILE_VAL_REPORT="${MAIN_PATH}/config_templates/plot/CORDEXML_val_report_SA.json"
+
+# Files/model
+CHECKPOINT="checkpoints/checkpoint_${EPOCH}"
+MODEL_NAME="GNN4CD_AxialAttention_CrossEdgeFeat_Model"
+LOSS_NAME="MSE_QMSE_PSD_Loss"
+GRAPH_FILE="low_high_graph.pkl"
+LOW_INPUT_FILE="low_input.npy"
+OROG_FILE="orog.npy"
+MASK_SEALAND_FILE="mask_sealand.npy"
+COORDS_IJ_FILE="coords_ij.npy"
+TARGET_FILE="target.npy"
+METADATA_FILE="low_input_metadata.json"
+SEED="100"
+HISTORY_LENGTH=2
+TARGET_TYPE="precipitation"
+THRESHOLD=0.0
+DATASET_NAME="Dataset_Graph"
+VAR="pr"
+DOMAIN="SA"
+EXPERIMENT="ESD_pseudo_reality"
+
+# Prediction period
+TEST_YEARS=""
+TEST_DAY_START=1
+TEST_MONTH_START=1
+TEST_YEAR_START=1980
+TEST_DAY_END=31
+TEST_MONTH_END=12
+TEST_YEAR_END=1980
+
+USE_ACCELERATE=true
+if [ ${USE_ACCELERATE} = true ] ; then USE_ACCELERATE="--use_accelerate"; else USE_ACCELERATE="--no-use_accelerate"; fi

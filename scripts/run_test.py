@@ -79,7 +79,7 @@ conda activate {cfg['ENV_PATH']}
 cd {cfg['MAIN_PATH']}
 export PYTHONPATH=$(pwd):$PYTHONPATH
 
-python accelerate.commands.launch --config_file "{accelerate_config}" -m predict.predict_test \
+accelerate launch --config_file "{accelerate_config}" -m predict.predict_test \
     --dataset_name="{dataset_name}" \
     --predictors_filename="{pred_list[ii]}" \
     --input_path_P="{input_list[ii]}" \
@@ -115,7 +115,13 @@ EOT
 
     # 2. SUBMIT PREDICTION JOB
     if run_slurm == "True":
-        result = subprocess.run(['bash', slurm_file], capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            ['bash', slurm_file],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
+            check=True
+        )
         jobid = result.stdout.strip().split()[-1]  # extract job ID
     else:
         jobid = None

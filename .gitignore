@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+
+run.err
+run.out
+slurm-*.out
