@@ -21,9 +21,9 @@ LOW_INPUT_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain_atten
 TIME_INDEX_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain_attention/Emulator_hist_future/pr/train/time_index.npy"
 LR_NORM_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/diffusion/Emulator_hist_future/attention_residual_ddpm_recon_wet_loss/lr_norm.npz"
 RESIDUAL_NORM_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/diffusion/Emulator_hist_future/attention_residual_ddpm_recon_wet_loss/residual_norm.npz"
-CHECKPOINT="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/diffusion/Emulator_hist_future/attention_residual_ddpm_recon_wet_loss/best_ema_model.pt"
+CHECKPOINT="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/diffusion/Emulator_hist_future/attention_residual_ddpm_recon_wet_loss/checkpoint_199.pt"
 
-OUTPUT_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/diffusion/Emulator_hist_future/prediction/attention_residual_ddpm_recon_wet_loss_2098/"
+OUTPUT_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/diffusion/Emulator_hist_future/prediction/attention_residual_ddpm_recon_wet_loss_2098_bestema_RN08/"
 OUTPUT_FILE="G_SA_pr_attention_residual_ddpm_recon_wet_2098.pkl"
 LOG_FILE="log.txt"
 
@@ -46,7 +46,7 @@ COARSE_SCALE_MIN=0.0
 COARSE_SCALE_MAX=4.0
 APPLY_COARSE_CONSERVATION=true
 NOISE_SCALE=1.0
-REVERSE_NOISE_SCALE=0.85
+REVERSE_NOISE_SCALE=0.8
 SNAPSHOT_INTERVAL=200
 SEED=42
 YEAR_FILTER=2098

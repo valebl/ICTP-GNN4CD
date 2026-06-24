@@ -1,0 +1,82 @@
+#!/bin/bash
+
+# Submit the complete ESD test matrix:
+# 2 GCMs x 3 periods x perfect/imperfect predictors = 12 jobs.
+TEST_MATRIX=true
+
+ACCOUNT="ict26_esp_0"
+PARTITION="boost_usr_prod"
+QOS=""
+MAIL="wtang@ictp.it"
+TIME="04:00:00"
+MEM="60G"
+JOB_NAME_PREFIX="rddpm-esd"
+N_GPU="1"
+
+SOURCE_PATH="/leonardo/home/userexternal/$USER/Conda_init.txt"
+ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv"
+MAIN_PATH="$HOME/benchmarks/Experiments_GNN_diffusion_ddpm_recon_wet_loss"
+VALENTINA_PATH="$HOME/benchmarks/Experiments_Valentina"
+
+# MODEL_TAG is used by Attention/DDPM pickle files.
+# MODEL_NETCDF_TAG is used by the preprocessed predictor NetCDF files.
+TEST_MODELS=(
+    "ACCESS_CM2|ACCESS-CM2"
+    "NorESM2_MM|NorESM2-MM"
+)
+
+# period | filename year range | first report year
+TEST_PERIODS=(
+    "historical|1981-2000|1981"
+    "mid_century|2041-2060|2041"
+    "end_century|2080-2099|2080"
+)
+
+TEST_INPUT_MODES=(
+    "perfect"
+    "imperfect"
+)
+
+ATTENTION_TEST_BASE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/diffusion/ESD_pseudo_reality/test/attention"
+TEST_PREDICTOR_BASE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/test/axialattention_crossedgefeat"
+DDPM_TEST_OUTPUT_BASE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/diffusion/ESD_pseudo_reality/test/ddpm_recon_wet_loss"
+
+GRAPH_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain_attention/ESD_pseudo_reality/pr/train/low_high_graph.pkl"
+STATIC_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain_attention/ESD_pseudo_reality/pr/train/orog.npy"
+INPUT_GRAPH_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-GRAPHS/SA_domain_attention/ESD_pseudo_reality/pr/train/"
+LOW_INPUT_FILE=""
+TIME_INDEX_FILE=""
+
+TRAIN_OUTPUT_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/diffusion/ESD_pseudo_reality/attention_residual_ddpm_recon_wet_loss"
+LR_NORM_FILE="${TRAIN_OUTPUT_PATH}/lr_norm.npz"
+RESIDUAL_NORM_FILE="${TRAIN_OUTPUT_PATH}/residual_norm.npz"
+CHECKPOINT="${TRAIN_OUTPUT_PATH}/checkpoint_ema_199.pt"
+
+LOG_FILE="log.txt"
+TARGET_TYPE="precipitation"
+VAR="pr"
+EXPERIMENT="ESD_pseudo_reality"
+
+DDPM_TIMESTEPS=1000
+BETA_START=0.0001
+BETA_END=0.02
+UNET_BASE=32
+LR_HIDDEN=32
+TIME_EMB_DIM=64
+N_SAMPLES=1
+BATCH_SIZE=16
+GRID_H=128
+GRID_W=128
+
+COARSE_BLOCK_SIZE=8
+COARSE_SCALE_MIN=0.0
+COARSE_SCALE_MAX=4.0
+APPLY_COARSE_CONSERVATION=true
+
+NOISE_SCALE=1.0
+REVERSE_NOISE_SCALE=0.8
+RESIDUAL_SCALE=0.9
+SNAPSHOT_INTERVAL=0
+SEED=42
+YEAR_FILTER=0
+MAKE_REPORT=false

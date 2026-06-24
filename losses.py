@@ -2,6 +2,46 @@ import torch
 import torch.nn.functional as F
 
 
+def smooth_node_field(field, grid_h=128, grid_w=128, kernel_size=9):
+    """Box-smooth flattened node fields laid out on a regular high-res grid."""
+    if kernel_size <= 1:
+        return field
+    pad = kernel_size // 2
+    grid = field.reshape(-1, 1, grid_h, grid_w)
+    grid = F.pad(grid, (pad, pad, pad, pad), mode="replicate")
+    smooth = F.avg_pool2d(grid, kernel_size=kernel_size, stride=1)
+    return smooth.reshape_as(field)
+
+
+def spatial_confidence_gate_from_precip(
+    gnn_pr_mm,
+    grid_h=128,
+    grid_w=128,
+    smooth_kernel=9,
+    threshold=1.0,
+    tau=0.5,
+    gate_min=0.0,
+):
+    """
+    Spatial confidence gate for residual corrections.
+
+    NEW: this gate makes the diffusion residual active mostly where the
+    deterministic Attention/GNN baseline already has a smooth wet signal. It
+    is meant to reduce false displaced precipitation structures that increase
+    RMSE while retaining stochastic texture in plausible wet regions.
+    """
+    smooth_ref = smooth_node_field(
+        gnn_pr_mm,
+        grid_h=grid_h,
+        grid_w=grid_w,
+        kernel_size=smooth_kernel,
+    )
+    gate = torch.sigmoid((smooth_ref - threshold) / max(float(tau), 1e-6))
+    if gate_min > 0:
+        gate = gate_min + (1.0 - gate_min) * gate
+    return gate.clamp(min=0.0, max=1.0)
+
+
 def wet_day_loss(pred_mm, target_mm, threshold=1.0, sharpness=4.0):
     """
     Wet/dry auxiliary loss for precipitation.

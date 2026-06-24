@@ -62,11 +62,19 @@ python train_residual_ddpm_lr.py \
     --beta_end=${BETA_END} \
     --grid_h=${GRID_H} \
     --grid_w=${GRID_W} \
+    ${SPATIAL_CONFIDENCE_GATE_FLAG:-"--no-use_spatial_confidence_gate"} \
+    --gate_smooth_kernel=${GATE_SMOOTH_KERNEL:-9} \
+    --gate_threshold=${GATE_THRESHOLD:-1.0} \
+    --gate_tau=${GATE_TAU:-0.5} \
+    --gate_min=${GATE_MIN:-0.0} \
     --lambda_recon=${LAMBDA_RECON} \
     --lambda_wet=${LAMBDA_WET} \
     --wet_threshold=${WET_THRESHOLD} \
     --aux_residual_model_clip=${AUX_RESIDUAL_MODEL_CLIP} \
     --aux_log_clip=${AUX_LOG_CLIP} \
+    --checkpoint_interval=${CHECKPOINT_INTERVAL:-10} \
+    --val_seed=${VAL_SEED:-12345} \
+    --val_repeats=${VAL_REPEATS:-1} \
     ${NORMALIZE_RESIDUAL_FLAG} \
     ${USE_EMA_FLAG} \
     --ema_decay=${EMA_DECAY} \
