@@ -54,6 +54,9 @@ parser.add_argument('--var', type=str)
 parser.add_argument('--domain', type=str)
 parser.add_argument('--experiment', type=str)
 parser.add_argument('--config_file', type=str)
+parser.add_argument('--val_file_help', type=str)
+parser.add_argument('--predictions_multiplier', type=float, default=1.0)
+parser.add_argument('--target_multiplier', type=float, default=1.0)
 
 # ==================== Utility Functions ====================
 
@@ -139,10 +142,7 @@ def draw_maps_page(pdf, lon, lat, pred, target):
     else:
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
 
-    if VAR == "tasmax":
-        cmap_field = CONFIG["colormaps"]["field_tasmax"]
-    else:
-        cmap_field = CONFIG["colormaps"]["field_pr"]
+    cmap_field = CONFIG["colormaps"][f"field_{VAR}"]
 
     fig.suptitle(f'Average | {DOMAIN} | {VAR}',
                     fontsize=14, fontweight='bold', y=0.98)
@@ -369,7 +369,7 @@ def compute_rmse(pred, target):
 
 def compute_bias(pred, target):
     axis = 1 if pred.ndim == 2 else 2
-    return np.nanmean(pred - target, axis=axis)
+    return np.nanmean(pred, axis=axis) - np.nanmean(target, axis=axis) 
 
 def compute_wasserstein_per_node(pred, target):
     n  = pred.shape[0]
@@ -418,38 +418,59 @@ if __name__ == '__main__':
     plot_path = args.plot_path
     val_file= args.val_file
     val_year = args.val_year
+    val_file_help = args.val_file_help
+    predictions_multiplier = args.predictions_multiplier
+    target_multiplier = args.target_multiplier
 
     # Load plot configuration
     with open(CONFIG_FILE, "r") as f:
         CONFIG = json.load(f)
 
     MODEL_NAME = CONFIG["model"]["name"]
-    WET_THRESHOLD = CONFIG["thresholds"]["wet_threshold_mm_day"]
-    PR_RMSE_VMAX   = CONFIG["color_scales"]["pr"]["rmse_vmax"]
-    PR_BIAS_VMAX   = CONFIG["color_scales"]["pr"]["bias_vmax"]
-    PR_SDII_VMAX   = CONFIG["color_scales"]["pr"]["sdii_vmax"]
-    PR_RX1DAY_VMAX = CONFIG["color_scales"]["pr"]["rx1day_vmax"]
-    PR_WD_VMAX     = CONFIG["color_scales"]["pr"]["wasserstein_vmax"]
 
-    TX_RMSE_VMAX   = CONFIG["color_scales"]["tasmax"]["rmse_vmax"]
-    TX_BIAS_VMAX   = CONFIG["color_scales"]["tasmax"]["bias_vmax"]
-    TX_P98_VMAX    = CONFIG["color_scales"]["tasmax"]["p98_vmax"]
-    TX_TXX_VMAX    = CONFIG["color_scales"]["tasmax"]["txx_vmax"]
+    if VAR == "pr":
+        WET_THRESHOLD = CONFIG["thresholds"]["wet_threshold_mm_day"]
+        PR_RMSE_VMAX   = CONFIG["color_scales"][VAR]["rmse_vmax"]
+        PR_BIAS_VMAX   = CONFIG["color_scales"][VAR]["bias_vmax"]
+        PR_SDII_VMAX   = CONFIG["color_scales"][VAR]["sdii_vmax"]
+        PR_RX1DAY_VMAX = CONFIG["color_scales"][VAR]["rx1day_vmax"]
+        PR_WD_VMAX     = CONFIG["color_scales"][VAR]["wasserstein_vmax"]
+        PR_DAILY_BIAS_VMAX = CONFIG["color_scales"]["daily_bias"][f"{VAR}_vmax"]
+    else:
+        TX_RMSE_VMAX   = CONFIG["color_scales"][VAR]["rmse_vmax"]
+        TX_BIAS_VMAX   = CONFIG["color_scales"][VAR]["bias_vmax"]
+        TX_P98_VMAX    = CONFIG["color_scales"][VAR]["p98_vmax"]
+        TX_TXX_VMAX    = CONFIG["color_scales"][VAR]["txx_vmax"]
+        TX_DAILY_BIAS_VMAX = CONFIG["color_scales"]["daily_bias"][f"{VAR}_vmax"]
 
-    PR_DAILY_BIAS_VMAX = CONFIG["color_scales"]["daily_bias"]["pr_vmax"]
-    TX_DAILY_BIAS_VMAX = CONFIG["color_scales"]["daily_bias"]["tasmax_vmax"]
+    rmse_vmax = PR_RMSE_VMAX if VAR == 'pr' else TX_RMSE_VMAX
+    bias_vmax = PR_BIAS_VMAX if VAR == "pr" else TX_BIAS_VMAX 
+    cmap_bias = CONFIG["colormaps"][f"bias_{VAR}"]
+
+    daily_cfg = CONFIG["daily_comparison"][VAR]
+
+    if EXPERIMENT == "Emulator_hist_future":
+        vmin_f_list = daily_cfg.get("vmin_emulator", daily_cfg.get("vmin"))
+        vmax_f_list = daily_cfg.get("vmax_emulator", daily_cfg.get("vmax"))
+        bias_vmax_d_list = daily_cfg.get("bias_vmax_emulator", None)
+    else:
+        vmin_f_list = daily_cfg.get("vmin_esd", daily_cfg.get("vmin"))
+        vmax_f_list = daily_cfg.get("vmax_esd", daily_cfg.get("vmax"))
+        bias_vmax_d_list = daily_cfg.get("bias_vmax_esd", None)
 
     DATE_LABELS = CONFIG["date_labels"]
 
     date_labels_experiment = DATE_LABELS.get(EXPERIMENT)
     date_labels = date_labels_experiment.get(str(val_year))
 
+    print(val_year, date_labels)
+
     if DOMAIN == "ALPS":
         gcm_model = "CNRM-CM5"
     elif DOMAIN == "NZ" or DOMAIN == "SA":
         gcm_model = "ACCESS-CM2"
 
-    val_file_help=f"/leonardo_work/ICT26_ESP/sdigioia/CORDEX-ML/CORDEX-domains/{DOMAIN}_domain/train/ESD_pseudo_reality/target/pr_tasmax_{gcm_model}_1961-1980.nc"
+    # val_file_help=f"/leonardo_work/ICT26_ESP/sdigioia/CORDEX-ML/CORDEX-domains/{DOMAIN}_domain/train/ESD_pseudo_reality/target/pr_tasmax_{gcm_model}_1961-1980.nc"
     season_file=args.season_file
 
     VAL_FILE = input_path + val_file
@@ -460,41 +481,65 @@ if __name__ == '__main__':
         data = pickle.load(f)
     
     data2 = xr.open_dataset(val_file_help)
-    
-    if args.domain=='ALPS':
+    if DOMAIN in ['ALPS', 'North', 'Italy']:
         y = data2.y.to_numpy()
         x = data2.x.to_numpy()
         y_dim = y.shape[0]
         x_dim = x.shape[0]
     else:
-        y_dim = data2.pr.shape[2]
-        x_dim = data2.pr.shape[1]
+        try:
+            y_dim = data2.pr.shape[2]
+            x_dim = data2.pr.shape[1]
+        except:
+            y_dim = data2.tp.shape[2]
+            x_dim = data2.tp.shape[1]
     
     # Corresponding time indices within the validation year array
     # Day 14 = Jan 15, Day 195 = Jul 15
     time_index = data.times
+    time_index_target = data.times_target
     year_1, month_1, day_1 = map(int, date_labels[0].split("-"))
     year_2, month_2, day_2 = map(int, date_labels[1].split("-"))
     day_idx_1 = date_to_idxs_from_timeindex(year_1, month_1, day_1, time_index)
     day_idx_2 = date_to_idxs_from_timeindex(year_2, month_2, day_2, time_index)
+    day_idx_1_target = date_to_idxs_from_timeindex(year_1, month_1, day_1, time_index_target)
+    day_idx_2_target = date_to_idxs_from_timeindex(year_2, month_2, day_2, time_index_target)
     SAMPLE_TIME_INDICES = [day_idx_1, day_idx_2]
+    SAMPLE_TIME_INDICES_TARGET = [day_idx_1_target, day_idx_2_target]
+
+    print("SAMPLE_TIME_INDICES: ", SAMPLE_TIME_INDICES, "SAMPLE_TIME_INDICES_TARGET: ", SAMPLE_TIME_INDICES_TARGET)
         
 
     # --- Detect format: HeteroData vs plain dict ---
     IS_HETERODATA = hasattr(data, '_node_store_dict')
 
     if IS_HETERODATA:
-        pred   = data.pr_gnn4cd   if VAR == 'pr' else data.tasmax_gnn4cd
-        target = data.target if VAR == 'pr' else data.target
+        target = data.target
+        if VAR == 'pr':
+            pred   = data.pr_gnn4cd
+        elif VAR == 'tasmax':
+            pred = data.tasmax_gnn4cd
+        else:
+            pred = data.t2m_gnn4cd
         lon    = data['high'].lon
         lat    = data['high'].lat           
         times  = data.times if hasattr(data, 'times') else np.arange(pred.shape[1])
     else:
-        pred   = data['pr_gnn4cd']   if VAR == 'pr' else data['tasmax_gnn4cd']
-        target = data['pr_target']   if VAR == 'pr' else data['tasmax_target']
+        if VAR == 'pr':
+            pred = data['pr_gnn4cd']
+        elif VAR == 'tasmax':
+            pred = data['tasmax_gnn4cd']
+        else:
+            pred = data['t2m_gnn4cd']
+        target = data['pr_target'] if VAR == 'pr' else data['target']
         lon    = data['lon']
         lat    = data['lat']
         times  = data['times'] if 'times' in data else np.arange(pred.shape[1])
+
+    if VAR == 'pr' and DOMAIN in ['North', 'Italy']:
+        pred *= 24
+        if DOMAIN == 'North':
+            target *= 24
         
     print(target.shape)
     
@@ -544,65 +589,89 @@ if __name__ == '__main__':
 
     # ==================== RMSE ====================
     print("  RMSE...")
-    rmse = compute_rmse(pred_grid, target_grid)
-    rmse_vmax = TX_RMSE_VMAX if VAR == 'tasmax' else PR_RMSE_VMAX
-    draw_metric_page(pdf, lon_grid, lat_grid, rmse, 0, rmse_vmax, 'viridis',
-                     'RMSE', f'RMSE | {MODEL_NAME} | {VAR}')
+    try:
+        rmse = compute_rmse(pred_grid, target_grid)
+        rmse_vmax = PR_RMSE_VMAX if VAR == 'pr'  else TX_RMSE_VMAX
+        draw_metric_page(pdf, lon_grid, lat_grid, rmse, 0, rmse_vmax, 'viridis',
+                        'RMSE', f'RMSE | {MODEL_NAME} | {VAR}')
+    except Exception as e:
+        print(f"\tCould not compute RMSE: {e}")
 
     # ==================== Mean Bias ====================
     print("  Mean Bias...")
     bias      = compute_bias(pred_grid, target_grid)
-    bias_vmax = TX_BIAS_VMAX if VAR == 'tasmax' else PR_BIAS_VMAX
-    if VAR == "tasmax":
-        cmap_bias = CONFIG["colormaps"]["bias_tasmax"]
-    else:
+    bias_vmax = PR_BIAS_VMAX if VAR == 'pr' else TX_BIAS_VMAX
+    if VAR == "pr":
         cmap_bias = CONFIG["colormaps"]["bias_pr"]
+    else:
+        cmap_bias = CONFIG["colormaps"][f"bias_{VAR}"]
     draw_metric_page(pdf, lon_grid, lat_grid, bias, -bias_vmax, bias_vmax, cmap_bias,
                      'Mean Bias', f'Mean Bias | {MODEL_NAME} | {VAR}')
 
     # ==================== Variable-specific metrics ====================
     if VAR == 'pr':
-        print("  Wasserstein Distance...")
-        wd = compute_wasserstein_per_node(pred, target)
-        wd = nodes_to_grid(wd, y_dim, x_dim)
-        draw_metric_page(pdf, lon_grid, lat_grid, wd, 0, PR_WD_VMAX, 'viridis',
-                         'Wasserstein Distance',
-                         f'Wasserstein Distance | {MODEL_NAME} | {VAR}',
-                         text=f"\nWet threshold: {WET_THRESHOLD} mm/day")
+        try:
+            print("  Wasserstein Distance...")
+            wd = compute_wasserstein_per_node(pred, target)
+            wd = nodes_to_grid(wd, y_dim, x_dim)
+            draw_metric_page(pdf, lon_grid, lat_grid, wd, 0, PR_WD_VMAX, 'viridis',
+                            'Wasserstein Distance',
+                            f'Wasserstein Distance | {MODEL_NAME} | {VAR}',
+                            text=f"\nWet threshold: {WET_THRESHOLD} mm/day")
+        except Exception as e:
+            print(f"\tCould not compute Wasserstein Distance: {e}")
 
         print("  Bias (SDII)...")
-        sdii_bias = compute_sdii(pred_grid) - compute_sdii(target_grid)
-        draw_metric_page(pdf, lon_grid, lat_grid, sdii_bias, -PR_SDII_VMAX, PR_SDII_VMAX, 'BrBG',
-                         'Bias (SDII)', f'Bias (SDII) | {MODEL_NAME} | {VAR}',
-                         text=f"\nWet threshold: {WET_THRESHOLD} mm/day")
+        try:
+            sdii_bias = compute_sdii(pred_grid) - compute_sdii(target_grid)
+            draw_metric_page(pdf, lon_grid, lat_grid, sdii_bias, -PR_SDII_VMAX, PR_SDII_VMAX, 'BrBG',
+                            'Bias (SDII)', f'Bias (SDII) | {MODEL_NAME} | {VAR}',
+                            text=f"\nWet threshold: {WET_THRESHOLD} mm/day")
+        except Exception as e:
+            print(f"\tCould not compute Bias (SDII): {e}")
 
         print("  Bias (RX1day)...")
-        rx1_bias = compute_rx1day(pred_grid) - compute_rx1day(target_grid)
-        draw_metric_page(pdf, lon_grid, lat_grid, rx1_bias, -PR_RX1DAY_VMAX, PR_RX1DAY_VMAX, 'BrBG',
-                         'Bias (RX1day)', f'Bias (RX1day) | {MODEL_NAME} | {VAR}')
+        try:
+            rx1_bias = compute_rx1day(pred_grid) - compute_rx1day(target_grid)
+            draw_metric_page(pdf, lon_grid, lat_grid, rx1_bias, -PR_RX1DAY_VMAX, PR_RX1DAY_VMAX, 'BrBG',
+                            'Bias (RX1day)', f'Bias (RX1day) | {MODEL_NAME} | {VAR}')
+        except Exception as e:
+            print(f"\tCould not compute Bias (RX1day): {e}")
 
     else:  # tasmax
         print("  Bias (p98)...")
-        p98_bias = compute_p98(pred_grid) - compute_p98(target_grid)
-        draw_metric_page(pdf, lon_grid, lat_grid, p98_bias, -TX_P98_VMAX, TX_P98_VMAX, 'RdBu_r',
-                         'Bias (p98)', f'Bias (p98) | {MODEL_NAME} | {VAR}')
+        try:
+            p98_bias = compute_p98(pred_grid) - compute_p98(target_grid)
+            draw_metric_page(pdf, lon_grid, lat_grid, p98_bias, -TX_P98_VMAX, TX_P98_VMAX, 'RdBu_r',
+                            'Bias (p98)', f'Bias (p98) | {MODEL_NAME} | {VAR}')
+        except Exception as e:
+            print(f"\tCould not compute Bias (p98): {e}")
 
         print("  Bias (TXx)...")
-        txx_bias = compute_txx(pred_grid) - compute_txx(target_grid)
-        draw_metric_page(pdf, lon_grid, lat_grid, txx_bias, -TX_TXX_VMAX, TX_TXX_VMAX, 'RdBu_r',
-                         'Bias (TXx)', f'Bias (TXx) | {MODEL_NAME} | {VAR}')
+        try:
+            txx_bias = compute_txx(pred_grid) - compute_txx(target_grid)
+            draw_metric_page(pdf, lon_grid, lat_grid, txx_bias, -TX_TXX_VMAX, TX_TXX_VMAX, 'RdBu_r',
+                            'Bias (TXx)', f'Bias (TXx) | {MODEL_NAME} | {VAR}')
+        except Exception as e:
+            print(f"\tCould not compute Bias (TXx): {e}")
 
     # ==================== Overall PSD ====================
     print("  Overall PSD (per time step, may take ~1 min)...")
     T = pred.shape[1]
+    T_target = target.shape[1]
     psd_p_sum = psd_t_sum = None
-    for _t in range(T):
-        wn, _p = compute_psd_2d(pred[:,   _t], y_dim, x_dim)
-        _,  _q = compute_psd_2d(target[:, _t], y_dim, x_dim)
-        if psd_p_sum is None:
-            psd_p_sum = np.zeros_like(_p)
-            psd_t_sum = np.zeros_like(_q)
-        psd_p_sum += _p;  psd_t_sum += _q
+    for _t in range(max(T, T_target)):
+        if _t < T:
+            wn, _p = compute_psd_2d(pred[:,   _t], y_dim, x_dim)
+            if psd_p_sum is None:
+                psd_p_sum = np.zeros_like(_p)
+            psd_p_sum += _p
+        if _t < T_target:
+            _,  _q = compute_psd_2d(target[:, _t], y_dim, x_dim)
+            if psd_t_sum is None:
+                psd_t_sum = np.zeros_like(_q)
+            psd_t_sum += _q
+    
     psd_p = psd_p_sum / T
     psd_t = psd_t_sum / T
 
@@ -616,10 +685,10 @@ if __name__ == '__main__':
     plt.tight_layout();  pdf.savefig(fig, bbox_inches='tight');  plt.close()
 
     # ==================== PSD for specific dates ====================
-    for time_idx, date_label in zip(SAMPLE_TIME_INDICES, date_labels):
+    for time_idx, time_idx_target, date_label in zip(SAMPLE_TIME_INDICES, SAMPLE_TIME_INDICES_TARGET, date_labels):
         print(f"  PSD {date_label}...")
         wn, psd_p = compute_psd_2d(pred[:,   time_idx], y_dim, x_dim)
-        _,  psd_t = compute_psd_2d(target[:, time_idx], y_dim, x_dim)
+        _,  psd_t = compute_psd_2d(target[:, time_idx_target], y_dim, x_dim)
         fig, ax = plt.subplots(figsize=(10, 7))
         fig.suptitle(f'Power Spectral Density | {DOMAIN} | {VAR} | {date_label}',
                      fontsize=14, fontweight='bold')
@@ -643,11 +712,11 @@ if __name__ == '__main__':
         bias_vmax_d_list = daily_cfg.get("bias_vmax_esd", None)
 
     i = 0
-    for time_idx, date_label in zip(SAMPLE_TIME_INDICES, date_labels):
+    for time_idx, time_idx_target, date_label in zip(SAMPLE_TIME_INDICES, SAMPLE_TIME_INDICES_TARGET, date_labels):
         print(f"  Daily comparison {date_label}...")
 
         fp = pred_grid[:, :, time_idx]
-        ft = target_grid[:, :, time_idx]
+        ft = target_grid[:, :, time_idx_target]
         fb = fp - ft
 
         vmin_f = vmin_f_list[i]
@@ -662,7 +731,7 @@ if __name__ == '__main__':
         else:
             fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 6))
 
-        cmap_field = 'magma' if VAR == 'tasmax' else 'turbo'
+        cmap_field = CONFIG["colormaps"][f"field_{VAR}"]
         fig.suptitle(f'Daily Comparison | {DOMAIN} | {VAR} | {date_label}',
                      fontsize=14, fontweight='bold', y=0.98)
 

@@ -104,14 +104,17 @@ accelerate launch \
     "\${ARGS[@]}"
 
 # Plot report
-python ./utils/plotting/plot_report.py \
+python -m utils.plotting.plot_report \
     --input_path="${OUTPUT_PATH}" \
     --plot_path="${OUTPUT_PATH}" \
     --val_file="${OUTPUT_FILE}" \
+    --val_file_help="${VAL_FILE_HELP}" \
     --var="${VAR}" \
-    --experiment="ESD_pseudo_reality" \
-    --val_year="${TEST_YEAR_START}" \
+    --experiment="${EXPERIMENT}" \
     --domain="${DOMAIN}" \
-    --config_file="${CONFIG_FILE_VAL_REPORT}"
+    --val_year="${VAL_YEAR}" \
+    --config_file="${CONFIG_FILE_VAL_REPORT}" \
+    --predictions_multiplier="${PREDICTIONS_MULTIPLIER}" \
+    --target_multiplier="${TARGET_MULTIPLIER}"
 
 EOT

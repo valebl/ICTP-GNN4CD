@@ -14,7 +14,7 @@ from utils.helpers.tools import write_log
 from data.structures.graph import derive_edge_index_within, derive_edge_index_multiscale
 from data.loaders.read_dataset import read_dataset
 
-from preprocess.add_base_args import add_base_args
+from args.preprocess.add_base_args import add_base_args
 from data.loaders.registry import get_dataset_loader
 
 
@@ -103,6 +103,8 @@ else:
         lon_high = target_ds.longitude.to_numpy()
         lat_high = target_ds.latitude.to_numpy()
 
+    write_log(f'\n\tLon and lat high derived from target and have shape: lon {lon_high.shape}, lat {lat_high.shape}.', args, accelerator=None, mode='a')
+
 # 2. Orography
 write_log(f"\n-- 2. OROGRAPHY ", args, accelerator=None, mode='a')
 orog_ds = xr.open_dataset(args.input_path_topo + args.topo_file)
@@ -115,12 +117,23 @@ except:
 if target_high is None:
     lon_high = orog_ds.lon.to_numpy()
     lat_high = orog_ds.lat.to_numpy()
+    write_log(f'\n\tLon and lat high derived from orog and have shape: lon {lon_high.shape}, lat {lat_high.shape}.', args, accelerator=None, mode='a')
+
+if lon_high.ndim == 1 and lat_high.ndim == 1:
+    lat_high, lon_high = np.meshgrid(
+        lat_high,
+        lon_high,
+        indexing="ij"
+    )
 
 # 3. Mask sea-land
 write_log(f"\n-- 3. MASK SEA-LAND ", args, accelerator=None, mode='a')
 mask_sealand_ds = xr.open_dataset(args.input_path_mask_sealand + args.mask_sealand_file)
 
-mask_sealand = mask_sealand_ds.z.to_numpy()
+try:
+    mask_sealand = mask_sealand_ds.lsm.to_numpy()
+except:
+    mask_sealand = mask_sealand_ds.z.to_numpy()
 
 # 4. Matrix coordinates ij
 write_log(f"\n-- 4. MATRIX COORDINATES ij ", args, accelerator=None, mode='a')
@@ -169,7 +182,7 @@ low_high_graph = HeteroData()
 #-- EDGES --#
 use_edge_attr_high = False
 use_edge_attr_low2high = True
-use_edge_attr_low = True
+use_edge_attr_low = False
 
 write_log(f"\n-- 1. Derive low-to-high edges", args, accelerator=None, mode='a')
 
@@ -179,7 +192,7 @@ edges_low2high, edges_low2high_attr = derive_edge_index_multiscale(
     lat_senders=lat_low,
     lon_receivers=lon_high,
     lat_receivers=lat_high,
-    k=9, undirected=False,
+    k=args.k_low2high, undirected=False,
     use_edge_attr=use_edge_attr_low2high)
 
 edges_low2high = torch.tensor(edges_low2high)
@@ -225,20 +238,20 @@ edges_high, edges_high_attr = derive_edge_index_within(
 
 edges_high = torch.tensor(edges_high)
 
-# 3. Low-within-low edges
-write_log(f"\n-- 3. Derive low-within-low edges", args, accelerator=None, mode='a')
+# # 3. Low-within-low edges
+# write_log(f"\n-- 3. Derive low-within-low edges", args, accelerator=None, mode='a')
 
-edges_low, edges_low_attr = derive_edge_index_within(
-    lon_radius=args.lon_grid_radius_low,
-    lat_radius=args.lat_grid_radius_low,
-    lon_senders=lon_low_upd,
-    lat_senders=lat_low_upd,
-    lon_receivers=lon_low_upd,
-    lat_receivers=lat_low_upd,
-    use_edge_attr=use_edge_attr_low
-    )
+# edges_low, edges_low_attr = derive_edge_index_within(
+#     lon_radius=args.lon_grid_radius_low,
+#     lat_radius=args.lat_grid_radius_low,
+#     lon_senders=lon_low_upd,
+#     lat_senders=lat_low_upd,
+#     lon_receivers=lon_low_upd,
+#     lat_receivers=lat_low_upd,
+#     use_edge_attr=use_edge_attr_low
+#     )
 
-edges_low = torch.tensor(edges_low)
+# edges_low = torch.tensor(edges_low)
 
 #-- TO GRAPH ATTRIBUTES --#
 
@@ -262,13 +275,13 @@ low_high_graph['high', 'within', 'high'].edge_index = edges_high
 if use_edge_attr_high:
     low_high_graph['high', 'within', 'high'].edge_attr = torch.tensor(edges_high_attr).float()
 
-# 3. Low within Low
-low_high_graph['low', 'within', 'low'].edge_index = edges_low
-if use_edge_attr_low:
-    low_high_graph['low', 'within', 'low'].edge_attr = torch.tensor(edges_low_attr).float()
+# # 3. Low within Low
+# low_high_graph['low', 'within', 'low'].edge_index = edges_low
+# if use_edge_attr_low:
+#     low_high_graph['low', 'within', 'low'].edge_attr = torch.tensor(edges_low_attr).float()
 
-# 4. High to Low
-low_high_graph['high', 'to', 'low'].edge_index = low_high_graph['low', 'to', 'high'].edge_index.flip(0)
+# # 4. High to Low
+# low_high_graph['high', 'to', 'low'].edge_index = low_high_graph['low', 'to', 'high'].edge_index.flip(0)
 
 #-- SAVE METADATA --#
 
@@ -330,7 +343,7 @@ write_log(f"\n-- 6. Coords ij", args, accelerator=None, mode='a')
 np.save(args.output_path+"coords_ij.npy", coords)
 
 write_log(f"\n-- 7. Graph", args, accelerator=None, mode='a')
-with open(args.output_path + 'low_high_graph.pkl', 'wb') as f:
+with open(args.output_path + args.output_file, 'wb') as f:
     pickle.dump(low_high_graph, f)
 if target_high is not None:
     write_log(f"\n-- 8. High time index.", args, accelerator=None, mode='a')

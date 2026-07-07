@@ -3,6 +3,9 @@ source "$1"
 
 mkdir -p "${LOG_PATH}"
 
+TRAIN_YEARS_STR="${TRAIN_YEARS[*]}"
+VAL_YEARS_STR="${VAL_YEARS[*]}"
+
 sbatch << EOT
 #!/bin/bash
 #SBATCH -A ${ACCOUNT}
@@ -103,6 +106,9 @@ add_arg coords_ij_file "${COORDS_IJ_FILE}"
 add_arg metadata_file "${METADATA_FILE}"
 
 # Arrays
+TRAIN_YEARS=(${TRAIN_YEARS_STR})
+VAL_YEARS=(${VAL_YEARS_STR})
+
 if [[ \${#TRAIN_YEARS[@]} -gt 0 ]]; then
     ARGS+=( "--train_years" "\${TRAIN_YEARS[@]}" )
 fi

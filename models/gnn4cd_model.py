@@ -46,15 +46,11 @@ class Processor(nn.Module):
         self.block1 = GATBlock(hidden, 32, heads=2, dropout=0.2)
         self.block2 = GATBlock(64, 32, heads=2, dropout=0.2)
         self.block3 = GATBlock(64, 32, heads=2, dropout=0.2)
-        # self.block4 = GATBlock(64, 32, heads=2, dropout=0.2)
-        # self.block5 = GATBlock(64, 32, heads=2, dropout=0.2)
 
     def forward(self, x, edge_index):
         x = self.block1(x, edge_index)
         x = self.block2(x, edge_index)
         x = self.block3(x, edge_index)
-        # x = self.block4(x, edge_index)
-        # x = self.block5(x, edge_index)
         return x
 
 

@@ -52,20 +52,20 @@ def add_base_args(parser):
     parser.add_argument('--target_type', type=str)
 
     #-- start and end training dates
-    parser.add_argument('--train_year_start', type=str, default="")
-    parser.add_argument('--train_month_start', type=str, default="")
-    parser.add_argument('--train_day_start', type=str, default="")
-    parser.add_argument('--train_year_end', type=str, default="")
-    parser.add_argument('--train_month_end', type=str, default="")
-    parser.add_argument('--train_day_end', type=str, default="")
-    parser.add_argument('--validation_year', type=str, default="")
+    parser.add_argument('--train_year_start', type=str)
+    parser.add_argument('--train_month_start', type=str)
+    parser.add_argument('--train_day_start', type=str)
+    parser.add_argument('--train_year_end', type=str)
+    parser.add_argument('--train_month_end', type=str)
+    parser.add_argument('--train_day_end', type=str)
+    parser.add_argument('--validation_year', type=str)
     # for random validation years
-    parser.add_argument('--first_year', type=str, default="")
-    parser.add_argument('--last_year', type=str, default="")
-    parser.add_argument('--n_val_years', type=str, default="")
+    parser.add_argument('--first_year', type=str)
+    parser.add_argument('--last_year', type=str)
+    parser.add_argument('--n_val_years', type=str)
     # for lists of training and validation years
-    parser.add_argument('--train_years', type=str, default="")
-    parser.add_argument('--val_years', type=str, default="")
+    parser.add_argument('--train_years', nargs='+', type=int, default=[])
+    parser.add_argument('--val_years', nargs='+', type=int, default=[])
 
     parser.add_argument('--WANDB_API_KEY', type=str)
     parser.add_argument('--WANDB_USERNAME', type=str)

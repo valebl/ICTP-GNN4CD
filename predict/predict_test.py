@@ -20,6 +20,8 @@ from utils.predictand_transforms.inverse_transform_predictand import inverse_tra
 from utils.predictor_transforms.transform_predictors import transform_predictors
 from utils.losses.registry import get_loss
 
+from args.predict.build_args_test import build_args
+
 def return_test_idxs_from_years_list(years_list, time_index, history_length):
     test_idxs_list = []
     test_idxs_valid_list = []
@@ -68,14 +70,8 @@ def return_test_idxs(predictor: xr.Dataset,
 
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser = add_base_args_test(parser)
 
-    args, unknown = parser.parse_known_args()
-
-    # Update args with target-specific arguments
-    parser = add_target_specific_args(parser, args.target_type)
-    args = parser.parse_args()
+    args = build_args()
     
     # Set all seeds
     set_seed_everything(seed=args.seed)
@@ -129,7 +125,7 @@ if __name__ == '__main__':
     predictors_filename = args.input_path_P + args.predictors_filename
 
     # Load the input dataset
-    load_dataset = get_dataset_loader(args.dataset_name)
+    load_dataset = get_dataset_loader(args.dataset_loader_name)
     x_low, lat_low, lon_low, time_index, _, _ = load_dataset(
         file_path=args.input_path_P,
         file=args.predictors_filename,
@@ -230,11 +226,6 @@ if __name__ == '__main__':
     #--------------------------------------------
     #-------------- BUILD MODEL -----------------
     #--------------------------------------------
-
-    # Update args with loss- and model-specific arguments
-    parser = add_model_specific_args(parser, args.model_name)
-    args = parser.parse_args()
-
     LossClass = get_loss(args.loss_name)
     output_dim = LossClass.output_dim
     

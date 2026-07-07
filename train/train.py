@@ -37,6 +37,7 @@ from data.datasets.graph_dataset import Graph_Dataset, custom_collate_fn_graph
 # Transforms
 from utils.predictand_transforms.transform_predictand import transform_predictand
 from utils.predictor_transforms.transform_predictors import transform_predictors
+from utils.edge_attr_transforms.transform_edge_attr import transform_edge_attr
 
 
 if __name__ == '__main__':
@@ -198,7 +199,16 @@ if __name__ == '__main__':
         train_idxs=train_idxs,
         stats_save_path=args.output_path + "predictand_stats.npz"
     )
+
+    #----------------------------------------
+    #---------  NORMALISE EDGE ATTR ---------
+    #----------------------------------------
     
+    # low_high_graph = transform_edge_attr(
+    #     graph=low_high_graph,
+    #     stats_save_path=args.output_path + "edge_attr_stats.npz"
+    # )
+
     #-------------------------------------------
     #-------------- BUILD LOSS -----------------
     #-------------------------------------------

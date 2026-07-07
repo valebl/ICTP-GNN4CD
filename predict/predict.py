@@ -70,14 +70,14 @@ if __name__ == '__main__':
     orog = np.load(args.input_path+args.orog_file)
 
     #-- 5. Mask sea-land
-    if args.mask_sealand_file != "":
+    if args.mask_sealand_file != "" and args.mask_sealand_file is not None:
         mask_sealand = np.load(args.input_path+args.mask_sealand_file)
         use_mask_sealand = True
     else:
         use_mask_sealand = False
     
     #-- 6. Coords ij
-    if args.coords_ij_file != "":
+    if args.coords_ij_file != "" and args.coords_ij_file is not None:
         coords_ij = np.load(args.input_path+args.coords_ij_file)
         use_coords_ij = True
     else:
@@ -85,6 +85,7 @@ if __name__ == '__main__':
 
     #-- 7. Time index
     time_index = np.load(args.input_path+"time_index.npy")
+    time_index_target = np.load(args.input_path+"high_time_index.npy")
 
     #-- 8. Low input metadata
     with open(args.input_path + args.metadata_file, "r") as f:
@@ -103,6 +104,13 @@ if __name__ == '__main__':
         date_to_idxs_from_timeindex
     )
 
+    test_idxs_target, test_idxs_valid_target, test_idxs_valid_subset_target = compute_predictions_idxs(
+        cfg,
+        time_index_target,
+        args.history_length,
+        date_to_idxs_from_timeindex
+    )
+
     if accelerator is None or accelerator.is_main_process:
         print(f"Output (start_idx, end_idx): {test_idxs_valid[0], test_idxs_valid[-1]}" +
         f" corresponding to {time_index[test_idxs_valid[0]], time_index[test_idxs_valid[-1]]}")
@@ -110,7 +118,9 @@ if __name__ == '__main__':
     #-- Slice time index and target
     time_index_test = time_index[test_idxs]
     x_low_test = x_low[:, test_idxs, :, :] # num_nodes, time, vars, levels
-    target_test = target[:, test_idxs][:, test_idxs_valid_subset]
+
+    time_index_target_test = time_index_target[test_idxs_target]
+    target_test = target[:, test_idxs_target][:, test_idxs_valid_subset_target]
 
     #-----------------------------------------
     #---------  TRANSFORM PREDICTORS ---------
@@ -292,6 +302,7 @@ if __name__ == '__main__':
     data.target = target_test
 
     data.times = time_index_test[test_idxs_valid_subset][idxs_sorted]
+    data.times_target = time_index_target_test[test_idxs_valid_subset_target]
     data["low"].lat = lat_low
     data["low"].lon = lon_low
     data["high"].lat = lat_high

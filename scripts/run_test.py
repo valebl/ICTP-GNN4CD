@@ -31,7 +31,7 @@ graph_file = cfg['LOW_GRAPH_FILE']
 train_path = cfg['TRAIN_PATH']
 input_path = cfg['INPUT_PATH']
 plot_path = cfg['PLOT_PATH']
-dataset_name = cfg['DATASET_NAME']
+dataset_loader_name = cfg['DATASET_LOADER_NAME']
 loss_name = cfg['LOSS_NAME']
 history_length = cfg['HISTORY_LENGTH']
 threshold = cfg['THRESHOLD']
@@ -79,8 +79,8 @@ conda activate {cfg['ENV_PATH']}
 cd {cfg['MAIN_PATH']}
 export PYTHONPATH=$(pwd):$PYTHONPATH
 
-python accelerate.commands.launch --config_file "{accelerate_config}" -m predict.predict_test \
-    --dataset_name="{dataset_name}" \
+python -m accelerate.commands.launch --config_file "{accelerate_config}" -m predict.predict_test \
+    --dataset_loader_name="{dataset_loader_name}" \
     --predictors_filename="{pred_list[ii]}" \
     --input_path_P="{input_list[ii]}" \
     --input_path="{input_path}" \

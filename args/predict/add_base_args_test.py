@@ -14,7 +14,7 @@ def add_base_args_test(parser):
     parser.add_argument('--model_name', type=str, default=None)
     parser.add_argument('--loss_name', type=str, default=None)
     parser.add_argument('--history_length', type=int)
-    parser.add_argument('--dataset_name', type=str, default=None)  
+    parser.add_argument('--dataset_loader_name', type=str, default=None)  
     parser.add_argument('--graph_file', type=str, default=None)
     parser.add_argument('--output_file', type=str, default="test_predictions.pkl")
     parser.add_argument('--output_file_season', type=str, default="test_seasonal_predictions.pkl")

@@ -55,6 +55,7 @@ add_arg target_file "${TARGET_FILE}"
 add_arg predictors_file "${PREDICTORS_FILE}"
 add_arg mask_sealand_file "${MASK_SEALAND_FILE}"
 add_arg topo_file "${TOPO_FILE}"
+add_arg output_file "${OUTPUT_FILE}"
 
 # Output + logging
 add_arg output_path "${OUTPUT_PATH}"
@@ -65,6 +66,7 @@ add_arg lon_grid_radius_high "${LON_GRID_RADIUS_HIGH}"
 add_arg lat_grid_radius_high "${LAT_GRID_RADIUS_HIGH}"
 add_arg lon_grid_radius_low "${LON_GRID_RADIUS_LOW}"
 add_arg lat_grid_radius_low "${LAT_GRID_RADIUS_LOW}"
+add_arg k_low2high "${K_LOW2HIGH}"
 
 # Mask + land use
 add_arg mask_path "${MASK_PATH}"
