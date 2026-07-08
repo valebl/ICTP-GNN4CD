@@ -7,7 +7,7 @@ sbatch << EOT
 #!/bin/bash
 #SBATCH -A ${ACCOUNT}
 #SBATCH -p ${PARTITION}
-#SBATCH --qos=${QOS}
+${QOS:+#SBATCH --qos=${QOS}}
 #SBATCH --time=${TIME}
 #SBATCH -N 1
 #SBATCH --mem=${MEM}
