@@ -8,7 +8,7 @@ sbatch << EOT
 #!/bin/bash
 #SBATCH -A ${ACCOUNT}
 #SBATCH -p ${PARTITION}
-#SBATCH --qos=${QOS}
+${QOS:+#SBATCH --qos=${QOS}}
 #SBATCH --time ${TIME}
 #SBATCH -N 1
 #SBATCH --mem=${MEM}
@@ -67,6 +67,7 @@ add_arg lat_grid_radius_high "${LAT_GRID_RADIUS_HIGH}"
 add_arg lon_grid_radius_low "${LON_GRID_RADIUS_LOW}"
 add_arg lat_grid_radius_low "${LAT_GRID_RADIUS_LOW}"
 add_arg k_low2high "${K_LOW2HIGH}"
+add_arg edge_norm_constants "${EDGE_NORM_CONSTANTS}"
 
 # Mask + land use
 add_arg mask_path "${MASK_PATH}"

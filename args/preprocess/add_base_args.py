@@ -24,15 +24,17 @@ def add_base_args(parser):
     parser.add_argument('--lat_grid_radius_high', type=float)
     parser.add_argument('--lon_grid_radius_low', type=float)
     parser.add_argument('--lat_grid_radius_low', type=float)
-    parser.add_argument('--k_low2high', type=int, default=9)
+    parser.add_argument('--k_low2high', type=int)
 
     #-- other
-    parser.add_argument('--mask_path', type=str, default=None)
-    parser.add_argument('--mask_file', type=str, default=None)
+    parser.add_argument('--mask_path', type=str)
+    parser.add_argument('--mask_file', type=str)
     parser.add_argument('--predictors_dataset', type=str)
     parser.add_argument('--target_dataset', type=str)
     parser.add_argument('--target_type', type=str)
-    parser.add_argument('--target_multiplier', type=float, default=1)
+    parser.add_argument('--target_multiplier', type=float)
+    parser.add_argument('--low2high_norm_constants', type=str)
+    parser.add_argument('--high_norm_constants', type=str)
 
     parser.add_argument("--params", type=str, help="Comma-separated list of variable names")
     parser.add_argument("--levels", type=str, help="Comma-separated list of pressure levels")

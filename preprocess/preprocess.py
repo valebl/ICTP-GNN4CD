@@ -11,7 +11,14 @@ import torch_geometric.transforms as T
 transform = T.AddLaplacianEigenvectorPE(k=2)
 
 from utils.helpers.tools import write_log
-from data.structures.graph import derive_edge_index_within, derive_edge_index_multiscale
+from data.structures.graph import (
+    derive_edge_index_within,
+    derive_edge_index_multiscale,
+    compute_dist_scale,
+    save_edge_norm_constants,
+    load_edge_norm_constants
+)
+
 from data.loaders.read_dataset import read_dataset
 
 from args.preprocess.add_base_args import add_base_args
@@ -180,9 +187,15 @@ write_log(f"\n\n#### Creating the graph object.", args, accelerator=None, mode='
 low_high_graph = HeteroData()
 
 #-- EDGES --#
-use_edge_attr_high = False
+use_edge_attr_high = True
 use_edge_attr_low2high = True
 use_edge_attr_low = False
+
+if args.low2high_norm_constants is None:
+    dist_scale_low2high = compute_dist_scale(lon_senders=lon_low, lat_senders=lat_low)
+    save_edge_norm_constants(args.output_path+"low2high_norm_constants.json", dist_scale_low2high)
+else:
+    dist_scale_low2high = load_edge_norm_constants(args.input_path+"low2high_norm_constants.json")["dist_scale"]
 
 write_log(f"\n-- 1. Derive low-to-high edges", args, accelerator=None, mode='a')
 
@@ -193,7 +206,8 @@ edges_low2high, edges_low2high_attr = derive_edge_index_multiscale(
     lon_receivers=lon_high,
     lat_receivers=lat_high,
     k=args.k_low2high, undirected=False,
-    use_edge_attr=use_edge_attr_low2high)
+    use_edge_attr=use_edge_attr_low2high,
+    dist_scale=dist_scale_low2high)
 
 edges_low2high = torch.tensor(edges_low2high)
 
@@ -224,16 +238,23 @@ assert low_input_upd.shape[0] == unique_src.shape[0]
 # 2. high-within-high edges
 write_log(f"\n-- 2. Derive high-within-high edges", args, accelerator=None, mode='a')
 
+if args.high_norm_constants is None:
+    dist_scale_high = compute_dist_scale(lon_senders=lon_low, lat_senders=lat_low)
+    save_edge_norm_constants(args.output_path+"high_norm_constants.json", dist_scale_high)
+else:
+    dist_scale_high = load_edge_norm_constants(args.input_path+"high_norm_constants.json")["dist_scale"]
+
 edges_high, edges_high_attr = derive_edge_index_within(
     lon_radius=args.lon_grid_radius_high,
     lat_radius=args.lat_grid_radius_high,
     lon_senders=lon_high,
     lat_senders=lat_high,
-    orog_senders=orog.squeeze(), 
+    orog_senders=None, 
     lon_receivers=lon_high,
     lat_receivers=lat_high,
-    orog_receivers=orog.squeeze(),
-    use_edge_attr=use_edge_attr_high
+    orog_receivers=None,
+    use_edge_attr=use_edge_attr_high,
+    dist_scale=dist_scale_high
     )
 
 edges_high = torch.tensor(edges_high)
