@@ -183,6 +183,7 @@ class GNN4CD_AxialAttention_CrossEdgeFeat_Model(nn.Module):
         parser.add_argument("--rnn_n_layers", type=int, default=2)
         parser.add_argument("--x_low_encoding_dim", type=int, default=128)
         parser.add_argument("--x_low2high_dim", type=float, default=64)
+        parser.add_argument("--edge_attr_dim", type=int, default=4)
         return parser
     
     def __init__(
@@ -192,9 +193,9 @@ class GNN4CD_AxialAttention_CrossEdgeFeat_Model(nn.Module):
         x_high_dim,
         output_dim,
         history_length,
-        rnn_n_layers,
         x_low_encoding_dim,
-        x_low2high_dim
+        x_low2high_dim,
+        edge_attr_dim
         ):
 
         super().__init__()
@@ -216,7 +217,7 @@ class GNN4CD_AxialAttention_CrossEdgeFeat_Model(nn.Module):
         self.downscaler = CrossAttEdgeFeatDownscaler(
             low_dim=x_low_encoding_dim,
             high_dim=x_high_dim,
-            edge_dim=2,
+            edge_dim=edge_attr_dim,
             hidden_dim=x_low2high_dim,
             out_dim=x_low2high_dim
         )
