@@ -1,0 +1,58 @@
+#!/bin/bash
+
+# ALPS Attention + residual DDPM with reconstruction/wet auxiliary losses.
+# The deterministic Attention prediction file should cover 1961-1980.
+# The training script splits this full file internally:
+#   train = 1961-1979
+#   validation = 1980
+
+ACCOUNT="ict26_esp_0"
+PARTITION="boost_usr_prod"
+QOS=""
+MAIL="wtang@ictp.it"
+TIME="3:00:00"
+MEM="120G"
+JOB_NAME="alps-rddpm-rw-esd"
+N_GPU="1"
+
+SOURCE_PATH="/leonardo/home/userexternal/$USER/Conda_init.txt"
+ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv"
+MAIN_PATH="$HOME/benchmarks/Experiments_GNN_diffusion_ddpm_recon_wet_loss"
+
+GNN_PRED_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/ALPS_domain/ESD_pseudo_reality/predictions/attention/pr_mse_qmse_psd_axialattention_crossedgefeat_e150_train1961_1980/G_ALPS_attention_pr_train_1961_1980.pkl"
+TARGET_FILE="/leonardo_work/ICT26_ESP/SHARED/preprocessed/CORDEXML/ALPS/train/ESD_pseudo_reality/pr/target.npy"
+TIME_INDEX_FILE="/leonardo_work/ICT26_ESP/SHARED/preprocessed/CORDEXML/ALPS/train/ESD_pseudo_reality/pr/time_index.npy"
+LOW_INPUT_FILE="/leonardo_work/ICT26_ESP/SHARED/preprocessed/CORDEXML/ALPS/train/ESD_pseudo_reality/pr/low_input.npy"
+GRAPH_FILE="/leonardo_work/ICT26_ESP/SHARED/preprocessed/CORDEXML/ALPS/train/ESD_pseudo_reality/pr/low_high_graph.pkl"
+STATIC_FILE="/leonardo_work/ICT26_ESP/SHARED/preprocessed/CORDEXML/ALPS/train/ESD_pseudo_reality/pr/orog.npy"
+
+OUTPUT_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/ALPS_domain/diffusion/ESD_pseudo_reality/attention_residual_ddpm_recon_wet_loss/"
+LOG_FILE="log.txt"
+
+TARGET_TYPE="precipitation"
+TRAIN_YEARS="1961_1962_1963_1964_1965_1966_1967_1968_1969_1970_1971_1972_1973_1974_1975_1976_1977_1978_1979"
+VAL_YEARS="1980"
+EPOCHS=200
+BATCH_SIZE=32
+LR=0.00015
+WEIGHT_DECAY=0.0
+LAMBDA_RECON=0.02
+LAMBDA_WET=0.01
+WET_THRESHOLD=1.0
+CHECKPOINT_INTERVAL=10
+VAL_SEED=12345
+VAL_REPEATS=1
+DDPM_TIMESTEPS=1000
+UNET_BASE=32
+LR_HIDDEN=32
+TIME_EMB_DIM=64
+BETA_START=0.0001
+BETA_END=0.02
+GRID_H=128
+GRID_W=128
+AUX_RESIDUAL_MODEL_CLIP=8.0
+AUX_LOG_CLIP=8.0
+NORMALIZE_RESIDUAL_FLAG="--normalize_residual"
+USE_EMA_FLAG="--use_ema"
+EMA_DECAY=0.999
+SEED=42

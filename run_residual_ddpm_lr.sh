@@ -78,5 +78,10 @@ python train_residual_ddpm_lr.py \
     ${NORMALIZE_RESIDUAL_FLAG} \
     ${USE_EMA_FLAG} \
     --ema_decay=${EMA_DECAY} \
+    --wandb_project_name=${WANDB_PROJECT_NAME:-} \
+    --wandb_run_name=${WANDB_RUN_NAME:-} \
+    --WANDB_API_KEY=${WANDB_API_KEY:-} \
+    --WANDB_USERNAME=${WANDB_USERNAME:-} \
+    --WANDB_MODE=${WANDB_MODE:-offline} \
     --seed=${SEED}
 EOT

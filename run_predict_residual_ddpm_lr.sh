@@ -102,7 +102,7 @@ if [ "${MAKE_REPORT:-true}" = true ] && [ -f "${OUTPUT_PATH}${OUTPUT_FILE}" ]; t
         --var=${VAR} \
         --experiment="${EXPERIMENT}" \
         --val_year=${TEST_YEAR_START} \
-        --domain=SA
+        --domain=${DOMAIN:-SA}
 elif [ "${MAKE_REPORT:-true}" = true ]; then
     echo "ERROR: ${OUTPUT_PATH}${OUTPUT_FILE} not found, skipping plot_report.py"
 else
@@ -124,7 +124,7 @@ if [ "${MAKE_REPORT:-true}" = true ] && [ ${SNAPSHOT_INTERVAL} -gt 0 ]; then
                 --var=${VAR} \
                 --experiment="${EXPERIMENT}" \
                 --val_year=${TEST_YEAR_START} \
-                --domain=SA
+                --domain=${DOMAIN:-SA}
         else
             echo "WARNING: ${OUTPUT_PATH}\${SNAP_FILE} not found, skipping snapshot report"
         fi
@@ -133,17 +133,37 @@ fi
 EOT
 }
 
-if [ "${TEST_MATRIX:-false}" = true ] ; then
+if [ "${TEST_CASES+x}" = x ] && [ "${#TEST_CASES[@]}" -gt 0 ] ; then
+    for case_spec in "${TEST_CASES[@]}"; do
+        IFS='|' read -r MODEL_TAG MODEL_NETCDF_TAG PERIOD PERIOD_YEARS PERIOD_START INPUT_MODE <<< "${case_spec}"
+
+        ATTENTION_VAR_NAME="${ATTENTION_VAR_NAME:-${VAR:-pr}}"
+        DDPM_OUTPUT_TAG="${DDPM_OUTPUT_TAG:-attention_ddpm_recon_wet}"
+        GNN_PRED_FILE="${ATTENTION_TEST_BASE}/${PERIOD}/${INPUT_MODE}/${MODEL_TAG}_${ATTENTION_VAR_NAME}_attention.pkl"
+        TEST_INPUT_PATH_P="${TEST_PREDICTOR_BASE}/${PERIOD}/predictors/${INPUT_MODE}/"
+        PREDICTORS_FILE="${MODEL_NETCDF_TAG}_${PERIOD_YEARS}.nc"
+        OUTPUT_PATH="${DDPM_TEST_OUTPUT_BASE}/${PERIOD}/${INPUT_MODE}/"
+        OUTPUT_FILE="${MODEL_TAG}_${ATTENTION_VAR_NAME}_${DDPM_OUTPUT_TAG}.pkl"
+        LOG_FILE="${MODEL_TAG}_log.txt"
+        TEST_YEAR_START="${PERIOD_START}"
+        JOB_NAME="${JOB_NAME_PREFIX}-${MODEL_TAG}-${PERIOD}-${INPUT_MODE}"
+
+        echo "Submitting ${MODEL_TAG} ${PERIOD} ${INPUT_MODE}"
+        submit_prediction
+    done
+elif [ "${TEST_MATRIX:-false}" = true ] ; then
     for model_spec in "${TEST_MODELS[@]}"; do
         IFS='|' read -r MODEL_TAG MODEL_NETCDF_TAG <<< "${model_spec}"
         for period_spec in "${TEST_PERIODS[@]}"; do
             IFS='|' read -r PERIOD PERIOD_YEARS PERIOD_START <<< "${period_spec}"
             for INPUT_MODE in "${TEST_INPUT_MODES[@]}"; do
-                GNN_PRED_FILE="${ATTENTION_TEST_BASE}/${PERIOD}/${INPUT_MODE}/${MODEL_TAG}_pr_attention.pkl"
+                ATTENTION_VAR_NAME="${ATTENTION_VAR_NAME:-${VAR:-pr}}"
+        DDPM_OUTPUT_TAG="${DDPM_OUTPUT_TAG:-attention_ddpm_recon_wet}"
+        GNN_PRED_FILE="${ATTENTION_TEST_BASE}/${PERIOD}/${INPUT_MODE}/${MODEL_TAG}_${ATTENTION_VAR_NAME}_attention.pkl"
                 TEST_INPUT_PATH_P="${TEST_PREDICTOR_BASE}/${PERIOD}/predictors/${INPUT_MODE}/"
                 PREDICTORS_FILE="${MODEL_NETCDF_TAG}_${PERIOD_YEARS}.nc"
                 OUTPUT_PATH="${DDPM_TEST_OUTPUT_BASE}/${PERIOD}/${INPUT_MODE}/"
-                OUTPUT_FILE="${MODEL_TAG}_pr_attention_ddpm_recon_wet.pkl"
+                OUTPUT_FILE="${MODEL_TAG}_${ATTENTION_VAR_NAME}_${DDPM_OUTPUT_TAG}.pkl"
                 LOG_FILE="${MODEL_TAG}_log.txt"
                 TEST_YEAR_START="${PERIOD_START}"
                 JOB_NAME="${JOB_NAME_PREFIX}-${MODEL_TAG}-${PERIOD}-${INPUT_MODE}"

@@ -1,0 +1,21 @@
+#!/bin/bash
+
+MAIN_PATH="$HOME/benchmarks/Experiments_GNN_diffusion_ddpm_recon_wet_loss"
+REPORT_OUTPUT_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/diffusion/Emulator_hist_future/test/reports/attention_ACCESS_CM2/"
+REPORT_NAME="attention_ACCESS_CM2_pr_Emulator_hist_future_extremes"
+
+HISTORICAL_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/diffusion/Emulator_hist_future/test/attention/historical/perfect/ACCESS_CM2_pr_attention.pkl"
+MID_CENTURY_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/diffusion/Emulator_hist_future/test/attention/mid_century/perfect/ACCESS_CM2_pr_attention.pkl"
+END_CENTURY_FILE="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/train/SA_domain/diffusion/Emulator_hist_future/test/attention/end_century/perfect/ACCESS_CM2_pr_attention.pkl"
+
+FIELD_NAME="pr_gnn4cd"
+DAILY_DATE="1998-11-13"
+GRID_H=128
+GRID_W=128
+
+# Figure 1: Rx1day climatology; Figure 2: daily precipitation.
+# Figures 3-4: relative Rx1day changes at mid/end century.
+RX1DAY_VMAX=150
+DAILY_VMAX=175
+DELTA_MID_VMAX=40
+DELTA_END_VMAX=80

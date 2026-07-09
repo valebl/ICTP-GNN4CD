@@ -11,6 +11,24 @@ import numpy as np
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.colors import LinearSegmentedColormap
 
+# Compatibility for old-GNN pickle files saved with NumPy 2.x and read in the
+# RLenv NumPy 1.x runtime. NumPy 2 pickles may reference numpy._core modules.
+try:
+    import sys
+    import numpy.core as _np_core
+    import numpy.core._multiarray_umath as _np_umath
+    import numpy.core.fromnumeric as _np_fromnumeric
+    import numpy.core.multiarray as _np_multiarray
+    import numpy.core.numeric as _np_numeric
+
+    sys.modules.setdefault("numpy._core", _np_core)
+    sys.modules.setdefault("numpy._core._multiarray_umath", _np_umath)
+    sys.modules.setdefault("numpy._core.fromnumeric", _np_fromnumeric)
+    sys.modules.setdefault("numpy._core.multiarray", _np_multiarray)
+    sys.modules.setdefault("numpy._core.numeric", _np_numeric)
+except Exception:
+    pass
+
 os.environ.setdefault("CARTOPY_DATA_DIR", "/leonardo_work/ICT26_ESP_0/wtang/cartopy_data")
 try:
     import cartopy.crs as ccrs

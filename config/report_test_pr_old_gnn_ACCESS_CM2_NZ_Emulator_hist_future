@@ -1,0 +1,20 @@
+#!/bin/bash
+
+MAIN_PATH="$HOME/benchmarks/Experiments_GNN_diffusion_ddpm_recon_wet_loss"
+REPORT_OUTPUT_PATH="/leonardo_work/ICT26_ESP_0/wtang/CORDEXML-BENCHMARK/test/reports/old_gnn/NZ_domain/Emulator_hist_future/ACCESS_CM2_imperfect/"
+REPORT_NAME="old_gnn_ACCESS_CM2_imperfect_pr_NZ_Emulator_hist_future_extremes"
+
+# NZ Emulator does not have ACCESS-CM2 historical/perfect, so use the complete
+# ACCESS-CM2 imperfect set consistently across historical/mid/end periods.
+HISTORICAL_FILE="/leonardo_work/ICT26_ESP/SHARED/CORDEX-predictions/NZ_domain/Emulator_hist_future/historical/imperfect/ACCESS_CM2_pr_pred.pkl"
+MID_CENTURY_FILE="/leonardo_work/ICT26_ESP/SHARED/CORDEX-predictions/NZ_domain/Emulator_hist_future/mid_century/imperfect/ACCESS_CM2_pr_pred.pkl"
+END_CENTURY_FILE="/leonardo_work/ICT26_ESP/SHARED/CORDEX-predictions/NZ_domain/Emulator_hist_future/end_century/imperfect/ACCESS_CM2_pr_pred.pkl"
+
+FIELD_NAME="pr_gnn4cd"
+DAILY_DATE="1998-11-13"
+GRID_H=128
+GRID_W=128
+RX1DAY_VMAX=225
+DAILY_VMAX=225
+DELTA_MID_VMAX=45
+DELTA_END_VMAX=80

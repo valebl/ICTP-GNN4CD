@@ -87,6 +87,11 @@ parser.add_argument("--use_ema", action="store_true")
 parser.add_argument("--no-use_ema", dest="use_ema", action="store_false")
 parser.set_defaults(use_ema=True)
 parser.add_argument("--ema_decay", type=float, default=0.999)
+parser.add_argument("--wandb_project_name", type=str, default="")
+parser.add_argument("--wandb_run_name", type=str, default="")
+parser.add_argument("--WANDB_API_KEY", type=str, default="")
+parser.add_argument("--WANDB_USERNAME", type=str, default="")
+parser.add_argument("--WANDB_MODE", type=str, default="offline")
 
 
 def compute_losses(
@@ -249,6 +254,32 @@ if __name__ == "__main__":
         "w",
     )
 
+    wandb_run = None
+    if args.wandb_project_name:
+        try:
+            import wandb
+
+            if args.WANDB_API_KEY:
+                os.environ["WANDB_API_KEY"] = args.WANDB_API_KEY
+            if args.WANDB_USERNAME:
+                os.environ["WANDB_USERNAME"] = args.WANDB_USERNAME
+            if args.WANDB_MODE:
+                os.environ["WANDB_MODE"] = args.WANDB_MODE
+
+            wandb_run = wandb.init(
+                project=args.wandb_project_name,
+                name=args.wandb_run_name or None,
+                config=vars(args),
+                dir=args.output_path,
+            )
+            write_log(
+                f"W&B enabled: project={args.wandb_project_name}, "
+                f"mode={os.environ.get('WANDB_MODE', '')}\n",
+                log_path,
+            )
+        except Exception as exc:
+            write_log(f"W&B disabled: {exc}\n", log_path)
+
     dataset = ResidualDDPMDatasetLR(
         gnn_pred_file=args.gnn_pred_file,
         target_file=args.target_file,
@@ -374,6 +405,8 @@ if __name__ == "__main__":
         valid_batches = 0
         skipped_batches = 0
         t0 = time.time()
+        if device.type == "cuda":
+            torch.cuda.reset_peak_memory_stats(device)
 
         for x_gnn, x_hr, residual, lr_feats in dataloader:
             x_gnn = x_gnn.to(device)
@@ -419,6 +452,12 @@ if __name__ == "__main__":
             meters[key] /= valid_batches
 
         elapsed = time.time() - t0
+        memory_meters = {}
+        if device.type == "cuda":
+            memory_meters = {
+                "gpu_peak_alloc_gb": torch.cuda.max_memory_allocated(device) / 1024**3,
+                "gpu_peak_reserved_gb": torch.cuda.max_memory_reserved(device) / 1024**3,
+            }
         val_meters = None
         if val_loader is not None:
             eval_model = ema_model if ema_model is not None else model
@@ -446,10 +485,35 @@ if __name__ == "__main__":
                 f"val_recon={val_meters['recon']:.6f} "
                 f"val_wet={val_meters['wet']:.6f}"
             )
+        if memory_meters:
+            msg += (
+                f" | gpu_peak_alloc={memory_meters['gpu_peak_alloc_gb']:.3f}GB "
+                f"gpu_peak_reserved={memory_meters['gpu_peak_reserved_gb']:.3f}GB"
+            )
         msg += f" | {elapsed:.1f}s\n"
         write_log(msg, log_path)
         if skipped_batches:
             write_log(f"Skipped non-finite batches: {skipped_batches}/{len(dataloader)}\n", log_path)
+
+        if wandb_run is not None:
+            wandb_log = {
+                "epoch": epoch + 1,
+                "train/total": meters["total"],
+                "train/noise": meters["noise"],
+                "train/recon": meters["recon"],
+                "train/wet": meters["wet"],
+                "time/epoch_seconds": elapsed,
+            }
+            if val_meters is not None:
+                wandb_log.update({
+                    "val/total": val_meters["total"],
+                    "val/noise": val_meters["noise"],
+                    "val/recon": val_meters["recon"],
+                    "val/wet": val_meters["wet"],
+                })
+            for key, value in memory_meters.items():
+                wandb_log[f"memory/{key}"] = value
+            wandb_run.log(wandb_log, step=epoch + 1)
 
         ckpt = {
             "model": model.state_dict(),
@@ -481,3 +545,6 @@ if __name__ == "__main__":
 
     metric_name = "validation loss" if val_loader is not None else "training loss"
     write_log(f"\nTraining complete. Best {metric_name}: {best_loss:.6f}\n", log_path)
+    if wandb_run is not None:
+        wandb_run.summary["best_loss"] = best_loss
+        wandb_run.finish()
