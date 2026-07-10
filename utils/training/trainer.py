@@ -126,6 +126,7 @@ class Trainer(object):
                     
             accelerator.save_state(output_dir=args.output_path+f"checkpoints/checkpoint_{epoch}/", safe_serialization=False)
             torch.save({"epoch": epoch}, args.output_path+f"checkpoints/checkpoint_{epoch}/epoch")
+            torch.save({"lr_scheduler": lr_scheduler.state_dict()}, args.output_path+f"checkpoints/checkpoint_{epoch}/lr_scheduler_state")
 
             # VALIDATION
             if dataloader_val is not None:
