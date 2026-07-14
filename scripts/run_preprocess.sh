@@ -75,10 +75,12 @@ add_arg mask_file "${MASK_FILE}"
 add_arg land_use_path "${LAND_USE_PATH}"
 add_arg land_use_file "${LAND_USE_FILE}"
 
-# Target + dataset
-add_arg target_type "${TARGET_TYPE}"
-add_arg target_multiplier "${TARGET_MULTIPLIER}"
+# Dataset
 add_arg dataset_name "${DATASET_NAME}"
+
+# Target variables and multipliers
+[[ -n "${TARGET_VARIABLES}" ]] && ARGS+=( "--target_variables=${TARGET_VARIABLES}" )
+[[ -n "${TARGET_MULTIPLIERS}" ]] && ARGS+=( "--target_multipliers=${TARGET_MULTIPLIERS}" )
 
 # Params + levels (string or array)
 [[ -n "${PARAMS}" ]] && ARGS+=( "--params=${PARAMS}" )

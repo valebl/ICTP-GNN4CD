@@ -31,8 +31,8 @@ def add_base_args(parser):
     parser.add_argument('--mask_file', type=str)
     parser.add_argument('--predictors_dataset', type=str)
     parser.add_argument('--target_dataset', type=str)
-    parser.add_argument('--target_type', type=str)
-    parser.add_argument('--target_multiplier', type=float)
+    parser.add_argument("--target_variables", type=str, default="", help="Comma-separated list of target variable names as they appear in the .nc file, e.g. pr,tasmax")
+    parser.add_argument("--target_multipliers", type=str, default="", help="Comma-separated list of multipliers, same length and order as --target_variables. Use 1.0 for no conversion.")
     parser.add_argument('--low2high_norm_constants', type=str)
     parser.add_argument('--high_norm_constants', type=str)
 

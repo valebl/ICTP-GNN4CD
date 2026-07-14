@@ -10,7 +10,7 @@ from torch_geometric.data import HeteroData
 import torch_geometric.transforms as T
 transform = T.AddLaplacianEigenvectorPE(k=2)
 
-from utils.helpers.tools import write_log
+from utils.helpers.tools import write_log, extract_target_variable
 from data.structures.graph import (
     derive_edge_index_within,
     derive_edge_index_multiscale,
@@ -79,38 +79,43 @@ write_log(f'\nPreprocessing of low resolution data finished.', args, accelerator
 
 write_log(f'\n\n#### Preprocessing of the high resolution data.', args, accelerator=None, mode='a')
 
+# Reverse mapping: actual .nc variable name -> physical category
+# We can extend this as new target variables are introduced.
+VAR_TO_CATEGORY = {
+    "pr": "precipitation",
+    "tp": "precipitation",
+    "tasmax": "temperature",
+    "t2m": "temperature",
+}
+
+target_variables = args.target_variables.split(",")
+target_multipliers = [float(t) for t in args.target_multipliers.split(",")]
+
 # 1. Target
 write_log(f"\n-- 1. TARGET ", args, accelerator=None, mode='a')
 if args.target_file == "":
     target_high = None
+    lon_high = lat_high = None
     write_log(f"- ignoring", args, accelerator=None, mode='a')
 else:
     target_ds, high_new_time_index, high_time_res = read_dataset(args.input_path_target + args.target_file)
     write_log(f"Target time-resolution is {high_time_res} ... ", args, accelerator=None, mode='a')
 
-    if args.target_type == "precipitation":
-        try:
-            target_high = target_ds.pr.to_numpy()
-        except:
-            target_high = target_ds.tp.to_numpy()
-    elif args.target_type == "temperature":
-        try:
-            target_high = target_ds.tasmax.to_numpy()
-        except:
-            target_high = target_ds.t2m.to_numpy()
-
-    if args.target_multiplier is not None: 
-        target_high *= args.target_multiplier
-        write_log(f'\n\tMultiplying pr by {args.target_multiplier} to get the correct unit.', args, accelerator=None, mode='a')
-
+    # Lon/lat only need to be read once, regardless of how many variables we extract
     try:
         lon_high = target_ds.lon.to_numpy()
         lat_high = target_ds.lat.to_numpy()
-    except:
+    except AttributeError:
         lon_high = target_ds.longitude.to_numpy()
         lat_high = target_ds.latitude.to_numpy()
 
-    write_log(f'\n\tLon and lat high derived from target and have shape: lon {lon_high.shape}, lat {lat_high.shape}.', args, accelerator=None, mode='a')
+    write_log(f'\n\tLon and lat high derived from target and have shape: lon {lon_high.shape}, lat {lat_high.shape}.',
+               args, accelerator=None, mode='a')
+
+    target_high = {}
+    for var_name, var_multiplier in zip(target_variables, target_multipliers):
+        write_log(f"\n\tExtracting target variable: {var_name}", args, accelerator=None, mode='a')
+        target_high[var_name] = extract_target_variable(target_ds, var_name, var_multiplier, VAR_TO_CATEGORY, args)
 
 # 2. Orography
 write_log(f"\n-- 2. OROGRAPHY ", args, accelerator=None, mode='a')
@@ -137,10 +142,8 @@ if lon_high.ndim == 1 and lat_high.ndim == 1:
 write_log(f"\n-- 3. MASK SEA-LAND ", args, accelerator=None, mode='a')
 mask_sealand_ds = xr.open_dataset(args.input_path_mask_sealand + args.mask_sealand_file)
 
-try:
-    mask_sealand = mask_sealand_ds.lsm.to_numpy()
-except:
-    mask_sealand = mask_sealand_ds.z.to_numpy()
+varname = next(v for v in ['lsm', 'z', 'orog'] if hasattr(mask_sealand_ds, v))
+mask_sealand = getattr(mask_sealand_ds, varname).to_numpy()
 
 # 4. Matrix coordinates ij
 write_log(f"\n-- 4. MATRIX COORDINATES ij ", args, accelerator=None, mode='a')
@@ -166,8 +169,10 @@ y_dim = lon_high.shape[0] # time, x, y
 x_dim = lon_high.shape[1]
 
 if target_high is not None:
-    target_high = target_high.reshape(target_high.shape[0],-1) # (time, num_nodes)
-    target_high = target_high.swapaxes(0,1) # (num_nodes, time)
+    for var_name, arr in target_high.items():
+        arr = arr.reshape(arr.shape[0], -1)   # (time, num_nodes)
+        arr = arr.swapaxes(0, 1)              # (num_nodes, time)
+        target_high[var_name] = arr
 
 lon_high = lon_high.flatten()
 lat_high = lat_high.flatten()
@@ -350,7 +355,9 @@ np.save(args.output_path+"time_index.npy", low_time_index)
 
 if target_high is not None:
     write_log(f"\n-- 3. Target", args, accelerator=None, mode='a')
-    np.save(args.output_path+"target.npy", target_high)
+    for var_name, arr in target_high.items():
+        write_log(f"\n\ttarget_{var_name}.npy", args, accelerator=None, mode='a')
+        np.save(args.output_path+f"target_{var_name}.npy", arr)
 else:
     write_log(f"\n-- 3. Target - ignoring", args, accelerator=None, mode='a')
 
@@ -366,6 +373,7 @@ np.save(args.output_path+"coords_ij.npy", coords)
 write_log(f"\n-- 7. Graph", args, accelerator=None, mode='a')
 with open(args.output_path + args.output_file, 'wb') as f:
     pickle.dump(low_high_graph, f)
+    
 if target_high is not None:
     write_log(f"\n-- 8. High time index.", args, accelerator=None, mode='a')
     np.save(args.output_path+"high_time_index.npy", high_new_time_index)
