@@ -97,6 +97,8 @@ add_arg lr_warmup_epochs "${LR_WARMUP_EPOCHS}"
 add_arg weight_decay "${WEIGHT_DECAY}"
 add_arg x_dim "${X_DIM}"
 add_arg y_dim "${Y_DIM}"
+add_arg threshold_nll ${THRESHOLD_NLL}
+add_arg magnitude_weight ${MAGNITUDE_WEIGHT}
 
 # File paths
 add_arg low_input_file "${LOW_INPUT_FILE}"
