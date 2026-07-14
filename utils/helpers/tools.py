@@ -600,3 +600,24 @@ def get_backend(x):
         return np
     else:
         raise TypeError(f"Unsupported type for predictor transform: {type(x)}")
+
+
+def extract_target_variable(ds, var_name, var_multiplier, VAR_TO_CATEGORY, args):
+    """Extract a single target variable array (by exact .nc variable name)
+    from an already-opened dataset, applying category-specific processing."""
+    if not hasattr(ds, var_name):
+        raise ValueError(f"Variable '{var_name}' not found in target dataset.")
+
+    data = getattr(ds, var_name).to_numpy()
+
+    category = VAR_TO_CATEGORY.get(var_name)
+    if category is None:
+        write_log(f"\n\tWarning: no known category for variable '{var_name}', "
+                   f"skipping category-specific processing.", args, accelerator=None, mode='a')
+
+    if var_multiplier is not None and var_multiplier != 1.0:
+        data = data * var_multiplier
+        write_log(f'\n\tMultiplying {var_name} by {var_multiplier} to get the correct unit.',
+                   args, accelerator=None, mode='a')
+
+    return data
