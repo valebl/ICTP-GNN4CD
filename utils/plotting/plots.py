@@ -52,10 +52,30 @@ def plot_maps(
     if proj is None:
         proj = ccrs.PlateCarree(central_longitude=0)
 
-    fig, ax = plt.subplots(nrows=1, ncols=n_maps, figsize=(x_size*n_maps,y_size), subplot_kw={"projection": ccrs.PlateCarree()})
+    # fig, ax = plt.subplots(nrows=1, ncols=n_maps, figsize=(x_size*n_maps,y_size), subplot_kw={"projection": ccrs.PlateCarree()})
+    fig = plt.figure(figsize=(x_size * n_maps, y_size))
 
-    if n_maps == 1:
-        ax = [ax]
+    left_margin = 0.02
+    right_margin = 0.88
+    bottom = 0.10
+    height = 0.80
+    gap = 0.00   # zero gap = touching maps
+
+    total_width = right_margin - left_margin
+    map_width = (total_width - (n_maps - 1) * gap) / n_maps
+
+    ax = []
+    for i in range(n_maps):
+        left = left_margin + i * (map_width + gap)
+        axi = fig.add_axes([left, bottom, map_width, height], projection=proj)
+
+        # disable Cartopy’s aspect ratio enforcement
+        axi.set_adjustable("box")
+        axi.set_aspect("auto")
+
+        ax.append(axi)
+
+    cbar_ax = fig.add_axes([0.90, 0.20, 0.02, 0.60])    
 
     # Define cmaps
     if cmap_type is None:
@@ -119,14 +139,14 @@ def plot_maps(
         axi.add_feature(cfeature.BORDERS, linewidth=0.8, edgecolor="black")
 
     # print(fig.get_size_inches())
-    fig_x_size = fig.get_size_inches()[0]
-    fig_y_size = fig.get_size_inches()[1]
+    # fig_x_size = fig.get_size_inches()[0]
+    # fig_y_size = fig.get_size_inches()[1]
     
-    if cbar_ax_lim is None:
-        width = 1.5/fig_x_size
-        left = 0.95 #(fig_x_size - width*fig_x_size) / fig_x_size
-        cbar_ax_lim = [left, 0.15, width, 0.7]
-    cbar_ax = fig.add_axes(cbar_ax_lim)
+    # if cbar_ax_lim is None:
+    #     width = 1.5/fig_x_size
+    #     left = 0.95 #(fig_x_size - width*fig_x_size) / fig_x_size
+    #     cbar_ax_lim = [left, 0.15, width, 0.7]
+    # cbar_ax = fig.add_axes(cbar_ax_lim)
 
     if cbar_ticks is not None:
         cbar = fig.colorbar(im, cax=cbar_ax, aspect=25, ticks=cbar_ticks, extend=extend)
