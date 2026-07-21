@@ -41,11 +41,11 @@ In this example we will see how to run the preprocessing the CORDEX-ML Bench dat
 Then we will train a simple GNN4CD emulator on tasmax for the period 1961-1979 and see the training statistics on wandb.
 Finally we will create the predictions for the year 1980 and produce a sample PDF report to evaluate the emulator's predictions against the ground truth.
 
-### Preprocessing the data
-To run a simple preprocessing example, copy the default configuration file to your config folder and modify this new bash file
-`cp config_template/preprocess_ALPS_esd config/preprocess_example`
+First, copy the config_default directory into your config folder. We will then modify these files.
+`cp -r config_template/ config/`
 
-You need to fill the following parameters:
+### Preprocessing the data
+You need to fill the following parameters in the config/preprocess_ALPS_esd bash file:
 - `LOG_PATH` the complete path to where you want to save the pre-processed data
 - `MAIN_PATH` the complete path to your `ICTP-GNN4CD` folder
 
