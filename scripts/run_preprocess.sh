@@ -17,14 +17,12 @@ ${QOS:+#SBATCH --qos=${QOS}}
 #SBATCH -o ${LOG_PATH}/run.out
 #SBATCH -e ${LOG_PATH}/run.err
 
-# Optional source
-[[ -n "${SOURCE_PATH}" ]] && source "${SOURCE_PATH}"
-
 module purge
 module load --auto profile/deeplrn
 module load gcc
 module load cuda/11.8
 
+[[ -n "${SOURCE_PATH}" ]] && source "${SOURCE_PATH}"
 conda activate "${ENV_PATH}"
 
 cd "${MAIN_PATH}"
