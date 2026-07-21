@@ -1,6 +1,8 @@
-## GNN4CD-CORDEXML - branch Public
+# GNN4CD-CORDEXML - branch Public
 
 This folder contains the public code of the GNN4CD emulator, updated to its most recent stable version.
+
+# Instructions
 
 ### Clone the `Public` branch
 
@@ -29,4 +31,50 @@ You will be asked some questions about your training desired settings and it wil
 `~/.cache/huggingface/accelerate/default_config.yaml`
 Please rename this file adding a subscript with the number of GPUs specified in the file generation, e.g. if you chose 4 GPUs:
 `mv ~/.cache/huggingface/accelerate/default_config.yaml ~/.cache/huggingface/accelerate/default_config_4.yaml`
+
+You should now be all set up to start using the GNN4CD emulator!
+Move back to the ICTP-GNN4CD folder and create a new `config` directory. Here you will save your own configuration files to preprocess/train/predict!
+
+# A simple working example
+
+In this example we will see how to run the preprocessing the CORDEX-ML Bench data for the ALPS domain in the ESD pseudo reality training setting.
+Then we will train a simple GNN4CD emulator on tasmax for the period 1961-1979 and see the training statistics on wandb.
+Finally we will create the predictions for the year 1980 and produce a sample PDF report to evaluate the emulator's predictions against the ground truth.
+
+### Preprocessing the data
+To run a simple preprocessing example, copy the default configuration file to your config folder and modify this new bash file
+`cp config_template/preprocess_ALPS_esd config/preprocess_example`
+
+You need to fill the following parameters:
+- `LOG_PATH` the complete path to where you want to save the pre-processed data
+- `MAIN_PATH` the complete path to your `ICTP-GNN4CD` folder
+
+All the other parameters can be customised but will not address it in this example.
+
+To run the preprocessing:
+`./scripts/run_preprocessing.sh config/preprocess_example`
+
+You can check the state of your job using (substitute your_username with your actual username):
+`squeue -u your_username`
+
+The output of your job will be saved in `LOG_PATH` and will consist of the following files:
+
+- `low_high_graph_edgeattr.pkl`
+- `low_input.npy`
+- `target_tasmax.npy`
+- `target_pr.npy`
+- `orog.npy`
+- `mask_sealand.npy`
+- `coords_ij.npy`
+- `unique_src.npy`
+- `time_index.npy`
+- `high_time_index.npy`
+- `low_input_metadata.json`
+- `target_metadata.json`
+- `low2high_norm_constants.json`
+- `high_norm_constants.json`
+
+### Training the model
+
+
 
