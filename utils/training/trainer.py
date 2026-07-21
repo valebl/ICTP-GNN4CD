@@ -259,23 +259,6 @@ class Trainer(object):
                         plt.close(fig_avg)
                         plt.close(fig_bias)
                         plt.close(fig_pdf)
-
-                        if epoch == (args.epochs-1): # last epoch
-                            data = HeteroData()
-                            if args.target_type == "precipitation":
-                                data.pr_gnn4cd = y_pred
-                            elif args.target_type == "temperature":
-                                data.tasmax_gnn4cd = y_pred
-                            
-                            data.target = y
-
-                            data.times = times
-                            data.times_target = times
-                            data["high"].lat = lat
-                            data["high"].lon = lon
-
-                            with open(args.output_path + f"output_graph_{args.validation_year}.pkl", 'wb') as f:
-                                pickle.dump(data, f)
                             
                 accelerator.log({
                     'epoch':epoch,
