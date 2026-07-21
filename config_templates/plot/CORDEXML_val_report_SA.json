@@ -64,9 +64,9 @@
       "vmax_offset": 4
     },
     "tasmax": {
-      "vmin": 282,
-      "vmax_emulator": 307,
-      "vmax_esd": 303
+      "vmin": 285,
+      "vmax_emulator": 320,
+      "vmax_esd": 320
     }
   },
 
@@ -89,30 +89,35 @@
     "pr": {
       "vmin_esd": [0, 0],
       "vmin_emulator": [0, 0],
-      "vmax_emulator": [440, 195],
-      "vmax_esd": [260, 55],
-      "bias_vmax_emulator": [410, 160],
-      "bias_vmax_esd": [210, 41]
+      "vmax_emulator": [132, 75],
+      "vmax_esd": [270, 55],
+      "bias_vmax_emulator": [78, 61],
+      "bias_vmax_esd": [210, 42]
     },
     "tasmax": {
-      "vmin_emulator": [290, 25],
-      "vmax_emulator": [284.5, 303],
-      "vmin_esd": [280, 275],
-      "vmax_esd": [312, 300],
-      "bias_vmax_emulator": [7.5, 4.8],
-      "bias_vmax_esd": [7, 6.1]
+      "vmin_emulator": [258, 278],
+      "vmax_emulator": [296, 321],
+      "vmin_esd": [278, 272],
+      "vmax_esd": [303, 293],
+      "bias_vmax_emulator": [6.1, 5.9],
+      "bias_vmax_esd": [4.9, 3.4]
     }
   },
   
   "histogram_bins": {
     "tasmax": {
-      "min": 270,
+      "min": 230,
+      "max": 320,
+      "step": 1
+    },
+    "t2m": {
+      "min": 230,
       "max": 320,
       "step": 1
     },
     "pr": {
       "min": 0,
-      "max": 1000,
+      "max": 500,
       "step": 1
     }
   }
