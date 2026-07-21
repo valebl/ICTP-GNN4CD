@@ -6,9 +6,12 @@ PREDICTAND_INVERSE_TRANSFORM_REGISTRY = {}
 def register_predictand_transform(mode):
     """Decorator for forward transforms."""
     def decorator(func):
-        """
-        func: the function being decorated
-        """
+        if mode in PREDICTAND_TRANSFORM_REGISTRY and PREDICTAND_TRANSFORM_REGISTRY[mode] is not func:
+            raise ValueError(
+                f"Predictand transform '{mode}' is already registered to "
+                f"{PREDICTAND_TRANSFORM_REGISTRY[mode]!r}; refusing to overwrite with {func!r}. "
+                f"Check for duplicate registrations."
+            )
         PREDICTAND_TRANSFORM_REGISTRY[mode] = func
         return func
     return decorator
@@ -16,9 +19,12 @@ def register_predictand_transform(mode):
 def register_predictand_inverse_transform(mode):
     """Decorator for inverse transforms."""
     def decorator(func):
-        """
-        func: the function being decorated
-        """
+        if mode in PREDICTAND_INVERSE_TRANSFORM_REGISTRY and PREDICTAND_INVERSE_TRANSFORM_REGISTRY[mode] is not func:
+            raise ValueError(
+                f"Predictand inverse transform '{mode}' is already registered to "
+                f"{PREDICTAND_INVERSE_TRANSFORM_REGISTRY[mode]!r}; refusing to overwrite with {func!r}. "
+                f"Check for duplicate registrations."
+            )
         PREDICTAND_INVERSE_TRANSFORM_REGISTRY[mode] = func
         return func
     return decorator

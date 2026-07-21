@@ -92,6 +92,7 @@ add_arg metadata_file "${METADATA_FILE}"
 # Loss + history + threshold
 add_arg loss_name "${LOSS_NAME}"
 add_arg history_length "${HISTORY_LENGTH}"
+add_arg threshold_nll "${THRESHOLD_NLL}"
 add_arg threshold "${THRESHOLD}"
 
 # Debug print

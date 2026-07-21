@@ -184,6 +184,7 @@ class GNN4CD_AxialAttention_CrossEdgeFeat_Model(nn.Module):
         parser.add_argument("--x_low_encoding_dim", type=int, default=128)
         parser.add_argument("--x_low2high_dim", type=float, default=64)
         parser.add_argument("--edge_attr_dim", type=int, default=4)
+        parser.add_argument("--d_encoder", type=int, default=128)
         return parser
     
     def __init__(
@@ -195,7 +196,8 @@ class GNN4CD_AxialAttention_CrossEdgeFeat_Model(nn.Module):
         history_length,
         x_low_encoding_dim,
         x_low2high_dim,
-        edge_attr_dim
+        edge_attr_dim,
+        d_encoder
         ):
 
         super().__init__()
@@ -208,7 +210,7 @@ class GNN4CD_AxialAttention_CrossEdgeFeat_Model(nn.Module):
             var_dim=x_low_var_dim,
             lev_dim=x_low_lev_dim,
             seq_length=seq_length,
-            d_model=128,
+            d_model=d_encoder,
             n_heads=4,
             n_layers=2,
             out_dim=x_low_encoding_dim

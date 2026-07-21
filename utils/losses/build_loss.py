@@ -18,4 +18,4 @@ def build_loss(args):
 
     loss = LossClass(**filtered)
 
-    return loss, LossClass.output_dim
+    return loss, LossClass.output_dim, filtered

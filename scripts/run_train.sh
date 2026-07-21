@@ -79,6 +79,7 @@ add_arg n_val_years "${N_VAL_YEARS}"
 add_arg checkpoint_ctd "${CHECKPOINT_CTD}"
 add_arg alpha "${ALPHA}"
 add_arg beta "${BETA}"
+add_arg gamma "${GAMMA}"
 add_arg binmin "${BINMIN}"
 add_arg binmax "${BINMAX}"
 add_arg binwidth "${BINWIDTH}"
@@ -99,6 +100,7 @@ add_arg x_dim "${X_DIM}"
 add_arg y_dim "${Y_DIM}"
 add_arg threshold_nll ${THRESHOLD_NLL}
 add_arg magnitude_weight ${MAGNITUDE_WEIGHT}
+add_arg d_encoder ${D_ENCODER}
 
 # File paths
 add_arg low_input_file "${LOW_INPUT_FILE}"

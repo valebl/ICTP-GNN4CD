@@ -8,7 +8,6 @@ class Bernoulli_Gamma_NLL_Loss(nn.Module):
     """
     Bernoulli-Gamma (hurdle) negative log-likelihood for precipitation.
     """
-
     output_dim = 3
     components = ["p", "shape", "scale"]
 
@@ -24,9 +23,8 @@ class Bernoulli_Gamma_NLL_Loss(nn.Module):
         self.ignore_nans = ignore_nans
         self.eps = eps
         self.threshold_nll = threshold_nll
-        self.magnitude_weight = magnitude_weight
 
-    def forward(self, y_out, target):
+    def forward(self, y_out, target, return_mean=False):
         p_raw, shape_raw, scale_raw = y_out[:, 0], y_out[:, 1], y_out[:, 2]
 
         p = torch.sigmoid(p_raw)
@@ -53,10 +51,14 @@ class Bernoulli_Gamma_NLL_Loss(nn.Module):
         )
         nll = -(no_rain_ll + rain_ll)
 
-        if self.magnitude_weight > 0:
-            # note: target here is the shifted excess, so weighting is
-            # relative to excess-over-threshold, not raw precipitation
-            weight = (1.0 + self.magnitude_weight * target).detach()
-            return (nll * weight).sum() / weight.sum()
+        loss = nll.mean()
         
-        return nll.mean(), [p.mean(), shape.mean(), scale.mean()]
+        if return_mean:
+            conditional_mean = shape * scale
+            if self.threshold_nll is not None:
+                conditional_mean = conditional_mean + self.threshold_nll
+            mean = p * conditional_mean
+
+            return loss, [p.mean(), shape.mean(), scale.mean(), mean]
+        
+        return loss, [p.mean(), shape.mean(), scale.mean()]

@@ -37,7 +37,6 @@ from data.datasets.graph_dataset import Graph_Dataset, custom_collate_fn_graph
 # Transforms
 from utils.predictand_transforms.transform_predictand import transform_predictand
 from utils.predictor_transforms.transform_predictors import transform_predictors
-from utils.edge_attr_transforms.transform_edge_attr import transform_edge_attr
 
 
 if __name__ == '__main__':
@@ -213,7 +212,9 @@ if __name__ == '__main__':
     #-------------- BUILD LOSS -----------------
     #-------------------------------------------
 
-    loss_fn, output_dim = build_loss(args)
+    loss_fn, output_dim, loss_args = build_loss(args)
+
+    write_log(f"\nLoss args: {loss_args}", args, accelerator, 'a')
 
     # Eventually compute QMSE bins
     if getattr(loss_fn, "use_bins", False):
@@ -337,9 +338,11 @@ if __name__ == '__main__':
     #-----------------------------------------------------
 
     if args.ctd_training:
-        write_log("\nContinuing the training.")
+        write_log("\nContinuing the training.", args, accelerator, 'a')
         accelerator.load_state(args.checkpoint_ctd)
         epoch_start = torch.load(args.checkpoint_ctd+"epoch")["epoch"] + 1
+    else:     
+        epoch_start=0
             
     inspect_model(model, args, accelerator)
 
@@ -383,22 +386,24 @@ if __name__ == '__main__':
         )
         cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
-            T_max=args.epochs - 2,
+            T_max=args.epochs - args.lr_warmup_epochs,
             eta_min=args.lr_eta_min,
         )
         lr_scheduler = torch.optim.lr_scheduler.SequentialLR(
             optimizer,
             schedulers=[warmup, cosine],
-            milestones=[2],
+            milestones=[args.lr_warmup_epochs],
         )
     else:
         lr_scheduler = None
 
+    if args.ctd_training:
+        write_log("\nResuming lr scheduler from checkpoint...", args, accelerator, 'a')
+        lr_scheduler.load_state_dict(args.checkpoint_ctd+"lr_scheduler_state")["lr_scheduler"]
+
 #-----------------------------------------------------
 #---------------- ACCELERATE PREPARE -----------------
 #-----------------------------------------------------
-
-    epoch_start=0
     
     if accelerator is not None:
         model, optimizer, dataloader_train, lr_scheduler, loss_fn = accelerator.prepare(
@@ -414,7 +419,7 @@ if __name__ == '__main__':
 #-----------------------------------------------------
 
     write_log(f"\nUsing lr={optimizer.param_groups[0]['lr']:.8f}, " +
-                f"weight decay = {args.weight_decay} and epochs={args.epochs}." + 
+                f"weight decay = {args.weight_decay} and epochs={args.epochs - epoch_start}." + 
                 f"\nloss: {loss_fn}", args, accelerator, 'a') 
     
     effective_batch_size = args.batch_size if accelerator is None else args.batch_size*torch.cuda.device_count()

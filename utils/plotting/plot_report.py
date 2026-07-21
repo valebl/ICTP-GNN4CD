@@ -155,6 +155,16 @@ def draw_maps_page(pdf, lon, lat, pred, target):
                             f'Prediction ({MODEL_NAME})')
     plt.colorbar(im2, ax=ax2, fraction=0.046, pad=0.04, label=f'{VAR} value')
 
+    # Summary stat
+    ax1.text(0.98, 0.98, f"mean = {np.nanmean(target):.2f}",
+            transform=ax1.transAxes, ha='right', va='top',
+            bbox=dict(boxstyle='round', facecolor='white', edgecolor='black'))
+
+    # Summary stat
+    ax2.text(0.98, 0.98, f"mean = {np.nanmean(pred):.2f}",
+            transform=ax2.transAxes, ha='right', va='top',
+            bbox=dict(boxstyle='round', facecolor='white', edgecolor='black'))
+
     plt.tight_layout()
     pdf.savefig(fig, bbox_inches='tight')
     plt.close()
@@ -173,6 +183,11 @@ def draw_metric_page(pdf, lon, lat, metric, vmin, vmax, cmap, label, title, text
     im = make_spatial_map(ax1, lon, lat, metric, vmin, vmax, cmap, 'Spatial Map')
     cbar = plt.colorbar(im, ax=ax1, fraction=0.046, pad=0.04)
     cbar.set_label(label, fontsize=12)
+
+    # Summary stat
+    ax1.text(0.98, 0.98, f"mean = {np.nanmean(metric):.2f}",
+            transform=ax1.transAxes, ha='right', va='top',
+            bbox=dict(boxstyle='round', facecolor='white', edgecolor='black'))
 
     valid = metric[~np.isnan(metric)]
     ax2.boxplot([valid], patch_artist=True,
@@ -739,13 +754,28 @@ if __name__ == '__main__':
                                f'Ground Truth ({date_label})')
         plt.colorbar(im1, ax=ax1, fraction=0.046, pad=0.04, label=f'{VAR} value')
 
+        # Summary stat
+        ax1.text(0.98, 0.98, f"mean = {np.nanmean(ft):.2f}",
+                transform=ax1.transAxes, ha='right', va='top',
+                bbox=dict(boxstyle='round', facecolor='white', edgecolor='black'))
+
         im2 = make_spatial_map(ax2, lon_grid, lat_grid, fp, vmin_f, vmax_f, cmap_field,
                                f'Prediction ({MODEL_NAME})')
         plt.colorbar(im2, ax=ax2, fraction=0.046, pad=0.04, label=f'{VAR} value')
 
+        # Summary stat
+        ax2.text(0.98, 0.98, f"mean = {np.nanmean(fp):.2f}",
+                transform=ax2.transAxes, ha='right', va='top',
+                bbox=dict(boxstyle='round', facecolor='white', edgecolor='black'))
+
         im3 = make_spatial_map(ax3, lon_grid, lat_grid, fb, -bias_vmax_d, bias_vmax_d, cmap_bias,
                                'Bias (Pred - GT)')
         plt.colorbar(im3, ax=ax3, fraction=0.046, pad=0.04, label='Bias')
+
+        # Summary stat
+        ax3.text(0.98, 0.98, f"mean = {np.nanmean(fb):.2f}",
+                transform=ax3.transAxes, ha='right', va='top',
+                bbox=dict(boxstyle='round', facecolor='white', edgecolor='black'))
 
         plt.tight_layout()
         pdf.savefig(fig, bbox_inches='tight')

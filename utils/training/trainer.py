@@ -174,7 +174,9 @@ class Trainer(object):
                         }, step=step)
                         
                         if args.make_val_plots:
-                            y_pred = extract_prediction(y_out, args.loss_name)
+                            y_pred = extract_prediction(y_out, args.loss_name, args=args)
+                            if isinstance(y_pred, (tuple, list)):
+                                y_pred = y_pred[0]
 
                             # Retrieve graphs for individual time instances
                             n_nodes = graph["high"].num_nodes
