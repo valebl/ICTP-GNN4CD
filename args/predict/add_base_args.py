@@ -34,6 +34,7 @@ def add_base_args(parser):
 
     parser.add_argument('--batch_size', type=int)
     parser.add_argument('--seed', type=int)
+    parser.add_argument('--threshold_nll', type=float)
 
     parser.add_argument('--use_accelerate',  action='store_true')
     parser.add_argument('--no-use_accelerate', dest='use_accelerate', action='store_false')

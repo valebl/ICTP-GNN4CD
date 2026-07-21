@@ -25,4 +25,6 @@ def build_args():
 
     args, unknown = parser.parse_known_args()
 
+    print("unknown args:", unknown, flush=True)
+
     return args
