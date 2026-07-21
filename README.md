@@ -52,7 +52,7 @@ You need to fill the following parameters in the config/preprocess_ALPS_esd bash
 - `LOG_PATH` the complete path to where you want to save the pre-processed data
 - `MAIN_PATH` the complete path to your `ICTP-GNN4CD` folder
 
-All the other parameters can be customised but will not address it in this example.
+All the other parameters can be customised but will not be addressed it in this example.
 
 To run the preprocessing:
 
@@ -88,7 +88,7 @@ You need to fill the following parameters in the config/train_ALPS_esd_tasmax ba
 - `MAIN_PATH` the complete path to your `ICTP-GNN4CD` folder
 - `INPUT_PATH` the path where you saved the preprocessed data
 
-All the other parameters can be customised but will not address it in this example.
+All the other parameters can be customised but will not be addressed it in this example.
 
 To run the training:
 
@@ -114,7 +114,7 @@ You need to fill the following parameters in the config/predict_ALPS_esd_tasmax 
 - `MAIN_PATH` the complete path to your `ICTP-GNN4CD` folder
 - `INPUT_PATH` the path where you saved the preprocessed data
 
-All the other parameters can be customised but will not address it in this example.
+All the other parameters can be customised but will not be addressed it in this example.
 
 To run the predictions:
 
