@@ -17,8 +17,8 @@ To set up the environment on Leonardo you need to follow the steps listed below:
 `source conda_init`
 3. Load the necessary modules
 `source load_modules`
-4. Activate the RLenv environment
-`conda activate /leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv`
+4. Activate the GNN4CDenv environment
+`conda activate /leonardo/pub/userexternal/vblasone/envs/GNN4CDenv`
 
 ### Create a wandb account
 To train the emulator you should create a wandb account on the [wandb website](https://wandb.ai/site/).
@@ -42,19 +42,24 @@ Then we will train a simple GNN4CD emulator on tasmax for the period 1961-1979 a
 Finally we will create the predictions for the year 1980 and produce a sample PDF report to evaluate the emulator's predictions against the ground truth.
 
 First, copy the config_default directory into your config folder. We will then modify these files.
+
 `cp -r config_template/ config/`
 
 ### Preprocessing the data
+
 You need to fill the following parameters in the config/preprocess_ALPS_esd bash file:
+
 - `LOG_PATH` the complete path to where you want to save the pre-processed data
 - `MAIN_PATH` the complete path to your `ICTP-GNN4CD` folder
 
 All the other parameters can be customised but will not address it in this example.
 
 To run the preprocessing:
-`./scripts/run_preprocessing.sh config/preprocess_example`
+
+`./scripts/run_preprocess.sh config/preprocess/preprocess_ALPS_esd`
 
 You can check the state of your job using (substitute your_username with your actual username):
+
 `squeue -u your_username`
 
 The output of your job will be saved in `LOG_PATH` and will consist of the following files:
@@ -74,7 +79,50 @@ The output of your job will be saved in `LOG_PATH` and will consist of the follo
 - `low2high_norm_constants.json`
 - `high_norm_constants.json`
 
-### Training the model
+### Training the emulator
+You need to fill the following parameters in the config/train_ALPS_esd_tasmax bash file:
 
+- `LOG_PATH` the complete path to where you want to save the pre-processed data
+- `WANDB_API_KEY` your wandb API key
+- `WANDB_USERNAME` your wandb username
+- `MAIN_PATH` the complete path to your `ICTP-GNN4CD` folder
+- `INPUT_PATH` the path where you saved the preprocessed data
 
+All the other parameters can be customised but will not address it in this example.
+
+To run the training:
+
+`./scripts/run_train.sh config/train/train_ALPS_esd_tasmax`
+
+You can check the state of your job using (substitute your_username with your actual username):
+
+`squeue -u your_username`
+
+The output of your job will be saved in `LOG_PATH`.
+
+Wandb is set to run offline as the compute nodes on Leonardo do not have internet access. Whenever you want (during training or after training) you can synchronise the wandb logs to the web-platform by running the following command:
+
+`wandb sync --sync-all`
+This will upload all your local runs, saved in `ICTP-GNN4CD/wandb`
+
+### Using the trained emulator for predictions
+You need to fill the following parameters in the config/predict_ALPS_esd_tasmax bash file:
+
+- `LOG_PATH` the complete path to where you want to save the predictions results and plot report
+- `TRAIN_PATH` the path where you saved the trainining output
+- `EPOCH` the epoch of the training that you want to use for the predictions (e.g. 149, the last epoch)
+- `MAIN_PATH` the complete path to your `ICTP-GNN4CD` folder
+- `INPUT_PATH` the path where you saved the preprocessed data
+
+All the other parameters can be customised but will not address it in this example.
+
+To run the predictions:
+
+./scripts/run_predict.sh config/predict/predict_ALPS_esd_tasmax
+
+You can check the state of your job using (substitute your_username with your actual username):
+
+`squeue -u your_username`
+
+The output of your job will be saved in `LOG_PATH`. The output of the predictons are a pickle file containing the graph structure and target/prediction data. Also, a PDF report with some comparison plots is automatically created.
 
