@@ -12,6 +12,7 @@ LOG_PATH=""
 N_GPU="1"
 SEED=100
 DOMAIN="ALPS"
+TARGET_TYPE="temperature"
 
 #------------------#
 # WANDB PARAMETERS #
@@ -24,7 +25,7 @@ WANDB_USERNAME=""
 # PATHS (conda env, main, accelerate config) #
 #--------------------------------------------#
 SOURCE_PATH="./conda_init"
-ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv"
+ENV_PATH="/leonardo/pub/userexternal/vblasone/envs/GNN4CDenv"
 MAIN_PATH=""
 ACCELERATE_CONFIG_PATH="$HOME/.cache/huggingface/accelerate/default_config_${N_GPU}.yaml"
 CARTOPY_DATA_DIR="/leonardo_work/ICT26_ESP/vblasone/cartopy/"

@@ -5,44 +5,44 @@
 #------------------#
 ACCOUNT="ict26_esp_0"
 PARTITION="boost_usr_prod"
+QOS="boost_qos_dbg"
 TIME="00:30:00"
 MEM="100G"
-JOB_NAME="val"
+JOB_NAME="pred-ALPS"
 LOG_PATH=""
 N_GPU="1"
+SEED="100"
+TARGET_TYPE="temperature"
 
-#------------------#
-# TRAIN PARAMETERS #
-#------------------#
+#---------------------------------#
+# PARAMETERS OF THE TRAINED MODEL #
+#---------------------------------#
 TRAIN_PATH=""
 EPOCH=""
-GRAPH_FILE="low_high_graph.pkl"
-SEED="100"
-TARGET_TYPE="precipitation"
+GRAPH_FILE="low_high_graph_edgeattr.pkl"
 
 #--------------------------------------------#
 # PATHS (conda env, main, accelerate config) #
 #--------------------------------------------#
-SOURCE_PATH="/leonardo/home/userexternal/vblasone/.bashrc"
+SOURCE_PATH="./conda_init"
 ENV_PATH="/leonardo/home/userexternal/vblasone/.conda/envs/GNN4CDenv"
-MAIN_PATH="/leonardo_work/ICT26_ESP/vblasone/GNN4CD-CORDEXML/"
-ACCELERATE_CONFIG_PATH="/leonardo/home/userexternal/vblasone/.cache/huggingface/accelerate/default_config_${N_GPU}.yaml"
+MAIN_PATH=""
+ACCELERATE_CONFIG_PATH="$HOME/.cache/huggingface/accelerate/default_config_${N_GPU}.yaml"
 
 #-------------------------------#
 # INPUT/OUTPUT FILES #
 #-------------------------------#
-INPUT_PATH="/leonardo_work/ICT26_ESP/SHARED/preprocessed/CORDEXML/ALPS/train/ESD_pseudo_reality/pr/"
+INPUT_PATH=""
 OUTPUT_PATH=${LOG_PATH}
 LOG_FILE="log.txt"  
 LOW_INPUT_FILE="low_input.npy"
 OROG_FILE="orog.npy"
 MASK_SEALAND_FILE="mask_sealand.npy"
 COORDS_IJ_FILE="coords_ij.npy"
-TARGET_FILE="target.npy"
+TARGET_FILE="target_tasmax.npy"
 METADATA_FILE="low_input_metadata.json"
 CHECKPOINT="checkpoints/checkpoint_${EPOCH}"
 DATASET_NAME="Dataset_Graph"
-TEST_IDXS_FILE=""
 
 OUTPUT_FILE="G_italy_1980.pkl"
 
@@ -51,8 +51,7 @@ OUTPUT_FILE="G_italy_1980.pkl"
 #------------------#
 MODEL_NAME="GNN4CD_Model"
 HISTORY_LENGTH=2 # days
-LOSS_NAME="MSE_QMSE_PSD_Loss"
-THRESHOLD=0.0
+LOSS_NAME="Gaussian_NLL_Loss"
 
 #-------------------#
 # PREDICTION PERIOD #
@@ -67,20 +66,17 @@ TEST_YEAR_END=1980
 #------------#
 # VAL REPORT #
 #------------#
-VAR="pr" # for plot_report.py
+VAR="tasmax" # for plot_report.py
 DOMAIN="ALPS"
-CONFIG_FILE_VAL_REPORT="/leonardo_work/ICT26_ESP/vblasone/GNN4CD-CORDEXML/config/plot/CORDEXML_val_report_${DOMAIN}.json"
+VAL_FILE_HELP="/leonardo_work/ICT26_ESP/sdigioia/CORDEX-ML/CORDEX-domains/ALPS_domain/train/ESD_pseudo_reality/target/pr_tasmax_CNRM-CM5_1961-1980.nc"
+CONFIG_FILE_VAL_REPORT="${MAIN_PATH}/config/plot/CORDEXML_val_report_${DOMAIN}.json"
 CARTOPY_DATA_DIR="/leonardo_work/ICT26_ESP/vblasone/cartopy/"
+VAL_YEAR=1980
+PREDICTIONS_MULTIPLIER=1.0
+TARGET_MULTIPLIER=1.0
+EXPERIMENT="ESD_pseudo_reality"
 
 #-----------------#
 # BOOLEAN OPTIONS #
 #-----------------#
-USE_ACCELERATE=true
-
-#--------------do not change here below------------------
-
-if [ ${USE_ACCELERATE} = true ] ; then
-	USE_ACCELERATE="--use_accelerate"
-else
-	USE_ACCELERATE="--no-use_accelerate"
-fi
+USE_ACCELERATE="--use_accelerate"

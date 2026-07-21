@@ -20,7 +20,7 @@ TARGET_MULTIPLIERS="1.0,1.0"
 #--------------------------#
 # OTHER GENERAL PARAMETERS #
 #--------------------------#
-ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv"
+ENV_PATH="/leonardo/pub/userexternal/vblasone/envs/GNN4CDenv"
 LOG_FILE="log.txt"
 SOURCE_PATH="./conda_init"
 MAIN_PATH=""
