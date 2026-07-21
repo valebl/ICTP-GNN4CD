@@ -3,32 +3,30 @@
 #------------------#
 # SLURM PARAMETERS #
 #------------------#
-ACCOUNT=""
-PARTITION=""
-QOS=""
-TIME="08:00:00"
+ACCOUNT="ict26_esp_0"
+PARTITION="boost_usr_prod"
+TIME="10:00:00"
 MEM="100G"
-JOB_NAME="mse-qmse-psd"
-MAIL=""
+JOB_NAME="train-ALPS"
 LOG_PATH=""
 N_GPU="1"
 SEED=100
-TARGET_TYPE="precipitation"
+DOMAIN="ALPS"
 
 #------------------#
 # WANDB PARAMETERS #
 #------------------#
-WANDB_PROJECT_NAME=""
+WANDB_PROJECT_NAME="CORDEXML_tasmax"
 WANDB_API_KEY=""
 WANDB_USERNAME=""
 
 #--------------------------------------------#
 # PATHS (conda env, main, accelerate config) #
 #--------------------------------------------#
-SOURCE_PATH=""
-ENV_PATH=""
+SOURCE_PATH="./conda_init"
+ENV_PATH="/leonardo/pub/userexternal/sdigioia/sdigioia/env/RLenv"
 MAIN_PATH=""
-ACCELERATE_CONFIG_PATH=""
+ACCELERATE_CONFIG_PATH="$HOME/.cache/huggingface/accelerate/default_config_${N_GPU}.yaml"
 CARTOPY_DATA_DIR="/leonardo_work/ICT26_ESP/vblasone/cartopy/"
 
 #-------------------------------#
@@ -41,9 +39,9 @@ LOW_INPUT_FILE="low_input.npy"
 OROG_FILE="orog.npy"
 MASK_SEALAND_FILE="mask_sealand.npy"
 COORDS_IJ_FILE="coords_ij.npy"
-TARGET_FILE="target.npy"
+TARGET_FILE="target_tasmax.npy"
 METADATA_FILE="low_input_metadata.json"
-GRAPH_FILE="low_high_graph.pkl"
+GRAPH_FILE="low_high_graph_edgeattr.pkl"
 DATASET_NAME="Dataset_Graph"
 COLLATE_NAME="custom_collate_fn_graph"
 
@@ -56,54 +54,39 @@ HISTORY_LENGTH=2 # days
 #-----------------#
 # LOSS PARAMETERS #
 #-----------------#
-LOSS_NAME="MSE_QMSE_PSD_Loss"
-ALPHA=0.005
-BETA=0.005
-BINMIN=0.0
-BINMAX=350
-BINWIDTH=0.5
-BINSCALE="log"
+LOSS_NAME="Gaussian_NLL_Loss"
 
 #------------------------------------#
 # PREDICTOR AND PREDICTAND TRANSFORM #
 #------------------------------------#
-PREDICTAND_TRANSFORM_MODE="log1p" # log1p, minmax, zscore
+PREDICTAND_TRANSFORM_MODE="zscore" # log1p, minmax, zscore
 PREDICTOR_LOW_TRANSFORM_MODE="zscore_low_var" # zscore per variable, across levels
 PREDICTOR_HIGH_TRANSFORM_MODE="zscore_high_independent" # zscore per field, independently
 
 #---------------------#
 # TRAINING PARAMETERS #
 #---------------------#
-EPOCHS=150
+EPOCHS=250
 BATCH_SIZE=64
-LR=0.001
-LR_SCHEDULER="StepLR"
-LR_STEP_SIZE=25
-WEIGHT_DECAY=0.0
+LR_SCHEDULER="CosineAnnealingLR_with_warmup"
+LR=7e-4
+LR_WARMUP_EPOCHS=6
+LR_ETA_MIN=1e-6
+WEIGHT_DECAY=1e-4
 
-CTD_TRAINING=false
-USE_ACCELERATE=true
+CTD_TRAINING=--no-ctd_training
+USE_ACCELERATE=--use_accelerate
 
 #------------------#
 # VALIDATION PLOTS #
 #------------------#
-MAKE_VAL_PLOTS=true
+MAKE_VAL_PLOTS=--make_val_plots
 VAL_PLOT_FREQUENCY=1
 VAL_PLOT_CONFIG="${MAIN_PATH}/config/plot/CORDEXML_plot_params_${DOMAIN}.json"
 
 #-----------------#
 # TRAINING PERIOD #
 #-----------------#
-## Using Case 1: explicit year lists
-# TRAIN_YEARS=( $(seq 1961 1979) )
-# VAL_YEARS=( $(seq 1980) )
-
-## Using Case 2: random sampling from a year range
-# FIRST_YEAR="1961"
-# LAST_YEAR="1980"
-# N_VAL_YEARS="1"
-
-## Using Case 3: date range + validation year
 TRAIN_YEAR_START=1961
 TRAIN_MONTH_START=1
 TRAIN_DAY_START=3
@@ -111,24 +94,3 @@ TRAIN_YEAR_END=1979
 TRAIN_MONTH_END=12
 TRAIN_DAY_END=29
 VALIDATION_YEAR=1980
-
-#--------------do not change here below------------------
-
-if [ ${USE_ACCELERATE} = true ] ; then
-	USE_ACCELERATE="--use_accelerate"
-else
-	USE_ACCELERATE="--no-use_accelerate"
-fi
-
-if [ ${CTD_TRAINING} = true ] ; then
-	CTD_TRAINING="--ctd_training"
-else
-	CTD_TRAINING="--no-ctd_training"
-fi
-
-if [ ${MAKE_VAL_PLOTS} = true ] ; then
-	MAKE_VAL_PLOTS="--make_val_plots"
-else
-	MAKE_VAL_PLOTS="--no-make_val_plots"
-fi
-
