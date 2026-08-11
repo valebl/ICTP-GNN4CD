@@ -41,6 +41,7 @@ COORDS_IJ_FILE = cfg["COORDS_IJ_FILE"]
 METADATA_FILE = cfg["METADATA_FILE"]
 USE_ACCELERATE = cfg["USE_ACCELERATE"]
 DOMAIN = cfg["DOMAIN"]
+THRESHOLD_NLL= cfg["THRESHOLD_NLL"]
 write_slurm = cfg["write_slurm"]
 run_slurm = cfg["run_slurm"]
 run_report = cfg["run_report"]
@@ -105,6 +106,7 @@ python -m accelerate.commands.launch --config_file "{accelerate_config}" -m pred
     --epoch="{epoch}" \
     --history_length="{history_length}" \
     --threshold="{threshold}" \
+    --threshold_nll="{THRESHOLD_NLL}" \
     "{USE_ACCELERATE}"
 EOT
 """

@@ -98,9 +98,10 @@ add_arg lr_warmup_epochs "${LR_WARMUP_EPOCHS}"
 add_arg weight_decay "${WEIGHT_DECAY}"
 add_arg x_dim "${X_DIM}"
 add_arg y_dim "${Y_DIM}"
-add_arg threshold_nll ${THRESHOLD_NLL}
-add_arg magnitude_weight ${MAGNITUDE_WEIGHT}
-add_arg d_encoder ${D_ENCODER}
+add_arg threshold_nll "${THRESHOLD_NLL}"
+add_arg d_encoder "${D_ENCODER}"
+add_arg n_members "${N_MEMBERS}"
+add_arg M_train "${M_TRAIN}"
 
 # File paths
 add_arg low_input_file "${LOW_INPUT_FILE}"
@@ -135,6 +136,8 @@ add_arg WANDB_USERNAME "${WANDB_USERNAME}"
 add_flag "${USE_ACCELERATE}"
 add_flag "${CTD_TRAINING}"
 add_flag "${MAKE_VAL_PLOTS}"
+add_flag "${USE_CHECKPOINTING}"
+add_flag "${USE_SPECTRAL}"
 
 # Debug print
 echo "ARGS: \${ARGS[@]}"

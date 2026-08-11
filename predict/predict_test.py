@@ -290,8 +290,16 @@ if __name__ == '__main__':
 
     start = time.time()
     predictor = Predictor()
-    y_pred_raw, idxs_sorted = predictor.predict(model, dataloader, pred_size=len(graph_dataset), args=args, accelerator=accelerator)
+    output, idxs_sorted = predictor.predict(model, dataloader, pred_size=len(graph_dataset), args=args, accelerator=accelerator)
     end = time.time()
+
+    if isinstance(output, (tuple, list)):
+        y_pred_raw = output[0]
+        p = output[1]
+        shape = output[2]
+        scale = output[3]
+    else:
+        y_pred_raw = output
 
     write_log(f"\nTest Done! \nNow post-processing results.", args, accelerator, 'a')
 

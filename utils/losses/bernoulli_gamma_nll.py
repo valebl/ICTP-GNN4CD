@@ -14,11 +14,10 @@ class Bernoulli_Gamma_NLL_Loss(nn.Module):
     @staticmethod
     def add_loss_specific_args(parser):
         parser.add_argument("--threshold_nll", type=float)
-        parser.add_argument("--magnitude_weight", type=float)
         return parser
 
     def __init__(self, ignore_nans: bool = True, eps: float = 1e-6,
-                 threshold_nll: float | None = 0.1, magnitude_weight: float = 0.05):
+                 threshold_nll: float | None = 0.999):
         super().__init__()
         self.ignore_nans = ignore_nans
         self.eps = eps

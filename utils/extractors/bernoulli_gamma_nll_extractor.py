@@ -2,6 +2,10 @@ from .registry import register_extractor
 import torch
 
 
+@register_extractor("Bernoulli_Gamma_NLL_Spectral_Loss")
+@register_extractor("Bernoulli_Gamma_NLL_PSD_Loss")
+@register_extractor("Bernoulli_Gamma_CRPS_Loss")
+@register_extractor("Bernoulli_Gamma_CRPS_Spectral_Loss")
 @register_extractor("Bernoulli_Gamma_NLL_Loss")
 def extract_bernoulli_gamma_mean(y_out, threshold_nll, **kwargs):
     """

@@ -32,5 +32,7 @@ def add_base_args_test(parser):
 
     parser.add_argument('--make_plots',  action='store_true')
     parser.add_argument('--no-make_plots', dest='make_plots', action='store_false')
+    parser.add_argument('--threshold_nll', type=float)
+
 
     return parser

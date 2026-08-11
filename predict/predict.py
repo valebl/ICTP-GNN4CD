@@ -268,7 +268,12 @@ if __name__ == '__main__':
 
     if y_pred.ndim == 3:
         write_log(f"\nComputing samples mean, from shape {y_pred.shape}... ", args, accelerator, 'a')
-        y_pred = np.mean(y_pred, axis=-1)     
+        # y_pred is (n_nodes, time, M) here -- Predictor.predict()'s ensemble
+        # path explicitly moves M to the last axis (transpose(2,0,1) after
+        # gathering), landing on (nodes, time, M). Average over axis=-1 (M),
+        # not axis=0 (which collapses the node axis instead and is what
+        # caused the downstream mask IndexError)
+        y_pred = np.mean(y_pred, axis=-1)
         write_log(f"to {y_pred.shape}.", args, accelerator, 'a')
 
     if args.target_type == "precipitation":

@@ -1,6 +1,6 @@
 def add_target_specific_args(parser, target_type):
     
     if target_type == "precipitation":
-        parser.add_argument('--threshold', type=float, help='precipitation threshold')
+        parser.add_argument('--threshold', type=float, help='precipitation threshold', default=0.0)
     
     return parser

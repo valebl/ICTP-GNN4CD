@@ -75,13 +75,7 @@ class Trainer(object):
                     loss, loss_components = loss_fn(y_out, y, bins)
                 else:
                     if getattr(loss_fn, "components", False):
-                        if "GRAD" in loss_fn.components:
-                            if "BCE" in loss_fn.components:
-                                loss, loss_components = loss_fn(y_out, y, stats, graph['high', 'within', 'high'].edge_index)
-                            else:
-                                loss, loss_components = loss_fn(y_out, y, graph['high', 'within', 'high'].edge_index)
-                        else:
-                            loss, loss_components = loss_fn(y_out, y)  # the loss internally handles the different y_out cases
+                        loss, loss_components = loss_fn(y_out, y)  # the loss internally handles the different y_out cases
                     else:
                         loss = loss_fn(y_out, y)  # the loss internally handles the different y_out cases
                 
@@ -145,20 +139,23 @@ class Trainer(object):
                         train_mask = graph['high'].train_mask
                         y = graph["high"].y
 
-                        y_out = model(graph)
+                        # use generate_ensemble() when the model supports it (e.g. the
+                        # noisy CRPS model) since a plain model(graph) call in eval mode
+                        # returns a single deterministic sample, which CRPS can't score --
+                        # unwrap .module first in case the model is DDP/accelerate-wrapped
+                        model_ = model.module if hasattr(model, "module") else model
+                        is_ensemble = hasattr(model_, "generate_ensemble")
+                        if is_ensemble:
+                            y_out = model_.generate_ensemble(graph)
+                        else:
+                            y_out = model(graph)
                         
                         if getattr(loss_fn, "use_bins", False):
                             bins = graph['high'].w
                             loss, loss_components = loss_fn(y_out, y, bins)
                         else:
                             if getattr(loss_fn, "components", False):
-                                if "GRAD" in loss_fn.components:
-                                    if "BCE" in loss_fn.components:
-                                        loss, loss_components = loss_fn(y_out, y, stats, graph['high', 'within', 'high'].edge_index)
-                                    else:
-                                        loss, loss_components = loss_fn(y_out, y, graph['high', 'within', 'high'].edge_index)
-                                else:
-                                    loss, loss_components = loss_fn(y_out, y)  # the loss internally handles the different y_out cases
+                                loss, loss_components = loss_fn(y_out, y)  # the loss internally handles the different y_out cases
                             else:
                                 loss = loss_fn(y_out, y)  # the loss internally handles the different y_out cases
 
@@ -182,8 +179,21 @@ class Trainer(object):
                             n_nodes = graph["high"].num_nodes
                             B = y.shape[0] // n_nodes
                             y = y.view(B, n_nodes)
-                            y_pred = y_pred.view(B, n_nodes, -1)
                             train_mask = train_mask.view(B, n_nodes)
+
+                            if is_ensemble:
+                                # y_pred is (M, B*n_nodes[, output_dim]): M is
+                                # the model's native leading axis. Split the
+                                # flattened batch*nodes axis only -- M stays
+                                # exactly where the model put it, no permute
+                                # here. (A naive .view(B, n_nodes, -1) would
+                                # silently scramble values: same total element
+                                # count, wrong memory layout, since it doesn't
+                                # know about the leading M axis at all.)
+                                M = y_pred.shape[0]
+                                y_pred = y_pred.reshape(M, B, n_nodes, *y_pred.shape[2:])
+                            else:
+                                y_pred = y_pred.view(B, n_nodes, -1)
 
                             y_pred = torch.atleast_2d(y_pred) # from (N,) to (1,N)
                             y = torch.atleast_2d(y)
@@ -216,7 +226,17 @@ class Trainer(object):
                         y_all = y_all.squeeze()[:val_size, :][indices, :]
 
                         # Squeeze, swapaxes and , convert to cpu and numpy
-                        y_pred_all = y_pred_all.swapaxes(0,1) # (nodes, time)
+                        # For the ensemble model, shape here is (time, M, nodes)
+                        # -- torch.stack(dim=0) put time first (needed for
+                        # accelerator.gather(), which concatenates across
+                        # processes along axis 0), so M did not end up last on
+                        # its own. Move to (nodes, time, M) explicitly so axis 0
+                        # is node-indexed (matching mask/plotting conventions)
+                        # and M is last (matching the axis=-1 mean below).
+                        if is_ensemble and y_pred_all.ndim == 3:
+                            y_pred_all = y_pred_all.transpose(2, 0, 1)
+                        else:
+                            y_pred_all = y_pred_all.swapaxes(0,1) # (nodes, time)
                         y_all = y_all.swapaxes(0,1)
 
                         print(f"y_pred_all.shape: {y_pred_all.shape}, y_all.shape: {y_all.shape}, indices.shape: {indices.shape}")
@@ -226,8 +246,12 @@ class Trainer(object):
                         y_pred_all = inverse_transform_predictand(y_pred_all, stats)
 
                         if y_pred_all.ndim == 3:
-                            y_pred_all = np.mean(y_pred_all, axis=-1)     
-                            print(f"After averaging y_pred_all.shape: {y_pred_all.shape}.")
+                            # (nodes, time, M) for the ensemble model -- M is
+                            # last (swapaxes(0,1) above only ever touched the
+                            # first two axes), so average over axis=-1, not
+                            # axis=0 (which would average over nodes instead)
+                            y_pred_all = np.mean(y_pred_all, axis=-1)
+                            print(f"After averaging y_pred_all.shape: {y_pred_all.shape}.", flush=True)
 
                         # Load validation plots metadata
                         metadata_file_path = args.val_plot_config
@@ -291,4 +315,4 @@ class Trainer(object):
                         }, step=step)
                     
             if lr_scheduler is not None:
-                lr_scheduler.step()  
+                lr_scheduler.step()
