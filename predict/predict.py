@@ -4,7 +4,6 @@ import torch
 import time
 import os
 import json
-import importlib
 import safetensors
 from accelerate import Accelerator
 
@@ -64,7 +63,33 @@ if __name__ == '__main__':
     x_low = np.load(args.input_path+args.low_input_file)
 
     #-- 3. Target
-    target = np.load(args.input_path+args.target_file)
+    # read the target_variables comma-separated list recorded during training
+    target_variables_file = args.train_path + "target_variables.json"
+    if os.path.exists(target_variables_file):
+        with open(target_variables_file, "r") as f:
+            target_variables = json.load(f)["target_variables"]
+        write_log(f"\nUsing target_variables recorded by training ({target_variables_file}): {target_variables}", args, accelerator, 'a')
+    else:
+        target_variables = args.target_variables.split(",")
+        write_log(
+            f"\nWARNING: {target_variables_file} not found (older training run?). "
+            f"Falling back to --target_variables as passed: {target_variables}. "
+            f"Double check this matches the order used at training time.",
+            args, accelerator, 'a'
+        )
+    n_target_variables = len(target_variables)
+    is_multivariable = n_target_variables > 1
+    args.target_variables = ",".join(target_variables)
+
+    target_per_var = [
+        np.load(args.input_path + f"target_{var_name}.npy")
+        for var_name in target_variables
+    ]
+    target = np.stack(target_per_var, axis=-1)  # (num_nodes, time, n_target_variables)
+    del target_per_var
+
+    with open(args.output_path + "target_variables.json", "w") as f:
+        json.dump({"target_variables": target_variables}, f, indent=4)
 
     #-- 4. Orography
     orog = np.load(args.input_path+args.orog_file)
@@ -120,6 +145,8 @@ if __name__ == '__main__':
     x_low_test = x_low[:, test_idxs, :, :] # num_nodes, time, vars, levels
 
     time_index_target_test = time_index_target[test_idxs_target]
+    # Slicing over axis 1 (time), so this is unchanged whether
+    # target is (num_nodes, time) or (num_nodes, time, n_target_variables)
     target_test = target[:, test_idxs_target][:, test_idxs_valid_subset_target]
 
     #-----------------------------------------
@@ -185,6 +212,7 @@ if __name__ == '__main__':
         x_low_lev_dim=n_levels,
         x_high_dim=n_static_high,
         output_dim=output_dim,
+        n_target_variables=n_target_variables,
         args=args
     )
 
@@ -205,6 +233,9 @@ if __name__ == '__main__':
     
     write_log("\nLoading state dict.", args, accelerator, 'a')
     model.load_state_dict(checkpoint)
+
+    model_ = model.module if hasattr(model, "module") else model
+    is_ensemble = hasattr(model_, "generate_ensemble")
 
     #-----------------------------------------------------
     #-------------- DATASET AND DATALOADER ---------------
@@ -262,22 +293,37 @@ if __name__ == '__main__':
     #------------------ POST-PROCESSING ------------------
     #-----------------------------------------------------
 
-    # from raw model prediction to actual pr/tasmax values
-    predictand_stats = np.load(args.train_path + "predictand_stats.npz", allow_pickle=True)
-    y_pred = inverse_transform_predictand(y_pred_raw, predictand_stats)
+    # from raw model prediction to actual physical-units values, one variable at a time
+    #   single-variable, deterministic: (nodes, time)
+    #   single-variable, ensemble:      (nodes, time, M)
+    #   multivariable, deterministic:   (nodes, time, n_vars)
+    #   multivariable, ensemble:        (nodes, time, n_vars, M)
+    predictand_stats_per_var = {
+        var_name: np.load(args.train_path + f"predictand_stats_{var_name}.npz", allow_pickle=True)
+        for var_name in target_variables
+    }
 
-    if y_pred.ndim == 3:
-        write_log(f"\nComputing samples mean, from shape {y_pred.shape}... ", args, accelerator, 'a')
-        # y_pred is (n_nodes, time, M) here -- Predictor.predict()'s ensemble
-        # path explicitly moves M to the last axis (transpose(2,0,1) after
-        # gathering), landing on (nodes, time, M). Average over axis=-1 (M),
-        # not axis=0 (which collapses the node axis instead and is what
-        # caused the downstream mask IndexError)
-        y_pred = np.mean(y_pred, axis=-1)
-        write_log(f"to {y_pred.shape}.", args, accelerator, 'a')
+    y_pred_dict = {}
+    for i, var_name in enumerate(target_variables):
+        if is_multivariable and is_ensemble:
+            y_pred_var_raw = y_pred_raw[:, :, i, :]  # (nodes, time, M)
+        elif is_multivariable:
+            y_pred_var_raw = y_pred_raw[..., i]      # (nodes, time)
+        else:
+            y_pred_var_raw = y_pred_raw              # (nodes, time) or (nodes, time, M)
 
-    if args.target_type == "precipitation":
-        y_pred[y_pred < args.threshold] = 0.0
+        y_pred_var = inverse_transform_predictand(y_pred_var_raw, predictand_stats_per_var[var_name])
+
+        if y_pred_var.ndim == 3:
+            write_log(f"\nComputing samples mean for {var_name}, from shape {y_pred_var.shape}... ", args, accelerator, 'a')
+            # (nodes, time, M) average over axis=-1
+            y_pred_var = np.mean(y_pred_var, axis=-1)
+            write_log(f"to {y_pred_var.shape}.", args, accelerator, 'a')
+
+        if var_name in ("pr", "tp"):
+            y_pred_var[y_pred_var < args.threshold] = 0.0
+
+        y_pred_dict[var_name] = y_pred_var
 
     # LON LAT
     lat_low = low_high_graph["low"].lat.cpu().numpy()
@@ -287,19 +333,21 @@ if __name__ == '__main__':
 
     degree = degree(low_high_graph["high", "within", "high"].edge_index[0], low_high_graph["high"].num_nodes).cpu().numpy()
 
-    # If target and predictions have the same spatial shape, create the mask
-    if target.shape[0] == y_pred.shape[0]:
-        mask =  degree > 2 * np.array([~np.isnan(target[i,:]).all() for i in range(target.shape[0])])
+    # If target and predictions have the same spatial shape, create the mask.
+    # a node counts as having data if ANY variable/time is non-NaN for it.
+    if target.shape[0] == y_pred_dict[target_variables[0]].shape[0]:
+        node_has_data = ~np.all(np.isnan(target), axis=(1, 2))
+        mask = degree > 2 * node_has_data
     else:
         mask = degree > 2
 
     np.save(args.output_path + "mask_degree.npy", mask)
 
     if mask is not None:
-        target_test[~mask,:] = np.nan # space, time
+        target_test[~mask] = np.nan
         degree[~mask] = np.nan
-        if y_pred is not None:
-            y_pred[~mask,:] = np.nan
+        for var_name in target_variables:
+            y_pred_dict[var_name][~mask, :] = np.nan
 
     #-----------------------------------------------------
     #-------------------- SAVE RESULTS -------------------
@@ -307,12 +355,14 @@ if __name__ == '__main__':
 
     data = HeteroData()
 
-    if args.target_type == "precipitation":
-        data.pr_gnn4cd = y_pred
-    elif args.target_type == "temperature":
-        data.tasmax_gnn4cd = y_pred
-    
-    data.target = target_test
+    for i, var_name in enumerate(target_variables):
+        setattr(data, f"{var_name}_gnn4cd", y_pred_dict[var_name])
+        # gives (nodes, time) same as y_pred
+        setattr(data, f"{var_name}_target", target_test[..., i])
+
+    if not is_multivariable:
+        # Keep the single-field names too
+        data.target = target_test[..., 0]
 
     data.times = time_index_test[test_idxs_valid_subset][idxs_sorted]
     data.times_target = time_index_target_test[test_idxs_valid_subset_target]

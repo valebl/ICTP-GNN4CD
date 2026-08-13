@@ -507,6 +507,90 @@ def compute_predictions_idxs(cfg, time_index, history_length, date_to_idxs_fn):
     return test_idxs, test_idxs_valid, test_idxs_valid_subset
 
 
+def period_to_years(period):
+    """used by both predict_test.py and plot_report_test.py
+
+    Parameters
+    ----------
+    period : str
+        'historical', 'mid_century', or anything else (treated as
+        end-of-century).
+
+    Returns
+    -------
+    list[int]
+        The years belonging to that period.
+    """
+    if period == 'historical':
+        return list(range(1981, 2001))
+    elif period == 'mid_century':
+        return list(range(2041, 2061))
+    else:
+        return list(range(2080, 2100))
+
+
+def year_range_idxs(years_list, time_index):
+    """Indices of time_index falling within any of years_list, via
+    date_to_idxs_from_timeindex per year.
+    Works with numpy.datetime64, Python datetime, or cftime calendars.
+
+    No history_length offset is applied.
+
+    Parameters
+    ----------
+    years_list : list[int]
+    time_index : array-like of datetime-like values
+
+    Returns
+    -------
+    np.ndarray
+        Concatenated indices for all years in years_list.
+    """
+    idxs_list = []
+    for year in sorted(years_list):
+        start_idx, end_idx = date_to_idxs_from_timeindex(
+            year_start=year, month_start=1, day_start=1,
+            year_end=year, month_end=12, day_end=31,
+            time_index=time_index
+        )
+        idxs_list.append(np.arange(start_idx, end_idx))
+    return np.concatenate(idxs_list)
+
+
+def return_test_idxs_from_years_list(years_list, time_index, history_length):
+    """Like year_range_idxs, but offsets each year's start backward by
+    history_length.
+    
+    Parameters
+    ----------
+    years_list : list[int]
+    time_index : array-like of datetime-like values
+    history_length : int
+
+    Returns
+    -------
+    test_idxs : np.ndarray
+    test_idxs_valid_subset : np.ndarray
+    """
+    test_idxs_list = []
+    test_idxs_valid_list = []
+    years = sorted(years_list)
+    for year in years:
+        test_start_idx, test_end_idx = date_to_idxs_from_timeindex(
+            year_start=year, month_start=1, day_start=1,
+            year_end=year, month_end=12, day_end=31,
+            time_index=time_index
+        )
+        if test_start_idx - history_length < 0:
+            test_start_idx = history_length
+        test_idxs_list.append(np.arange(test_start_idx - history_length, test_end_idx))
+        test_idxs_valid_list.append(np.arange(test_start_idx, test_end_idx))
+    test_idxs = np.concatenate(test_idxs_list)
+    test_idxs_valid = np.concatenate(test_idxs_valid_list)
+    test_idxs_valid_subset = np.where(np.isin(test_idxs, test_idxs_valid))[0]
+    return test_idxs, test_idxs_valid_subset
+
+
 def inspect_model(model, args, accelerator):
     """
 

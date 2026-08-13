@@ -1,15 +1,10 @@
-import pickle
-import torch
 import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib
-import wandb
-
 import os
 os.environ["CARTOPY_DATA_DIR"] = "/leonardo_work/ICT26_ESP/vblasone/cartopy/"
 import cartopy.crs as ccrs
 
-from .plots import get_cmap_dict, plot_maps, plot_pdf
+from .plots import get_cmap_dict, plot_maps, plot_pdf, plot_maps_grid, plot_pdf_grid
 
 def create_validation_plots(
     y_pred_plot,
@@ -124,7 +119,8 @@ def create_validation_plots(
     Ntot_target = np.nansum(hist_vals_target)
 
     if meta[target_type]["xlim_pdf"] is None:
-        meta[target_type]["xlim_pdf"] = [0.2, bins.max()+10]
+
+        meta[target_type]["xlim_pdf"] = [float(bins.min()), float(bins.max())]
 
     fig_pdf = plot_pdf(
         bin_list=[bins_target_mid, bins_mid],
@@ -148,3 +144,136 @@ def create_validation_plots(
     return fig_avg, fig_bias, fig_pdf
 
 
+def create_multivariable_validation_plots(
+    y_pred_dict,
+    y_dict,
+    lon,
+    lat,
+    var_names,
+    meta,
+    ):
+    """
+    Multivariable counterpart of create_validation_plots: still exactly
+    three figures (mean, bias, pdf) regardless of how many variables there
+    are, each one is now a grid with one row (mean/bias) or one panel
+    (pdf) per variable in var_names, via plot_maps_grid / plot_pdf_grid,
+    instead of one set of three figures per variable.
+
+    y_pred_dict / y_dict: {var_name: (nodes, time) array}, already in
+        physical units (post inverse-transform), same convention as
+        y_pred_plot/y_plot in create_validation_plots, just one per
+        variable.
+    meta: {var_name: <per-variable style dict, e.g. meta[var_name] as
+        returned by resolve_plot_meta(var_name, meta)>, "general": {...}}.
+        Same style-dict fields as create_validation_plots' meta[target_type].
+    """
+    cmap_dict = get_cmap_dict()
+    general = meta["general"]
+
+    lon_map, lat_map = {}, {}
+    avg_data, bias_data = {}, {}
+    cmap_avg, cmap_bias = {}, {}
+    pr_min_avg, pr_max_avg = {}, {}
+    pr_min_bias, pr_max_bias = {}, {}
+    legend_title_map, s_map = {}, {}
+
+    bin_dict, hist_dict = {}, {}
+    xlabel_map, xlim_map, ylim_map = {}, {}, {}
+    log_xy_map, plot_func_map = {}, {}
+    tail_zoom_map, tail_lim_map, tail_ylim_map = {}, {}, {}
+
+    for var_name in var_names:
+        m = meta[var_name]
+        y_pred_plot = y_pred_dict[var_name]
+        y_plot = y_dict[var_name]
+
+        #---- AVG / BIAS ----#
+        gnn4cd_avg = np.nanmean(y_pred_plot, axis=-1)
+        target_avg = np.nanmean(y_plot, axis=-1)
+        bias = gnn4cd_avg - target_avg
+
+        lon_map[var_name] = [lon, lon]
+        lat_map[var_name] = [lat, lat]
+        avg_data[var_name] = [gnn4cd_avg, target_avg]
+        bias_data[var_name] = [bias]
+
+        cmap_avg[var_name] = cmap_dict['avg']['cmap'] if m["cmap"] == "cmap_dict['avg']['cmap']" else m["cmap"]
+        cmap_bias[var_name] = m["cmap_bias"]
+        pr_min_avg[var_name] = m["vmin"]
+        pr_max_avg[var_name] = m["vmax"]
+        pr_min_bias[var_name] = m["vmin_bias"]
+        pr_max_bias[var_name] = m["vmax_bias"]
+        legend_title_map[var_name] = m["map_unit"]
+        s_map[var_name] = m["s"]
+
+        #---- PDF ----#
+        y_pred_pdf = y_pred_plot.flatten()
+        y_pdf = y_plot.flatten()
+
+        binmin = m["binmin"]
+        if binmin is None:
+            binmin = min(np.floor(np.min(y_pred_plot)), np.floor(np.min(y_plot))) - 5
+
+        binmax = m["binmax"]
+        if binmax is None:
+            binmax = max(np.ceil(np.max(y_pred_plot)), np.ceil(np.min(y_plot))) + 5
+
+        bins = np.arange(binmin, binmax, m["binwidth"]).astype(np.float32)
+
+        hist_vals, bins = np.histogram(y_pred_pdf, bins=bins, density=False)
+        bins_mid = (bins[:-1] + bins[1:]) / 2
+        Ntot = np.nansum(hist_vals)
+        hist_vals_target, bins_target = np.histogram(y_pdf, bins=bins, density=False)
+        bins_target_mid = (bins_target[:-1] + bins_target[1:]) / 2
+        Ntot_target = np.nansum(hist_vals_target)
+
+        xlim_pdf = m["xlim_pdf"]
+        if xlim_pdf is None:
+            xlim_pdf = [float(bins.min()), float(bins.max())]
+
+        bin_dict[var_name] = [bins_target_mid, bins_mid]
+        hist_dict[var_name] = [hist_vals_target/Ntot_target, hist_vals/Ntot]
+        xlabel_map[var_name] = m["pdf_unit"]
+        xlim_map[var_name] = xlim_pdf
+        ylim_map[var_name] = m["ylim_pdf"]
+        log_xy_map[var_name] = m["log_xy"]
+        plot_func_map[var_name] = m["plot_func_pdf"]
+        tail_zoom_map[var_name] = m["tail_zoom"]
+        tail_lim_map[var_name] = m["tail_lim"]
+        tail_ylim_map[var_name] = m["tail_ylim"]
+
+    fig_avg = plot_maps_grid(
+        lon_map, lat_map, avg_data, var_names,
+        col_labels=["GNN4CD", "TARGET"],
+        x_size=6, y_size=6, var_ncols=3,
+        font_size_title=general["fontsize_title"], font_size=general["fontsize"],
+        plot_func="scatter",
+        cmap_dict=cmap_avg, pr_min_dict=pr_min_avg, pr_max_dict=pr_max_avg,
+        legend_title_dict=legend_title_map, s_dict=s_map,
+        xlim=general["xlim"], ylim=general["ylim"], show_ticks=False,
+        suptitle="Average", suptitle_fontsize=general["fontsize_title"],
+    )
+
+    fig_bias = plot_maps_grid(
+        lon_map, lat_map, bias_data, var_names,
+        col_labels=["GNN4CD - TARGET"],
+        x_size=6, y_size=6, var_ncols=3,
+        font_size_title=25, font_size=20,
+        plot_func="scatter",
+        cmap_dict=cmap_bias, pr_min_dict=pr_min_bias, pr_max_dict=pr_max_bias,
+        legend_title_dict=legend_title_map, s_dict=s_map,
+        xlim=general["xlim"], ylim=general["ylim"], show_ticks=False,
+        suptitle="Bias", suptitle_fontsize=25,
+    )
+
+    fig_pdf = plot_pdf_grid(
+        bin_dict, hist_dict, var_names,
+        color_list=["black", "darkorange"], label_list=["TARGET", "GNN4CD"],
+        ncols=3,
+        xlabel_dict=xlabel_map, xlim_dict=xlim_map, ylim_dict=ylim_map,
+        log_xy_dict=log_xy_map, plot_func_dict=plot_func_map,
+        tail_zoom_dict=tail_zoom_map, tail_lim_dict=tail_lim_map, tail_ylim_dict=tail_ylim_map,
+        suptitle="PDF", suptitle_fontsize=24,
+    )
+
+    return fig_avg, fig_bias, fig_pdf

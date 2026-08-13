@@ -3,9 +3,7 @@ import numpy as np
 import pickle
 import time
 import os
-import importlib
 import json
-import random
 from accelerate import Accelerator
 
 from args.train.build_args import build_args
@@ -85,7 +83,25 @@ if __name__ == '__main__':
     x_low = np.load(args.input_path+args.low_input_file)
 
     #-- 3. Target
-    target = np.load(args.input_path+args.target_file)
+    # Multivariable convention: args.target_variables is a comma-separated
+    # list, e.g. TARGET_VARIABLES="tas,tasmax,tasmin,hurs,psl,uas,vas,pr"
+    # We load each and stack them along a new trailing axis so that
+    # target has shape (num_nodes, time, n_target_variables)
+    target_variables = args.target_variables.split(",")
+    n_target_variables = len(target_variables)
+
+    # Record the exact order used here, so that predict.py can read this back
+    with open(args.output_path + "target_variables.json", "w") as f:
+        json.dump({"target_variables": target_variables}, f, indent=4)
+
+    target_per_var = [
+        np.load(args.input_path + f"target_{var_name}.npy")
+        for var_name in target_variables
+    ]
+    target = np.stack(target_per_var, axis=-1)  # (num_nodes, time, n_target_variables)
+    del target_per_var
+
+    write_log(f"\nTarget variables: {target_variables} -> target shape {target.shape}", args, accelerator=None, mode='a')
 
     #-- 4. Orography
     orog = np.load(args.input_path+args.orog_file)
@@ -115,8 +131,19 @@ if __name__ == '__main__':
 #-------------------  TRAIN/VAL IDXS --------------------
 #--------------------------------------------------------
 
+    # find_not_all_nan_times expects a 2D (num_nodes, time) array. With a
+    # stacked multivariable target (num_nodes, time, n_target_variables) we
+    # build a 2D proxy that preserves NaN: a (node, time) entry is NaN
+    # in the proxy only if it is NaN for EVERY target variable, and is a
+    # valid (non-NaN) placeholder otherwise. 
+    if target.ndim == 3:
+        all_vars_nan = np.all(np.isnan(target), axis=-1)
+        target_for_nan_check = np.where(all_vars_nan, np.nan, 0.0)
+    else:
+        target_for_nan_check = target
+
     idxs_not_all_nan = find_not_all_nan_times(
-        data=target,
+        data=target_for_nan_check,
         L=args.history_length,
         args=args,
         accelerator=accelerator
@@ -192,21 +219,22 @@ if __name__ == '__main__':
     write_log(f"\nn_vars: {n_vars}, n_levels: {n_levels}, n_static_high: {n_static_high}", args, accelerator, 'a')
 
     # 2. Transform predictand
-    target_trans = transform_predictand(
-        target,
-        mode=args.predictand_transform_mode,      # e.g. "log1p", "z_score", "minmax"
-        train_idxs=train_idxs,
-        stats_save_path=args.output_path + "predictand_stats.npz"
-    )
+    # Each target variable gets its own transform statistics (e.g. its own
+    # mean/std for z-score), since different physical variables live on
+    # different scales. predictand_transform_mode is a single mode shared
+    # across variables
+    target_trans_per_var = []
+    for var_idx, var_name in enumerate(target_variables):
+        target_trans_var = transform_predictand(
+            target[..., var_idx],
+            mode=args.predictand_transform_mode,      # e.g. "log1p", "z_score", "minmax"
+            train_idxs=train_idxs,
+            stats_save_path=args.output_path + f"predictand_stats_{var_name}.npz"
+        )
+        target_trans_per_var.append(target_trans_var)
+    target_trans = np.stack(target_trans_per_var, axis=-1)  # (num_nodes, time, n_target_variables)
+    del target_trans_per_var
 
-    #----------------------------------------
-    #---------  NORMALISE EDGE ATTR ---------
-    #----------------------------------------
-    
-    # low_high_graph = transform_edge_attr(
-    #     graph=low_high_graph,
-    #     stats_save_path=args.output_path + "edge_attr_stats.npz"
-    # )
 
     #-------------------------------------------
     #-------------- BUILD LOSS -----------------
@@ -217,6 +245,8 @@ if __name__ == '__main__':
     write_log(f"\nLoss args: {loss_args}", args, accelerator, 'a')
 
     # Eventually compute QMSE bins
+    # Note: derive_qmse_bins currently expects a 2D (num_nodes, time) target.
+    # We will not use this in the multivariate setting
     if getattr(loss_fn, "use_bins", False):
         if args.binscale == "log":
             binmin = np.log1p(args.binmin)
@@ -277,6 +307,7 @@ if __name__ == '__main__':
         x_low_lev_dim=n_levels,
         x_high_dim=n_static_high,
         output_dim=output_dim,
+        n_target_variables=n_target_variables,
         args=args
     )
 
@@ -448,5 +479,3 @@ if __name__ == '__main__':
     end = time.time()
 
     write_log(f"\nCompleted in {end - start} seconds.\nDONE!", args, accelerator, 'a')
-    
-

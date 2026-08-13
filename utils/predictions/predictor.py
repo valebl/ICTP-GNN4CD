@@ -18,27 +18,26 @@ class Predictor(object):
         model_ = model.module if hasattr(model, "module") else model
         is_ensemble = hasattr(model_, "generate_ensemble")
 
+        target_variables = args.target_variables.split(",") if isinstance(args.target_variables, str) else args.target_variables
+        is_multivariable = len(target_variables) > 1
+
+        n_members = getattr(args, "n_members", 10)
+
         y_pred_lists = None  # one accumulation list per output stream, built on first batch
         idxs_list = []
         with torch.no_grad():
             for graph in dataloader:
 
-                # use generate_ensemble() when the model supports it (e.g. the
-                # noisy CRPS model) since a plain model(graph) call in eval mode
-                # returns a single deterministic sample, which CRPS can't score.
-                # generate_ensemble() returns (M, N_high, output_dim) -- M
-                # first, matching the model's native convention, preserved
-                # as-is through everything below.
+                # use generate_ensemble() when the model supports it
+                # generate_ensemble() returns (M, N_high, output_dim)
                 if is_ensemble:
-                    out = model_.generate_ensemble(graph)  # (M, batch*n_nodes, output_dim)
+                    out = model_.generate_ensemble(graph, n_members=n_members)  # (M, batch*n_nodes, output_dim)
                 else:
                     out = model(graph)
 
                 y_pred = extract_prediction(out, loss_name=args.loss_name, args=args)
 
                 # normalize to a tuple: works the same whether extract_prediction
-                # returns a single tensor (e.g. MSE) or several (e.g. p, shape,
-                # scale for the Bernoulli-Gamma NLL)
                 if not isinstance(y_pred, (tuple, list)):
                     y_pred = (y_pred,)
                 if y_pred_lists is None:
@@ -50,11 +49,8 @@ class Predictor(object):
                     # Retrieve graphs for individual time instances
                     n_nodes = graph["high"].num_nodes
                     if is_ensemble:
-                        # each yp is (M, batch_size*n_nodes, ...): M is the
-                        # model's native leading axis and is left untouched
-                        # here -- only the flattened batch*nodes axis gets
-                        # split into (B, n_nodes). No permute at this stage;
-                        # M stays exactly where the model put it.
+                        # each yp is (M, batch_size*n_nodes, ...)
+                        # only the flattened batch*nodes axis gets split into (B, n_nodes).
                         def _split_batch_nodes(yp):
                             M = yp.shape[0]
                             B = yp.shape[1] // n_nodes
@@ -66,7 +62,8 @@ class Predictor(object):
                     idxs = torch.atleast_2d(idxs)
 
                 for lst, yp in zip(y_pred_lists, y_pred):
-                    lst.append(yp)  # (M, B, nodes) for ensembles, (B, nodes, output_dim) otherwise
+                    # Move off GPU immediately
+                    lst.append(yp.detach().cpu())  # (M, B, nodes) for ensembles, (B, nodes, output_dim) otherwise
                 idxs_list.append(idxs)
 
                 if step % 100 == 0:
@@ -87,33 +84,43 @@ class Predictor(object):
 
         outputs = []
         for lst in y_pred_lists:
-            # Stack list into a tensor. dim=0 inserts the time/step axis in
-            # front of whatever each entry's shape already is -- required so
-            # the time axis is axis 0 for accelerator.gather() (which
-            # concatenates across processes along axis 0, assuming that's
-            # the sharded axis). For ensembles this gives (time, M, B, nodes);
-            # M deliberately is NOT axis 0 of this intermediate tensor, since
-            # time has to be for distributed gather to work correctly -- M is
-            # moved to its final position explicitly below, after gathering.
-            y_pred = torch.stack(lst, dim=0).squeeze()
+            # dim=0 inserts the time/step axis in front, since time axis = 0
+            # is required for accelerator.gather() (which concatenates
+            # across processes along axis 0, assuming that's the sharded
+            # axis). lst entries are already CPU tensors (see above).
+            #
+            # Pre-allocating the output and copying each step in one at a
+            # time to limit memory usage
+            n_steps = len(lst)
+            y_pred = torch.empty((n_steps, *lst[0].shape), dtype=lst[0].dtype)
+            for i in range(n_steps):
+                y_pred[i] = lst[i]
+                lst[i] = None  # drop the only remaining reference so it's freed now, not at the end of this loop
+            y_pred = y_pred.squeeze()
 
             if accelerator is not None:
                 accelerator.wait_for_everyone()
-                y_pred_all = accelerator.gather(y_pred)
+                if accelerator.num_processes > 1:
+                    y_pred_all = accelerator.gather(y_pred.to(accelerator.device))
+                else:
+
+                    y_pred_all = y_pred
             else:
                 y_pred_all = y_pred
 
             y_pred_all = y_pred_all.cpu().numpy()
             y_pred_all = y_pred_all.squeeze()[:pred_size, :][idxs_sorted, :]
 
-            if is_ensemble and y_pred_all.ndim == 3:
-                # currently (time, M, nodes) -- move to (nodes, time, M) so
-                # axis 0 is node-indexed (matching mask/plotting conventions
-                # elsewhere) and M is last (matching the axis=-1 mean used
-                # downstream in predict.py / the validation loop)
+            if is_ensemble and is_multivariable:
+                # from (time, M, nodes, n_vars) to (nodes, time, n_vars, M)
+                y_pred_all = y_pred_all.transpose(2, 0, 3, 1)
+            elif is_ensemble and y_pred_all.ndim == 3:
+                # from (time, M, nodes) to (nodes, time, M)
                 y_pred_all = y_pred_all.transpose(2, 0, 1)
             else:
-                y_pred_all = y_pred_all.swapaxes(0, 1)  # (nodes, time)
+                # single-variable deterministic: (nodes, time)
+                # multivariable deterministic: (nodes, time, n_vars)
+                y_pred_all = y_pred_all.swapaxes(0, 1)
 
             outputs.append(y_pred_all)
 

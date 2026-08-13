@@ -49,7 +49,8 @@ def add_base_args(parser):
 
     parser.add_argument('--dataset_name', type=str, default='graph_dataset')
     parser.add_argument('--collate_name', type=str)
-    parser.add_argument('--target_type', type=str)
+    parser.add_argument("--target_variables", type=str, required=True,
+                         help='Comma-separated target variable names, e.g. "tas,tasmax,pr"')
 
     #-- start and end training dates
     parser.add_argument('--train_year_start', type=str)

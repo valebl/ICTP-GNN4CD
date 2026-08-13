@@ -139,6 +139,10 @@ add_flag "${MAKE_VAL_PLOTS}"
 add_flag "${USE_CHECKPOINTING}"
 add_flag "${USE_SPECTRAL}"
 
+# Target variables and loss multipliers
+[[ -n "${TARGET_VARIABLES}" ]] && ARGS+=( "--target_variables=${TARGET_VARIABLES}" )
+[[ -n "${MULTIVARIABLE_LOSS_COEFF}" ]] && ARGS+=( "--multivariable_loss_coeff=${MULTIVARIABLE_LOSS_COEFF}" )
+
 # Debug print
 echo "ARGS: \${ARGS[@]}"
 

@@ -279,6 +279,195 @@ def plot_diurnal_cycles(pr_list, text_list = ['DJF', 'MAM', 'JJA', 'SON'], label
 
     return fig
 
+def plot_maps_grid(
+        lon_dict, lat_dict, pr_dict, var_names, col_labels,
+        x_size=6, y_size=6, font_size_title=25, font_size=20,
+        plot_func="scatter", cmap_dict=None, pr_min_dict=None, pr_max_dict=None,
+        legend_title_dict=None, s_dict=None, xlim=None, ylim=None, proj=None,
+        show_ticks=False, suptitle=None, suptitle_fontsize=30, var_ncols=None,
+        show_stats=True):
+    """
+    """
+    if proj is None:
+        proj = ccrs.PlateCarree(central_longitude=0)
+
+    n_vars = len(var_names)
+    n_maps = len(col_labels)
+    if var_ncols is None:
+        var_ncols = min(3, n_vars)
+    var_ncols = max(1, min(var_ncols, n_vars))
+    var_nrows = int(np.ceil(n_vars / var_ncols))
+
+    plt.rcParams.update({'font.size': int(font_size)})
+
+    fig = plt.figure(figsize=(x_size * n_maps * var_ncols, y_size * var_nrows))
+    outer = fig.add_gridspec(var_nrows, var_ncols, wspace=0.2, hspace=0.15)
+
+    for idx, var_name in enumerate(var_names):
+        row, col = divmod(idx, var_ncols)
+
+        inner = outer[row, col].subgridspec(
+            1, n_maps + 1, width_ratios=[1]*n_maps + [0.06], wspace=0.05
+        )
+
+        lons = lon_dict[var_name]
+        lats = lat_dict[var_name]
+        data = pr_dict[var_name]
+
+        pr_min = pr_min_dict.get(var_name) if pr_min_dict else None
+        pr_max = pr_max_dict.get(var_name) if pr_max_dict else None
+        cmap = (cmap_dict.get(var_name) if cmap_dict else None) or 'jet'
+        legend_title = (legend_title_dict.get(var_name) if legend_title_dict else None) or ""
+        s = (s_dict.get(var_name) if s_dict else None) or 30
+
+        if pr_max is None:
+            pr_max = np.nanmax([np.nanmax(d) for d in data])
+        if pr_min is None:
+            pr_min = np.nanmin([np.nanmin(d) for d in data])
+
+        im = None
+        for m in range(n_maps):
+            axi = fig.add_subplot(inner[0, m], projection=proj)
+            axi.set_adjustable("box")
+            axi.set_aspect("auto")
+
+            if plot_func == "scatter":
+                im = axi.scatter(lons[m], lats[m], c=data[m], marker="s", s=s, cmap=cmap, vmin=pr_min, vmax=pr_max)
+            elif plot_func == "pcolormesh":
+                im = axi.pcolormesh(lons[m], lats[m], data[m], cmap=cmap, vmin=pr_min, vmax=pr_max, shading="auto", transform=ccrs.PlateCarree())
+            elif plot_func == "tripcolor":
+                triang = tri.Triangulation(lons[m], lats[m])
+                im = axi.tripcolor(triang, data[m], cmap=cmap, vmin=pr_min, vmax=pr_max, shading="flat", transform=ccrs.PlateCarree())
+            else:
+                raise ValueError(f"Unsupported plot_func: {plot_func}")
+
+            if xlim is not None:
+                lon_min, lon_max = xlim
+            else:
+                lon_min, lon_max = lons[m].min(), lons[m].max()
+            if ylim is not None:
+                lat_min, lat_max = ylim
+            else:
+                lat_min, lat_max = lats[m].min(), lats[m].max()
+            axi.set_extent([lon_min, lon_max, lat_min, lat_max], crs=ccrs.PlateCarree())
+
+            axi.set_title(col_labels[m], fontsize=int(np.ceil(font_size_title*0.55)))
+            if m == 0:
+                axi.text(-0.08, 0.5, var_name, transform=axi.transAxes,
+                          rotation=90, va='center', ha='center',
+                          fontsize=int(np.ceil(font_size_title*0.7)), fontweight='bold')
+
+            if not show_ticks:
+                axi.xaxis.set_major_locator(ticker.NullLocator())
+                axi.yaxis.set_major_locator(ticker.NullLocator())
+            axi.add_feature(cfeature.COASTLINE, linewidth=0.8, edgecolor="black")
+            axi.add_feature(cfeature.BORDERS, linewidth=0.8, edgecolor="black")
+
+            if show_stats:
+
+                axi.text(0.98, 0.98, f"mean = {np.nanmean(data[m]):.2f}",
+                        transform=axi.transAxes, ha='right', va='top',
+                        fontsize=int(font_size*0.55),
+                        bbox=dict(boxstyle='round', facecolor='white', edgecolor='black'))
+
+        cax = fig.add_subplot(inner[0, n_maps])
+        cbar = fig.colorbar(im, cax=cax, aspect=20)
+        cbar.ax.set_ylabel(legend_title, rotation=90, fontsize=int(font_size*0.6))
+
+    if suptitle:
+        fig.suptitle(suptitle, fontsize=suptitle_fontsize)
+        fig.subplots_adjust(left=0.03, right=0.98, bottom=0.03, top=0.93)
+    else:
+        fig.subplots_adjust(left=0.03, right=0.98, bottom=0.03, top=0.97)
+
+    return fig
+
+
+def plot_pdf_grid(
+        bin_dict, hist_dict, var_names,
+        color_list=['black', 'darkorange'], label_list=["TARGET", "GNN4CD"],
+        ncols=3, fontsize=16, lg_fontsize=14,
+        xlabel_dict=None, xlim_dict=None, ylim_dict=None,
+        log_xy_dict=None, plot_func_dict=None,
+        tail_zoom_dict=None, tail_lim_dict=None, tail_ylim_dict=None,
+        suptitle="", suptitle_fontsize=24, fig_width_per_col=6, fig_height_per_row=5):
+    """
+    """
+    n_vars = len(var_names)
+    ncols = max(1, min(ncols, n_vars))
+    nrows = int(np.ceil(n_vars / ncols))
+
+    fig, axs = plt.subplots(
+        nrows=nrows, ncols=ncols,
+        figsize=(fig_width_per_col * ncols, fig_height_per_row * nrows),
+        squeeze=False,
+    )
+    axs_flat = axs.flatten()
+
+    for i, var_name in enumerate(var_names):
+        ax = axs_flat[i]
+        bin_list = bin_dict[var_name]
+        hist_list = hist_dict[var_name]
+
+        xlabel = (xlabel_dict.get(var_name) if xlabel_dict else None) or ""
+        xlim = xlim_dict.get(var_name) if xlim_dict else None
+        ylim = ylim_dict.get(var_name) if ylim_dict else None
+        log_xy = bool(log_xy_dict.get(var_name)) if log_xy_dict else False
+        plot_func = (plot_func_dict.get(var_name) if plot_func_dict else None) or "step"
+        tail_zoom = bool(tail_zoom_dict.get(var_name)) if tail_zoom_dict else False
+        tail_lim = tail_lim_dict.get(var_name) if tail_lim_dict else None
+        tail_ylim = tail_ylim_dict.get(var_name) if tail_ylim_dict else None
+
+        if tail_zoom and tail_lim is not None:
+            axi_tail = inset_axes(
+                ax, width="35%", height="35%", loc='lower left',
+                bbox_to_anchor=(0.15, 0.1, 1, 1), bbox_transform=ax.transAxes, borderpad=0
+            )
+            for j in range(len(bin_list)):
+                mask_tail = bin_list[j] >= tail_lim
+                axi_tail.scatter(bin_list[j][mask_tail], hist_list[j][mask_tail], color=color_list[j], s=30, label=label_list[j], zorder=2, alpha=0.4)
+            if log_xy:
+                axi_tail.set_yscale('log')
+                axi_tail.set_xscale('log')
+            axi_tail.grid(visible=True, which='both', axis='both', color='lightgrey', zorder=0)
+            axi_tail.tick_params(axis='both', which='both', labelsize=10)
+            axi_tail.xaxis.set_minor_formatter(NullFormatter())
+            axi_tail.yaxis.set_minor_formatter(NullFormatter())
+            if tail_ylim is not None:
+                axi_tail.set_ylim(tail_ylim)
+
+        for j in range(len(bin_list)):
+            if plot_func == "scatter":
+                ax.scatter(bin_list[j], hist_list[j], color=color_list[j], s=40, label=label_list[j], alpha=0.4, zorder=2)
+            else:
+                ax.step(bin_list[j], hist_list[j], color=color_list[j], where="mid", linewidth=1, label=label_list[j], zorder=2)
+
+        if ylim is not None:
+            ax.set_ylim(ylim)
+        if xlim is not None:
+            ax.set_xlim(xlim)
+        if log_xy:
+            ax.set_yscale('log')
+            ax.set_xscale('log')
+        ax.minorticks_on()
+        ax.grid(visible=True, which='both', axis='both', color='lightgrey', zorder=0)
+        ax.set_xlabel(xlabel, fontsize=fontsize)
+        ax.set_ylabel('frequency', fontsize=fontsize)
+        ax.tick_params(axis='both', which='major', labelsize=fontsize)
+        ax.tick_params(axis='both', which='minor', labelsize=fontsize)
+        ax.set_title(var_name, fontsize=fontsize+2)
+        ax.legend(loc='upper right', facecolor='white', framealpha=1, fontsize=lg_fontsize)
+
+    # hide any unused trailing axes (n_vars not a multiple of ncols)
+    for k in range(n_vars, len(axs_flat)):
+        axs_flat[k].axis('off')
+
+    fig.suptitle(suptitle, fontsize=suptitle_fontsize)
+    plt.tight_layout()
+
+    return fig
+
+
 def get_cmap_dict():
     c_list = [
         "#40916D",

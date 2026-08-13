@@ -34,5 +34,11 @@ def add_base_args_test(parser):
     parser.add_argument('--no-make_plots', dest='make_plots', action='store_false')
     parser.add_argument('--threshold_nll', type=float)
 
+    parser.add_argument("--target_variables", type=str, required=True,
+                         help='Comma-separated target variable names, e.g. "tas,tasmax,pr"')
+    parser.add_argument("--target_multipliers", type=str, required=True,
+                         help='Comma-separated target multipliers, e.g. "1.0,1.0,1.0"')
+    parser.add_argument("--params", type=str, help="Comma-separated list of variable names")
+    parser.add_argument("--levels", type=str, help="Comma-separated list of pressure levels")
 
     return parser

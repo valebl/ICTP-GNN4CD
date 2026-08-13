@@ -528,25 +528,21 @@ if __name__ == '__main__':
     # --- Detect format: HeteroData vs plain dict ---
     IS_HETERODATA = hasattr(data, '_node_store_dict')
 
+    # predict.py now saves one prediction/target field per variable, named
+    # dynamically ({var}_gnn4cd / {var}_target)
+    OLD_PRED_ATTR = {"pr": "pr_gnn4cd", "tasmax": "tasmax_gnn4cd"}.get(VAR, "t2m_gnn4cd")
+    pred_attr = f"{VAR}_gnn4cd"
+    target_attr = f"{VAR}_target"
+
     if IS_HETERODATA:
-        target = data.target
-        if VAR == 'pr':
-            pred   = data.pr_gnn4cd
-        elif VAR == 'tasmax':
-            pred = data.tasmax_gnn4cd
-        else:
-            pred = data.t2m_gnn4cd
+        pred = getattr(data, pred_attr) if hasattr(data, pred_attr) else getattr(data, OLD_PRED_ATTR)
+        target = getattr(data, target_attr) if hasattr(data, target_attr) else data.target
         lon    = data['high'].lon
         lat    = data['high'].lat           
         times  = data.times if hasattr(data, 'times') else np.arange(pred.shape[1])
     else:
-        if VAR == 'pr':
-            pred = data['pr_gnn4cd']
-        elif VAR == 'tasmax':
-            pred = data['tasmax_gnn4cd']
-        else:
-            pred = data['t2m_gnn4cd']
-        target = data['pr_target'] if VAR == 'pr' else data['target']
+        pred = data[pred_attr] if pred_attr in data else data[OLD_PRED_ATTR]
+        target = data[target_attr] if target_attr in data else (data['pr_target'] if VAR == 'pr' else data['target'])
         lon    = data['lon']
         lat    = data['lat']
         times  = data['times'] if 'times' in data else np.arange(pred.shape[1])
@@ -737,6 +733,19 @@ if __name__ == '__main__':
         vmin_f = vmin_f_list[i]
         vmax_f = vmax_f_list[i]
         bias_vmax_d = bias_vmax_d_list[i]
+
+        # None ("null" in the config) falls back to auto-computed from the
+        # actual data
+        if vmin_f is None or vmax_f is None:
+            combined = np.concatenate([np.ravel(ft), np.ravel(fp)])
+            combined = combined[~np.isnan(combined)]
+            if vmin_f is None:
+                vmin_f = float(np.min(combined))
+            if vmax_f is None:
+                vmax_f = float(np.max(combined))
+
+        if bias_vmax_d is None:
+            bias_vmax_d = float(np.nanmax(np.abs(fb[~np.isnan(fb)])))
 
         if HAS_CARTOPY:
             fig = plt.figure(figsize=(18, 6))

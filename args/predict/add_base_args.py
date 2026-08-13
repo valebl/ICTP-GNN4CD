@@ -39,4 +39,7 @@ def add_base_args(parser):
     parser.add_argument('--use_accelerate',  action='store_true')
     parser.add_argument('--no-use_accelerate', dest='use_accelerate', action='store_false')
 
+    parser.add_argument("--target_variables", type=str, required=True,
+                         help='Comma-separated target variable names, e.g. "tas,tasmax,pr"')
+
     return parser

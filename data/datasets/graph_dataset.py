@@ -9,6 +9,18 @@ import torch_geometric.transforms as T
 transform = T.AddLaplacianEigenvectorPE(k=2)
 
 class Graph_Dataset(Dataset):
+    """
+    Multivariable target convention: `target` can be either
+      - (num_nodes, time)              for a single target variable, or
+      - (num_nodes, time, n_vars)      for n_vars target variables,
+        stacked along a trailing axis in the same order as
+        args.target_variables (e.g. "tas,tasmax,...").
+    `_get_target` below is shape-agnostic: it just slices the time axis
+    (axis=1), so `snapshot['high'].y` ends up (num_nodes,) or
+    (num_nodes, n_vars) accordingly. This mirrors the model's output
+    convention of (N, n_target_variables, output_dim), so single- and
+    multi-variable runs share the same code path throughout.
+    """
 
     def __init__(
         self,
@@ -24,6 +36,8 @@ class Graph_Dataset(Dataset):
         self.high_input = high_input
         self.target = target
         self.history_length = history_length
+        # 1 for a single-variable target, n_vars for a stacked (N,T,n_vars) target
+        self.n_target_variables = target.shape[-1] if (target is not None and target.dim() == 3) else 1
         self.additional_feature_keys = []
         for key, value in kwargs.items():
             setattr(self, key, value)
@@ -44,7 +58,9 @@ class Graph_Dataset(Dataset):
         return x_low
 
     def _get_target(self, idx: int):
-        return self.target[:,idx] # num nodes, time
+        # (num_nodes,) for a single target variable, or
+        # (num_nodes, n_vars) when self.target is (num_nodes, time, n_vars)
+        return self.target[:,idx]
 
     def _get_train_mask(self, target: torch.tensor):
         return ~torch.isnan(target)
@@ -95,5 +111,3 @@ class Graph_Dataset(Dataset):
 
 def custom_collate_fn_graph(batch_list):
     return Batch.from_data_list(batch_list)
-
-

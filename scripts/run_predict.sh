@@ -82,7 +82,7 @@ add_arg checkpoint "${CHECKPOINT}"
 
 # Target + predictors
 add_arg target_type "${TARGET_TYPE}"
-add_arg target_file "${TARGET_FILE}"
+add_arg target_variables "${TARGET_VARIABLES}"
 add_arg low_input_file "${LOW_INPUT_FILE}"
 add_arg orog_file "${OROG_FILE}"
 add_arg mask_sealand_file "${MASK_SEALAND_FILE}"
@@ -105,18 +105,50 @@ accelerate launch \
     -m predict.predict \
     "\${ARGS[@]}"
 
-# Plot report
-python -m utils.plotting.plot_report \
-    --input_path="${OUTPUT_PATH}" \
-    --plot_path="${OUTPUT_PATH}" \
-    --val_file="${OUTPUT_FILE}" \
-    --val_file_help="${VAL_FILE_HELP}" \
-    --var="${VAR}" \
-    --experiment="${EXPERIMENT}" \
-    --domain="${DOMAIN}" \
-    --val_year="${VAL_YEAR}" \
-    --config_file="${CONFIG_FILE_VAL_REPORT}" \
-    --predictions_multiplier="${PREDICTIONS_MULTIPLIER}" \
-    --target_multiplier="${TARGET_MULTIPLIER}"
+# Plot report(s) -- one per target variable. Read the variable list back
+# from OUTPUT_PATH/target_variables.json, which predict.py writes out as the
+# definitive resolved order/set it actually predicted (may differ from
+# TARGET_VARIABLES above if predict.py fell back to a training-recorded
+# order) -- avoids the report ever drifting from what was actually predicted.
+TARGET_VARS_RESOLVED=\$(python3 -c "import json; print(','.join(json.load(open('${OUTPUT_PATH}target_variables.json'))['target_variables']))")
+IFS=',' read -ra VAR_ARR <<< "\$TARGET_VARS_RESOLVED"
+
+for VAR_I in "\${VAR_ARR[@]}"; do
+    echo "Generating report for variable: \${VAR_I}"
+    python -m utils.plotting.plot_report \
+        --input_path="${OUTPUT_PATH}" \
+        --plot_path="${OUTPUT_PATH}" \
+        --val_file="${OUTPUT_FILE}" \
+        --val_file_help="${VAL_FILE_HELP}" \
+        --var="\${VAR_I}" \
+        --experiment="${EXPERIMENT}" \
+        --domain="${DOMAIN}" \
+        --val_year="${VAL_YEAR}" \
+        --config_file="${CONFIG_FILE_VAL_REPORT}" \
+        --predictions_multiplier="${PREDICTIONS_MULTIPLIER}" \
+        --target_multiplier="${TARGET_MULTIPLIER}"
+done
+
+# Aggregated spatial-means report -- one PDF, one page, all target
+# variables' Ground-Truth/Prediction time-mean maps together. Multivariate
+# runs only (a single-variable run already has this via plot_report.py's
+# own Average page). Reuses the same resolved variable list as the
+# per-variable loop above. VARIABLE_ORDER (optional, comma-separated, same
+# set as TARGET_VARIABLES) overrides the row-fill display order on the page.
+if [[ "\${#VAR_ARR[@]}" -gt 1 ]]; then
+    echo "Generating aggregated spatial-means report"
+    AGG_ARGS=(
+        --input_path="${OUTPUT_PATH}"
+        --val_file="${OUTPUT_FILE}"
+        --plot_path="${OUTPUT_PATH}"
+        --target_variables="\${TARGET_VARS_RESOLVED}"
+        --config_file="${CONFIG_FILE_VAL_REPORT}"
+        --domain="${DOMAIN}"
+        --experiment="${EXPERIMENT}"
+        --val_year="${VAL_YEAR}"
+    )
+    [[ -n "${VARIABLE_ORDER}" ]] && AGG_ARGS+=( --variable_order="${VARIABLE_ORDER}" )
+    python -m utils.plotting.plot_aggregated_means "\${AGG_ARGS[@]}"
+fi
 
 EOT

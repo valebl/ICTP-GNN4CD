@@ -9,7 +9,8 @@ import json
 
 from utils.metrics.average_meter import AverageMeter
 from utils.helpers.tools import write_log, convert_dict
-from utils.plotting.validation import create_validation_plots
+from utils.helpers.target_variable_style import resolve_plot_meta
+from utils.plotting.validation import create_validation_plots, create_multivariable_validation_plots
 from utils.extractors.extract_prediction import extract_prediction
 from utils.predictand_transforms.inverse_transform_predictand import inverse_transform_predictand
 
@@ -39,7 +40,12 @@ class Trainer(object):
         write_log(f"\nStart training the regressor.", args, accelerator, 'a')
 
         # Load stats for validation
-        stats = np.load(args.output_path+"predictand_stats.npz", allow_pickle=True)
+        target_variables = args.target_variables.split(",")
+        is_multivariable = len(target_variables) > 1
+        stats_per_var = {
+            var_name: np.load(args.output_path + f"predictand_stats_{var_name}.npz", allow_pickle=True)
+            for var_name in target_variables
+        }
 
         step = 0
         
@@ -177,19 +183,20 @@ class Trainer(object):
 
                             # Retrieve graphs for individual time instances
                             n_nodes = graph["high"].num_nodes
-                            B = y.shape[0] // n_nodes
-                            y = y.view(B, n_nodes)
-                            train_mask = train_mask.view(B, n_nodes)
+                            B = y.shape[0] // n_nodes  # y.shape[0] is always N regardless of a trailing n_vars axis
+                            if is_multivariable:
+                                # y, train_mask: (N, n_target_variables) -> (B, n_nodes, n_target_variables)
+                                y = y.view(B, n_nodes, -1)
+                                train_mask = train_mask.view(B, n_nodes, -1)
+                            else:
+                                # y, train_mask: (N,) -> (B, n_nodes), unchanged from before
+                                y = y.view(B, n_nodes)
+                                train_mask = train_mask.view(B, n_nodes)
 
                             if is_ensemble:
                                 # y_pred is (M, B*n_nodes[, output_dim]): M is
                                 # the model's native leading axis. Split the
-                                # flattened batch*nodes axis only -- M stays
-                                # exactly where the model put it, no permute
-                                # here. (A naive .view(B, n_nodes, -1) would
-                                # silently scramble values: same total element
-                                # count, wrong memory layout, since it doesn't
-                                # know about the leading M axis at all.)
+                                # flattened batch*nodes axis
                                 M = y_pred.shape[0]
                                 y_pred = y_pred.reshape(M, B, n_nodes, *y_pred.shape[2:])
                             else:
@@ -221,58 +228,95 @@ class Trainer(object):
                         y_all = y_all.cpu().numpy()
                         times = times[indices]
 
-                        # Squeeze, swapaxes and , convert to cpu and numpy
-                        y_pred_all = y_pred_all.squeeze()[:val_size, :][indices, :] # (time, nodes)
+                        # Squeeze, swapaxes and convert to cpu and numpy
+                        y_pred_all = y_pred_all.squeeze()[:val_size, :][indices, :] # (time, nodes[, n_vars])
                         y_all = y_all.squeeze()[:val_size, :][indices, :]
 
-                        # Squeeze, swapaxes and , convert to cpu and numpy
-                        # For the ensemble model, shape here is (time, M, nodes)
-                        # -- torch.stack(dim=0) put time first (needed for
-                        # accelerator.gather(), which concatenates across
-                        # processes along axis 0), so M did not end up last on
-                        # its own. Move to (nodes, time, M) explicitly so axis 0
-                        # is node-indexed (matching mask/plotting conventions)
-                        # and M is last (matching the axis=-1 mean below).
-                        if is_ensemble and y_pred_all.ndim == 3:
+                        if is_ensemble and is_multivariable:
+                            # (time, M, nodes, n_vars) -> (nodes, time, n_vars, M)
+                            y_pred_all = y_pred_all.transpose(2, 0, 3, 1)
+                        elif is_ensemble and y_pred_all.ndim == 3:
+                            # (time, M, nodes) -> (nodes, time, M)
                             y_pred_all = y_pred_all.transpose(2, 0, 1)
                         else:
-                            y_pred_all = y_pred_all.swapaxes(0,1) # (nodes, time)
+                            # single-variable deterministic: (nodes, time)
+                            # multivariable deterministic: (nodes, time, n_vars)
+                            y_pred_all = y_pred_all.swapaxes(0,1)
                         y_all = y_all.swapaxes(0,1)
 
                         print(f"y_pred_all.shape: {y_pred_all.shape}, y_all.shape: {y_all.shape}, indices.shape: {indices.shape}")
 
-                        # Get the actual precipitation/temperature prediction
-                        y_all = inverse_transform_predictand(y_all, stats)
-                        y_pred_all = inverse_transform_predictand(y_pred_all, stats)
-
-                        if y_pred_all.ndim == 3:
-                            # (nodes, time, M) for the ensemble model -- M is
-                            # last (swapaxes(0,1) above only ever touched the
-                            # first two axes), so average over axis=-1, not
-                            # axis=0 (which would average over nodes instead)
-                            y_pred_all = np.mean(y_pred_all, axis=-1)
-                            print(f"After averaging y_pred_all.shape: {y_pred_all.shape}.", flush=True)
-
-                        # Load validation plots metadata
+                        # Load validation plots metadata (once, shared across variables)
                         metadata_file_path = args.val_plot_config
                         with open(metadata_file_path) as f:
                             meta = json.load(f)
-
-                        # Arguments for the plot function                        
                         meta = convert_dict(meta)
-                        target_type = args.target_type
+
                         lon = graph['high'].lon.cpu().numpy()
                         lat = graph['high'].lat.cpu().numpy()
 
-                        # Create a few plots to compare
-                        fig_avg, fig_bias, fig_pdf = create_validation_plots(
-                            y_pred_all, 
-                            y_all,
-                            lon,
-                            lat,
-                            args.target_type,
-                            meta
-                        )
+                        data_to_save = {} if epoch == (args.epochs-1) else None
+
+                        y_pred_dict = {}
+                        y_dict = {}
+                        meta_dict = {"general": meta["general"]}
+
+                        for i, var_name in enumerate(target_variables):
+                            # Slice out this variable's (nodes, time[, M]) array.
+                            # Layouts (set up by the transpose block above):
+                            #   single-variable, deterministic: (nodes, time)         -- nothing to slice
+                            #   single-variable, ensemble:       (nodes, time, M)      -- nothing to slice
+                            #   multivariable, deterministic:    (nodes, time, n_vars) -- n_vars is last
+                            #   multivariable, ensemble:         (nodes, time, n_vars, M) -- n_vars is 2nd-to-last
+                            if is_multivariable and is_ensemble:
+                                y_pred_var = y_pred_all[:, :, i, :]  # (nodes, time, M)
+                                y_var = y_all[..., i]                 # (nodes, time)
+                            elif is_multivariable:
+                                y_pred_var = y_pred_all[..., i]       # (nodes, time)
+                                y_var = y_all[..., i]                 # (nodes, time)
+                            else:
+                                y_pred_var = y_pred_all               # (nodes, time) or (nodes, time, M)
+                                y_var = y_all                         # (nodes, time)
+
+                            # Get the actual physical-units prediction, using this
+                            # variable's own transform stats (each variable was
+                            # transformed independently in train.py)
+                            stats = stats_per_var[var_name]
+                            y_var = inverse_transform_predictand(y_var, stats)
+                            y_pred_var = inverse_transform_predictand(y_pred_var, stats)
+
+                            if y_pred_var.ndim == 3:
+
+                                y_pred_var = np.mean(y_pred_var, axis=-1)
+                                print(f"After averaging y_pred_var.shape: {y_pred_var.shape}.", flush=True)
+
+                            y_pred_dict[var_name] = y_pred_var
+                            y_dict[var_name] = y_var
+                            # Resolve this variable's plot style
+                            meta_dict[var_name] = resolve_plot_meta(var_name, meta)[var_name]
+
+                            if data_to_save is not None:
+                                data_to_save[var_name] = (y_pred_var, y_var)
+
+                        if is_multivariable:
+                            fig_avg, fig_bias, fig_pdf = create_multivariable_validation_plots(
+                                y_pred_dict,
+                                y_dict,
+                                lon,
+                                lat,
+                                target_variables,
+                                meta_dict
+                            )
+                        else:
+                            var_name = target_variables[0]
+                            fig_avg, fig_bias, fig_pdf = create_validation_plots(
+                                y_pred_dict[var_name],
+                                y_dict[var_name],
+                                lon,
+                                lat,
+                                var_name,
+                                meta_dict
+                            )
 
                         accelerator.log({
                             "average": [wandb.Image(fig_avg)],
@@ -284,14 +328,11 @@ class Trainer(object):
                         plt.close(fig_bias)
                         plt.close(fig_pdf)
 
-                        if epoch == (args.epochs-1): # last epoch
+                        if data_to_save is not None: # last epoch
                             data = HeteroData()
-                            if args.target_type == "precipitation":
-                                data.pr_gnn4cd = y_pred
-                            elif args.target_type == "temperature":
-                                data.tasmax_gnn4cd = y_pred
-                            
-                            data.target = y
+                            for var_name, (y_pred_var, y_var) in data_to_save.items():
+                                setattr(data, f"{var_name}_gnn4cd", y_pred_var)
+                                setattr(data, f"{var_name}_target", y_var)
 
                             data.times = times
                             data.times_target = times
