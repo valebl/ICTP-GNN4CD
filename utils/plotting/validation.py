@@ -4,7 +4,7 @@ import os
 os.environ["CARTOPY_DATA_DIR"] = "/leonardo_work/ICT26_ESP/vblasone/cartopy/"
 import cartopy.crs as ccrs
 
-from .plots import get_cmap_dict, plot_maps, plot_pdf, plot_maps_grid, plot_pdf_grid
+from utils.plotting.plots import get_cmap_dict, plot_maps, plot_pdf, plot_maps_grid, plot_pdf_grid
 
 def create_validation_plots(
     y_pred_plot,
@@ -152,23 +152,11 @@ def create_multivariable_validation_plots(
     var_names,
     meta,
     ):
-    """
-    Multivariable counterpart of create_validation_plots: still exactly
-    three figures (mean, bias, pdf) regardless of how many variables there
-    are, each one is now a grid with one row (mean/bias) or one panel
-    (pdf) per variable in var_names, via plot_maps_grid / plot_pdf_grid,
-    instead of one set of three figures per variable.
-
-    y_pred_dict / y_dict: {var_name: (nodes, time) array}, already in
-        physical units (post inverse-transform), same convention as
-        y_pred_plot/y_plot in create_validation_plots, just one per
-        variable.
-    meta: {var_name: <per-variable style dict, e.g. meta[var_name] as
-        returned by resolve_plot_meta(var_name, meta)>, "general": {...}}.
-        Same style-dict fields as create_validation_plots' meta[target_type].
-    """
     cmap_dict = get_cmap_dict()
     general = meta["general"]
+    map_plot_func = general.get("plot_func_maps", "scatter")   # single scalar, read once
+    x_dim = general.get("x_dim")
+    y_dim = general.get("y_dim")
 
     lon_map, lat_map = {}, {}
     avg_data, bias_data = {}, {}
@@ -179,7 +167,7 @@ def create_multivariable_validation_plots(
 
     bin_dict, hist_dict = {}, {}
     xlabel_map, xlim_map, ylim_map = {}, {}, {}
-    log_xy_map, plot_func_map = {}, {}
+    log_xy_map, pdf_plot_func_map = {}, {}          # renamed -- no longer shadows map_plot_func
     tail_zoom_map, tail_lim_map, tail_ylim_map = {}, {}, {}
 
     for var_name in var_names:
@@ -237,17 +225,19 @@ def create_multivariable_validation_plots(
         xlim_map[var_name] = xlim_pdf
         ylim_map[var_name] = m["ylim_pdf"]
         log_xy_map[var_name] = m["log_xy"]
-        plot_func_map[var_name] = m["plot_func_pdf"]
+        pdf_plot_func_map[var_name] = m.get("plot_func_pdf", general.get("plot_func_pdf", "step"))
         tail_zoom_map[var_name] = m["tail_zoom"]
         tail_lim_map[var_name] = m["tail_lim"]
         tail_ylim_map[var_name] = m["tail_ylim"]
 
+    # -- outside the loop now --
     fig_avg = plot_maps_grid(
         lon_map, lat_map, avg_data, var_names,
         col_labels=["GNN4CD", "TARGET"],
         x_size=6, y_size=6, var_ncols=3,
         font_size_title=general["fontsize_title"], font_size=general["fontsize"],
-        plot_func="scatter",
+        plot_func=map_plot_func,
+        x_dim=x_dim, y_dim=y_dim,
         cmap_dict=cmap_avg, pr_min_dict=pr_min_avg, pr_max_dict=pr_max_avg,
         legend_title_dict=legend_title_map, s_dict=s_map,
         xlim=general["xlim"], ylim=general["ylim"], show_ticks=False,
@@ -259,7 +249,8 @@ def create_multivariable_validation_plots(
         col_labels=["GNN4CD - TARGET"],
         x_size=6, y_size=6, var_ncols=3,
         font_size_title=25, font_size=20,
-        plot_func="scatter",
+        plot_func=map_plot_func,
+        x_dim=x_dim, y_dim=y_dim,
         cmap_dict=cmap_bias, pr_min_dict=pr_min_bias, pr_max_dict=pr_max_bias,
         legend_title_dict=legend_title_map, s_dict=s_map,
         xlim=general["xlim"], ylim=general["ylim"], show_ticks=False,
@@ -271,7 +262,7 @@ def create_multivariable_validation_plots(
         color_list=["black", "darkorange"], label_list=["TARGET", "GNN4CD"],
         ncols=3,
         xlabel_dict=xlabel_map, xlim_dict=xlim_map, ylim_dict=ylim_map,
-        log_xy_dict=log_xy_map, plot_func_dict=plot_func_map,
+        log_xy_dict=log_xy_map, plot_func_dict=pdf_plot_func_map,
         tail_zoom_dict=tail_zoom_map, tail_lim_dict=tail_lim_map, tail_ylim_dict=tail_ylim_map,
         suptitle="PDF", suptitle_fontsize=24,
     )

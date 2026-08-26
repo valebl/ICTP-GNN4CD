@@ -282,14 +282,53 @@ def plot_diurnal_cycles(pr_list, text_list = ['DJF', 'MAM', 'JJA', 'SON'], label
 def plot_maps_grid(
         lon_dict, lat_dict, pr_dict, var_names, col_labels,
         x_size=6, y_size=6, font_size_title=25, font_size=20,
-        plot_func="scatter", cmap_dict=None, pr_min_dict=None, pr_max_dict=None,
+        plot_func="pcolormesh", cmap_dict=None, pr_min_dict=None, pr_max_dict=None,
         legend_title_dict=None, s_dict=None, xlim=None, ylim=None, proj=None,
         show_ticks=False, suptitle=None, suptitle_fontsize=30, var_ncols=None,
-        show_stats=True):
+        show_stats=True, x_dim=None, y_dim=None):
     """
+    Grid counterpart of plot_maps: one "block" per variable in var_names,
+    each block containing one map panel per entry in col_labels (e.g.
+    ["GNN4CD", "TARGET"] for average maps, or ["GNN4CD - TARGET"] for a
+    bias map) plus that variable's own colorbar. Blocks wrap into a
+    roughly-square grid of var_ncols columns (matching plot_pdf_grid's
+    wrapping, rather than stacking every variable straight down into one
+    very tall column, which is unreadable once you have more than a
+    handful of variables).
+
+    Each block gets its own colorbar/vmin/vmax/cmap, since different
+    target variables live on different physical scales -- unlike
+    plot_maps, which shares one colorbar across all panels (fine there
+    since all panels are the same variable).
+
+    lon_dict / lat_dict / pr_dict: {var_name: [array_per_col, ...]} -- for
+        each variable, one lon/lat/data array per column, matching the
+        length and order of col_labels.
+    cmap_dict / pr_min_dict / pr_max_dict / legend_title_dict / s_dict:
+        {var_name: value}, per-variable plotting parameters (as resolved
+        e.g. by resolve_plot_meta per variable). A missing/None value falls
+        back the same way plot_maps does (vmin/vmax auto from the data,
+        cmap='jet', legend_title='', s=30).
+    x_size / y_size: figure size per map panel (one block is
+        len(col_labels) panels wide plus a slim colorbar strip).
+    var_ncols: number of variable-blocks per row, wrapping into further
+        rows once n_vars exceeds it. Defaults to min(3, n_vars), matching
+        plot_pdf_grid's default ncols=3.
+    show_stats: if True (default), annotates each panel's top-right corner
+        with its mean value (nanmean), same style as plot_report.py's
+        per-panel "mean = ..." boxes.
+    x_dim / y_dim: if plot_func="pcolormesh" and both are given, each
+        panel's flat (nodes,) lon/lat/data arrays are reshaped to
+        (y_dim, x_dim) before plotting -- for graphs whose nodes map 1:1
+        onto a regular grid in row-major order. Ignored for other
+        plot_func values.
     """
     if proj is None:
         proj = ccrs.PlateCarree(central_longitude=0)
+
+    use_grid = plot_func == "pcolormesh" and x_dim is not None and y_dim is not None
+
+    n_vars = len(var_names)
 
     n_vars = len(var_names)
     n_maps = len(col_labels)
@@ -305,7 +344,10 @@ def plot_maps_grid(
 
     for idx, var_name in enumerate(var_names):
         row, col = divmod(idx, var_ncols)
-
+        # one subgridspec per variable block: n_maps map panels + a slim
+        # dedicated colorbar column, so blocks never fight each other for
+        # colorbar space the way a single fig.colorbar(ax=[...]) would once
+        # there's more than one block per row.
         inner = outer[row, col].subgridspec(
             1, n_maps + 1, width_ratios=[1]*n_maps + [0.06], wspace=0.05
         )
@@ -331,10 +373,16 @@ def plot_maps_grid(
             axi.set_adjustable("box")
             axi.set_aspect("auto")
 
+            lon_m, lat_m, data_m = lons[m], lats[m], data[m]
+            if use_grid:
+                lon_m = lon_m.reshape(y_dim, x_dim)
+                lat_m = lat_m.reshape(y_dim, x_dim)
+                data_m = data_m.reshape(y_dim, x_dim)
+
             if plot_func == "scatter":
-                im = axi.scatter(lons[m], lats[m], c=data[m], marker="s", s=s, cmap=cmap, vmin=pr_min, vmax=pr_max)
+                im = axi.scatter(lon_m, lat_m, c=data_m, marker="s", s=s, cmap=cmap, vmin=pr_min, vmax=pr_max)
             elif plot_func == "pcolormesh":
-                im = axi.pcolormesh(lons[m], lats[m], data[m], cmap=cmap, vmin=pr_min, vmax=pr_max, shading="auto", transform=ccrs.PlateCarree())
+                im = axi.pcolormesh(lon_m, lat_m, data_m, cmap=cmap, vmin=pr_min, vmax=pr_max, shading="auto", transform=ccrs.PlateCarree())
             elif plot_func == "tripcolor":
                 triang = tri.Triangulation(lons[m], lats[m])
                 im = axi.tripcolor(triang, data[m], cmap=cmap, vmin=pr_min, vmax=pr_max, shading="flat", transform=ccrs.PlateCarree())
@@ -344,13 +392,21 @@ def plot_maps_grid(
             if xlim is not None:
                 lon_min, lon_max = xlim
             else:
-                lon_min, lon_max = lons[m].min(), lons[m].max()
+                lon_min, lon_max = lon_m.min(), lon_m.max()
             if ylim is not None:
                 lat_min, lat_max = ylim
             else:
-                lat_min, lat_max = lats[m].min(), lats[m].max()
+                lat_min, lat_max = lat_m.min(), lat_m.max()
             axi.set_extent([lon_min, lon_max, lat_min, lat_max], crs=ccrs.PlateCarree())
 
+            # Column label (e.g. GNN4CD/TARGET) as the title on every
+            # panel; variable name as a row label on the block's first
+            # (leftmost) panel only. NOTE: axi.set_ylabel() does NOT work
+            # here -- cartopy's GeoAxes silently never draws it (the text
+            # is set, get_ylabel() confirms it, but nothing renders), so
+            # this uses a manually-positioned text artist just outside the
+            # axes' left edge instead, which renders correctly regardless
+            # of axis/projection type.
             axi.set_title(col_labels[m], fontsize=int(np.ceil(font_size_title*0.55)))
             if m == 0:
                 axi.text(-0.08, 0.5, var_name, transform=axi.transAxes,
@@ -364,7 +420,9 @@ def plot_maps_grid(
             axi.add_feature(cfeature.BORDERS, linewidth=0.8, edgecolor="black")
 
             if show_stats:
-
+                # Same style/position as plot_report.py's per-panel "mean = ..."
+                # annotation: fixed at the axes' own top-right corner
+                # regardless of the underlying map projection/extent.
                 axi.text(0.98, 0.98, f"mean = {np.nanmean(data[m]):.2f}",
                         transform=axi.transAxes, ha='right', va='top',
                         fontsize=int(font_size*0.55),
@@ -376,7 +434,21 @@ def plot_maps_grid(
 
     if suptitle:
         fig.suptitle(suptitle, fontsize=suptitle_fontsize)
-        fig.subplots_adjust(left=0.03, right=0.98, bottom=0.03, top=0.93)
+        # A fixed top *fraction* reserves far fewer absolute inches on a
+        # short (few-row) figure than a tall one, for the exact same
+        # fixed-size suptitle text -- that's what caused it to overlap the
+        # row below on a single-row figure while looking fine on a
+        # three-row one. Reserve a roughly constant number of inches
+        # instead (scaled a bit with suptitle_fontsize), then convert to
+        # the fraction subplots_adjust actually wants for this figure's
+        # real height.
+        fig_height_inches = y_size * var_nrows
+        # Calibrated so 3 rows at the default y_size=6/suptitle_fontsize=30
+        # lands back on the original top=0.93 that already looked right,
+        # rather than an arbitrary guess.
+        suptitle_margin_inches = 1.26 * (suptitle_fontsize / 30)
+        top = max(0.75, 1 - suptitle_margin_inches / fig_height_inches)
+        fig.subplots_adjust(left=0.03, right=0.98, bottom=0.03, top=top)
     else:
         fig.subplots_adjust(left=0.03, right=0.98, bottom=0.03, top=0.97)
 
@@ -392,6 +464,15 @@ def plot_pdf_grid(
         tail_zoom_dict=None, tail_lim_dict=None, tail_ylim_dict=None,
         suptitle="", suptitle_fontsize=24, fig_width_per_col=6, fig_height_per_row=5):
     """
+    Grid counterpart of plot_pdf: one subplot per variable in var_names,
+    arranged in up to `ncols` columns (wrapping into further rows) rather
+    than a single very wide row.
+
+    bin_dict / hist_dict: {var_name: [array_per_series, ...]} -- matches
+        plot_pdf's bin_list/hist_list convention, one array per entry in
+        label_list (e.g. TARGET then GNN4CD).
+    *_dict args: {var_name: value}, per-variable versions of plot_pdf's
+        equivalent scalar kwargs (e.g. as resolved by resolve_plot_meta).
     """
     n_vars = len(var_names)
     ncols = max(1, min(ncols, n_vars))

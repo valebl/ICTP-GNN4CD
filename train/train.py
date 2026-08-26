@@ -365,22 +365,6 @@ if __name__ == '__main__':
         write_log(f"\nRAM memory {round((used_memory/total_memory) * 100, 2)} %", args, accelerator, 'a')
 
     #-----------------------------------------------------
-    #----------------- LOAD A CHECKPOINT -----------------
-    #-----------------------------------------------------
-
-    if args.ctd_training:
-        write_log("\nContinuing the training.", args, accelerator, 'a')
-        accelerator.load_state(args.checkpoint_ctd)
-        epoch_start = torch.load(args.checkpoint_ctd+"epoch")["epoch"] + 1
-    else:     
-        epoch_start=0
-            
-    inspect_model(model, args, accelerator)
-
-    total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    write_log(f"\nTotal number of trainable parameters: {total_params}.", args, accelerator, 'a')
-
-    #-----------------------------------------------------
     #------------ OPTIMIZER AND LR SCHEDULER -------------
     #-----------------------------------------------------
 
@@ -428,10 +412,6 @@ if __name__ == '__main__':
     else:
         lr_scheduler = None
 
-    if args.ctd_training:
-        write_log("\nResuming lr scheduler from checkpoint...", args, accelerator, 'a')
-        lr_scheduler.load_state_dict(args.checkpoint_ctd+"lr_scheduler_state")["lr_scheduler"]
-
 #-----------------------------------------------------
 #---------------- ACCELERATE PREPARE -----------------
 #-----------------------------------------------------
@@ -444,6 +424,24 @@ if __name__ == '__main__':
     else:
         write_log("\nNot using accelerator to prepare model, optimizer, dataloader and loss...", args, accelerator, 'a')
         model = model.cuda()
+
+    #-----------------------------------------------------
+    #----------------- LOAD A CHECKPOINT -----------------
+    #-----------------------------------------------------
+
+    if args.ctd_training:
+        write_log("\nContinuing the training.", args, accelerator, 'a')
+        accelerator.load_state(args.checkpoint_ctd)
+        epoch_start = torch.load(args.checkpoint_ctd+"epoch")["epoch"] + 1
+        write_log("\nResuming lr scheduler from checkpoint...", args, accelerator, 'a')
+        lr_scheduler.load_state_dict(torch.load(args.checkpoint_ctd+"lr_scheduler_state")["lr_scheduler"])
+    else:     
+        epoch_start=0
+            
+    inspect_model(model, args, accelerator)
+
+    total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    write_log(f"\nTotal number of trainable parameters: {total_params}.", args, accelerator, 'a')
 
 #-----------------------------------------------------
 #----------------------- TRAIN -----------------------

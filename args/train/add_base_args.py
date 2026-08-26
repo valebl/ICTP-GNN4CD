@@ -8,7 +8,6 @@ def add_base_args(parser):
     parser.add_argument('--low_input_file', type=str, default=None)
     parser.add_argument('--orog_file', type=str, default=None)
     parser.add_argument('--mask_sealand_file', type=str, default=None)
-    parser.add_argument('--target_file', type=str, default=None)
     parser.add_argument('--graph_file', type=str, default=None) 
     parser.add_argument('--coords_ij_file', type=str, default=None)
 
