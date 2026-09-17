@@ -1,0 +1,81 @@
+#!/bin/bash
+
+#------------------#
+# SLURM PARAMETERS #
+#------------------#
+TIME="00:30:00" # format HH:MM:SS
+MEM="150G"
+JOB_NAME="train_Rall"
+LOG_PATH="examples/train/Rall/"
+N_GPU=4
+
+#------------------#
+# TRAIN PARAMETERS #
+#------------------#
+SEED=100
+MODEL_NAME="GNN4CD_model"
+MODEL_TYPE="Rall" # either R, C or Rall
+LR_SCHEDULER="StepLR"
+SEQ_L=24
+
+EPOCHS=50
+BATCH_SIZE=32
+LR_STEP_SIZE=25
+LR=0.0001
+WEIGHT_DECAY=0.0
+LOSS_FN="quantized_loss"
+ALPHA=0.005
+
+#------------------#
+# WANDB PARAMETERS #
+#------------------#
+WANDB_API_KEY=""
+WANDB_USERNAME=""
+WANDB_PROJECT_NAME="GNN4CD-TEST"
+
+#--------------------------------------------#
+# PATHS (conda env, main, accelerate config) #
+#--------------------------------------------#
+SOURCE_PATH="/leonardo/home/userexternal/$USER/.bashrc"
+ENV_PATH="/leonardo_work/ICT25_ESP/SHARED/GNN4CDenv"
+MAIN_PATH="/leonardo_work/ICT25_ESP/$USER/GNN4CD"
+ACCELERATE_CONFIG_PATH="/leonardo/home/userexternal/$USER/.cache/huggingface/accelerate/default_config_${N_GPU}.yaml"
+
+#-------------------------------#
+# INPUT/OUTPUT FILES PARAMETERS #
+#-------------------------------#
+INPUT_PATH="/leonardo_work/ICT25_ESP/SHARED/example_data/preprocessed/"
+OUTPUT_PATH=${LOG_PATH}
+LOG_FILE="log.txt"
+TARGET_FILE="target.pkl"
+GRAPH_FILE="low_high_graph.pkl"
+OUT_CHECKPOINT_FILE="checkpoint.pth"
+DATASET_NAME="Dataset_Graph"
+COLLATE_NAME="custom_collate_fn_graph"
+
+
+#----------------------------------------#
+#             TRAINING PERIOD            #
+#----------------------------------------#
+TRAIN_YEAR_START=2001
+TRAIN_MONTH_START=1
+TRAIN_DAY_START=1
+TRAIN_YEAR_END=2015
+TRAIN_MONTH_END=11
+TRAIN_DAY_END=30
+FIRST_YEAR=2001
+VALIDATION_YEAR=2007
+
+#-----------------#
+# BOOLEAN OPTIONS #
+#-----------------#
+USE_ACCELERATE=true
+
+
+#--------------do not change here below------------------
+
+if [ ${USE_ACCELERATE} = true ] ; then
+	USE_ACCELERATE="--use_accelerate"
+else
+	USE_ACCELERATE="--no-use_accelerate"
+fi

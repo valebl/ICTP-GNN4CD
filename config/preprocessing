@@ -1,0 +1,68 @@
+#!/bin/bash
+
+#------------------#
+# SLURM PARAMETERS #
+#------------------#
+TIME="00:30:00" # format HH:MM:SS
+MEM="150G"
+JOB_NAME="test_prep"
+LOG_PATH="examples/preprocessed/"
+
+#--------------------------#
+# OTHER GENERAL PARAMETERS #
+#--------------------------#
+ENV_PATH="/leonardo_work/ICT25_ESP/SHARED/GNN4CDenv" # conda env
+LOG_FILE="log.txt"
+SOURCE_PATH="/leonardo/home/userexternal/$USER/.bashrc" # path to the source .bashrc to use conda within the compute node
+MAIN_PATH="/leonardo_work/ICT25_ESP/$USER/GNN4CD" # path to the folder
+
+#-------------------------------#
+# CHOOSE PREP PHASES TO PERFORM #
+#-------------------------------#
+PERFORM_PHASE_1=false
+PERFORM_PHASE_2=true
+
+#---------------------------#
+# INPUT DATA TO PERSONALIZE #
+#---------------------------#
+# PHASE 1A
+INPUT_PATH_PHASE_1="/leonardo_work/ICT25_ESP/SHARED/example_data/input/"
+OUTPUT_PATH_PHASE_1="/leonardo_work/ICT25_ESP/SHARED/example_data/input/"
+PREFIX_PHASE_1="sliced_"
+# PHASE 2
+OUTPUT_PATH_PHASE_2=${LOG_PATH}
+OUTPUT_FILE_PHASE_2="low_high_graph.pkl"
+#-- 2A (w resolution data)
+INPUT_PATH_PHASE_2="/leonardo_work/ICT25_ESP/SHARED/example_data/input/"	# where the output of phase 1 is stored
+#-- 2B (high resolution data)
+INPUT_PATH_GRIPHO="/leonardo_work/ICT25_ESP/SHARED/example_data/input/"
+GRIPHO_FILE="gripho.nc"
+TARGET_MULTIPLIER=1.0
+
+INPUT_PATH_TOPO="/leonardo_work/ICT25_ESP/SHARED/example_data/input/"
+TOPO_FILE="topo.nc"
+
+LAND_USE_PATH="/leonardo_work/ICT25_ESP/SHARED/example_data/input/"
+LAND_USE_FILE="land_use.nc"
+
+MASK_PATH="/leonardo_work/ICT25_ESP/SHARED/example_data/input/"
+MASK_FILE="mask_land.nc"
+
+SUFFIX_PHASE_2=""
+
+PREDICTORS_TYPE="era5" # supported types are: "era5" and "regcm"
+
+LON_GRID_RADIUS_HIGH=0.0625 # for the grid of GRIPHO
+LAT_GRID_RADIUS_HIGH=0.05 # for the grid of GRIPHO
+
+## e.g. Friuli-Venezia-Giulia region
+LON_MIN=12.75
+LON_MAX=14.00
+LAT_MIN=45.5
+LAT_MAX=46.75
+INTERVAL=0.25
+
+#--------------do not change here below------------------
+
+PHASE_1_PATH="${MAIN_PATH}/slice_and_merge_"${PREDICTORS_TYPE}".sh"
+PHASE_2_PYTHON_FILE="preprocessing"
