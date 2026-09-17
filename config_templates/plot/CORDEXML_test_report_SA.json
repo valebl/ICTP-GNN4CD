@@ -1,0 +1,119 @@
+{
+  "model": {
+    "name": "GNN4CD"
+  },
+
+  "thresholds": {
+    "wet_threshold_mm_day": 1.0
+  },
+
+  "color_scales": {
+    "pr": {
+      "rmse_vmax": 12.0,
+      "bias_vmax": 2.0,
+      "sdii_vmax": 2.0,
+      "rx1day_vmax": 40.0,
+      "wasserstein_vmax": 5.0
+    },
+    "tasmax": {
+      "rmse_vmax": 4.0,
+      "bias_vmax": 1.0,
+      "p98_vmax": 3.0,
+      "txx_vmax": 3.0
+    },
+    "daily_bias": {
+      "pr_vmax": null,
+      "tasmax_vmax": 5.5
+    }
+  },
+
+  "colormaps": {
+    "field_pr": "turbo",
+    "field_tasmax": "magma",
+    "bias_pr": "BrBG",
+    "bias_tasmax": "RdBu_r",
+    "rmse": "viridis",
+    "wasserstein": "viridis"
+  },
+
+  "date_labels": {
+    "ESD_pseudo_reality": {
+      "1975": ["1975-01-15", "1975-07-15"],
+      "1980": ["1980-01-15", "1980-07-15"]
+    },
+    "Emulator_hist_future": {
+      "2098": ["2098-01-15", "2098-07-15"]
+    }
+  },
+
+  "plot_defaults": {
+    "figure_size_maps": [16, 6],
+    "figure_size_psd": [10, 7],
+    "title_fontsize": 14,
+    "title_fontweight": "bold",
+    "colorbar_fraction": 0.046,
+    "colorbar_pad": 0.04,
+    "boxplot_facecolor": "lightblue",
+    "boxplot_median_color": "orange",
+    "grid_alpha": 0.3
+  },
+
+  "average_field_ranges": {
+    "pr": {
+      "vmin": 0,
+      "vmax_offset": 4
+    },
+    "tasmax": {
+      "vmin": 282,
+      "vmax_emulator": 307,
+      "vmax_esd": 303
+    }
+  },
+
+  "spatial_map": {
+    "lon_margin": 0.5,
+    "lat_margin": 0.5,
+    "scatter_marker_size": 15,
+    "pcolormesh_edgecolor": "face",
+    "pcolormesh_linewidth": 0.01
+  },
+
+  "psd": {
+    "method": "radial_average_fft2",
+    "mean_subtraction": false,
+    "windowing": false,
+    "fft_shift": true
+  },
+
+  "daily_comparison": {
+    "pr": {
+      "vmin_esd": [0, 0],
+      "vmin_emulator": [0, 0],
+      "vmax_emulator": [440, 195],
+      "vmax_esd": [260, 55],
+      "bias_vmax_emulator": [410, 160],
+      "bias_vmax_esd": [210, 41]
+    },
+    "tasmax": {
+      "vmin_emulator": [290, 25],
+      "vmax_emulator": [284.5, 303],
+      "vmin_esd": [280, 275],
+      "vmax_esd": [312, 300],
+      "bias_vmax_emulator": [7.5, 4.8],
+      "bias_vmax_esd": [7, 6.1]
+    }
+  },
+  
+  "histogram_bins": {
+    "tasmax": {
+      "min": 270,
+      "max": 320,
+      "step": 1
+    },
+    "pr": {
+      "min": 0,
+      "max": 1000,
+      "step": 1
+    }
+  }
+}

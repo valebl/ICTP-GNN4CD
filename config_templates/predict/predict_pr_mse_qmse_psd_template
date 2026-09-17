@@ -1,0 +1,86 @@
+#!/bin/bash
+
+#------------------#
+# SLURM PARAMETERS #
+#------------------#
+ACCOUNT="ict26_esp_0"
+PARTITION="boost_usr_prod"
+TIME="00:30:00"
+MEM="100G"
+JOB_NAME="val"
+LOG_PATH=""
+N_GPU="1"
+
+#------------------#
+# TRAIN PARAMETERS #
+#------------------#
+TRAIN_PATH=""
+EPOCH=""
+GRAPH_FILE="low_high_graph.pkl"
+SEED="100"
+TARGET_TYPE="precipitation"
+
+#--------------------------------------------#
+# PATHS (conda env, main, accelerate config) #
+#--------------------------------------------#
+SOURCE_PATH="/leonardo/home/userexternal/vblasone/.bashrc"
+ENV_PATH="/leonardo/home/userexternal/vblasone/.conda/envs/GNN4CDenv"
+MAIN_PATH="/leonardo_work/ICT26_ESP/vblasone/GNN4CD-CORDEXML/"
+ACCELERATE_CONFIG_PATH="/leonardo/home/userexternal/vblasone/.cache/huggingface/accelerate/default_config_${N_GPU}.yaml"
+
+#-------------------------------#
+# INPUT/OUTPUT FILES #
+#-------------------------------#
+INPUT_PATH="/leonardo_work/ICT26_ESP/SHARED/preprocessed/CORDEXML/ALPS/train/ESD_pseudo_reality/pr/"
+OUTPUT_PATH=${LOG_PATH}
+LOG_FILE="log.txt"  
+LOW_INPUT_FILE="low_input.npy"
+OROG_FILE="orog.npy"
+MASK_SEALAND_FILE="mask_sealand.npy"
+COORDS_IJ_FILE="coords_ij.npy"
+TARGET_FILE="target.npy"
+METADATA_FILE="low_input_metadata.json"
+CHECKPOINT="checkpoints/checkpoint_${EPOCH}"
+DATASET_NAME="Dataset_Graph"
+TEST_IDXS_FILE=""
+
+OUTPUT_FILE="G_italy_1980.pkl"
+
+#------------------#
+# MODEL PARAMETERS #
+#------------------#
+MODEL_NAME="GNN4CD_Model"
+HISTORY_LENGTH=2 # days
+LOSS_NAME="MSE_QMSE_PSD_Loss"
+THRESHOLD=0.0
+
+#-------------------#
+# PREDICTION PERIOD #
+#-------------------#
+TEST_DAY_START=1
+TEST_MONTH_START=1
+TEST_YEAR_START=1980
+TEST_DAY_END=31
+TEST_MONTH_END=12
+TEST_YEAR_END=1980
+
+#------------#
+# VAL REPORT #
+#------------#
+VAR="pr" # for plot_report.py
+DOMAIN="ALPS"
+CONFIG_FILE_VAL_REPORT="/leonardo_work/ICT26_ESP/vblasone/GNN4CD-CORDEXML/config/plot/CORDEXML_val_report_${DOMAIN}.json"
+CARTOPY_DATA_DIR="/leonardo_work/ICT26_ESP/vblasone/cartopy/"
+
+#-----------------#
+# BOOLEAN OPTIONS #
+#-----------------#
+USE_ACCELERATE=true
+
+#--------------do not change here below------------------
+
+if [ ${USE_ACCELERATE} = true ] ; then
+	USE_ACCELERATE="--use_accelerate"
+else
+	USE_ACCELERATE="--no-use_accelerate"
+fi
